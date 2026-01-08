@@ -20,11 +20,18 @@
     <div class="media-left">
     </div>
     <div class="media-body">
-      <h2 class="media-heading">🧾 DNS Records</h2>
+      <h2 class="media-heading">🌐 DNS Records</h2>
     </div>
   </div>
 </div>
 {% if messages %}{% for message in messages %}<div {% if message.tags %} class="alert alert-{{ message.tags }}"{% endif %}>{{ message }}</div>{% endfor %}{% endif %}
+
+<div class="panel panel-default">
+    <div class="panel-heading">// General Actions</div>
+    <div class="panel-body">
+      <a class="btn btn-primary btn-xs" href="{% url 'findings:export_dns_records_csv' %}">Export to csv</a>&nbsp;
+    </div>
+</div>
 
 <!-- DNS Records List -->
 <div class="panel panel-default">

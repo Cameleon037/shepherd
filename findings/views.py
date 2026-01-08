@@ -11,16 +11,120 @@ from django.conf import settings
 from django.utils import timezone
 from django.utils.timezone import make_aware
 from django.utils.html import escape
-from django.http import HttpResponseForbidden
+from django.http import HttpResponseForbidden, JsonResponse, StreamingHttpResponse
+from django.db.models import Q
+from django.views.decorators.http import require_POST
 from project.models import Project, Asset, DNSRecord
 from findings.models import Finding, Port, Screenshot
 from findings.utils import asset_get_or_create, asset_finding_get_or_create, ignore_asset, ignore_finding
 from findings.forms import AddAssetForm
-from django.http import JsonResponse
 import threading
 from jobs.utils import run_job
-from django.http import StreamingHttpResponse
 import csv
+import json
+
+def _filter_assets_for_project(project_id, filters):
+    queryset = Asset.objects.filter(related_project_id=project_id, monitor=True)
+
+    asset_type = (filters.get('type') or '').strip()
+    if asset_type:
+        queryset = queryset.filter(type=asset_type)
+
+    scope = (filters.get('scope') or '').strip()
+    if scope:
+        queryset = queryset.filter(scope__iexact=scope)
+
+    sources = filters.get('sources') or []
+    if isinstance(sources, str):
+        sources = [sources]
+    sources = [src.strip() for src in sources if src and src.strip()]
+    if sources:
+        query = Q()
+        for src in sources:
+            query |= Q(source__icontains=src)
+        queryset = queryset.filter(query)
+
+    name = (filters.get('name') or '').strip()
+    if name:
+        queryset = queryset.filter(value__icontains=name)
+
+    return queryset
+
+
+def _run_scan_jobs(project_id, user, selected_uuids, scan_new_assets, scans):
+    selected_uuids = [str(uuid) for uuid in (selected_uuids or [])]
+    threads = []
+    triggered_messages = []
+
+    def add_message(text):
+        if text:
+            triggered_messages.append(text)
+
+    def build_args(extra=""):
+        args = f'--projectid {project_id}{extra}'
+        if selected_uuids:
+            args += f' --uuids {",".join(selected_uuids)}'
+        if scan_new_assets:
+            args += ' --new-assets'
+        return args
+
+    def launch(command, extra=""):
+        args = build_args(extra)
+        run_job(command, args, project_id, user)
+
+    def scan_nmap():
+        launch('scan_nmap')
+
+    def scan_httpx():
+        launch('scan_httpx')
+
+    def scan_playwright():
+        launch('scan_playwright')
+
+    def scan_shepherdai():
+        launch('scan_shepherdai')
+
+    def scan_nuclei():
+        launch('scan_nuclei')
+
+    def scan_nuclei_nt():
+        launch('scan_nuclei', ' --nt')
+
+    scan_nmap_flag = scans.get('scan_nmap')
+    scan_httpx_flag = scans.get('scan_httpx')
+    scan_playwright_flag = scans.get('scan_playwright')
+    scan_shepherdai_flag = scans.get('scan_shepherdai')
+    scan_nuclei_flag = scans.get('scan_nuclei')
+    scan_nuclei_new_flag = scans.get('scan_nuclei_new_templates')
+
+    if scan_nmap_flag:
+        threads.append(threading.Thread(target=scan_nmap))
+        add_message('Nmap scan has been triggered in the background. (check jobs)')
+
+    if scan_httpx_flag:
+        threads.append(threading.Thread(target=scan_httpx))
+        add_message('Httpx scan has been triggered in the background. (check jobs)')
+
+    if scan_playwright_flag:
+        threads.append(threading.Thread(target=scan_playwright))
+        add_message('Playwright scan has been triggered in the background. (check jobs)')
+
+    if scan_shepherdai_flag:
+        threads.append(threading.Thread(target=scan_shepherdai))
+        add_message('Shepherd AI scan has been triggered in the background. (check jobs)')
+
+    if scan_nuclei_flag:
+        threads.append(threading.Thread(target=scan_nuclei))
+        add_message('Nuclei scan has been triggered in the background. (check jobs)')
+
+    if scan_nuclei_new_flag:
+        threads.append(threading.Thread(target=scan_nuclei_nt))
+        add_message('Nuclei scan for new templates has been triggered in the background. (check jobs)')
+
+    for thread in threads:
+        thread.start()
+
+    return triggered_messages
 
 
 #### Asset stuffs
@@ -238,7 +342,7 @@ def view_asset(request, uuid):
         'asset': a_obj,
         'ports': a_obj.port_set.all().order_by('port'),
         'screenshots': Screenshot.objects.filter(domain=a_obj).order_by('-date'),
-        'findings': a_obj.finding_set.all().order_by('-scan_date', '-id'),
+        'findings': a_obj.finding_set.all().order_by('-severity', '-scan_date', '-id'),
         'dns_records': dns_records,
     }
     return render(request, 'findings/view_asset.html', context)
@@ -394,7 +498,7 @@ def delete_finding(request, uuid, findingid):
     except Asset.DoesNotExist:
         messages.error(request, 'Unknown Asset: %s' % uuid)
         return redirect(reverse('findings:assets'))
-    a_obj.finding_set.filter(id=findingid).delete()
+    a_obj.finding_set.filter(id=findingid).delete() 
     messages.info(request, 'finding deleted!')
     return redirect(reverse('findings:view_asset', args=(uuid,)))
 
@@ -418,128 +522,22 @@ def scan_assets(request):
             new_assets = Asset.objects.filter(related_project=project_id, last_scan_time__isnull=True)
             selected_uuids = list(new_assets.values_list('uuid', flat=True))
 
-        def scan_nmap():
-            try:
-                command = 'scan_nmap'
-                args = f'--projectid {project_id}'
-                if selected_uuids:
-                    args += f' --uuids {",".join(selected_uuids)}'
-                if scan_new_assets:
-                    args += ' --new-assets'
-                run_job(command, args, project_id, request.user)
-            except Exception as e:
-                print(f"Error running scan_nmap: {e}")
+        scan_flags = {
+            'scan_nmap': 'scan_nmap' in request.POST,
+            'scan_httpx': 'scan_httpx' in request.POST,
+            'scan_playwright': 'scan_playwright' in request.POST,
+            'scan_shepherdai': 'scan_shepherdai' in request.POST,
+            'scan_nuclei': 'scan_nuclei' in request.POST,
+            'scan_nuclei_new_templates': 'scan_nuclei_new_templates' in request.POST,
+        }
 
-        def scan_httpx():
-            try:
-                command = 'scan_httpx'
-                args = f'--projectid {project_id}'
-                if selected_uuids:
-                    args += f' --uuids {",".join(selected_uuids)}'
-                if scan_new_assets:
-                    args += ' --new-assets'
-                run_job(command, args, project_id, request.user)
-            except Exception as e:
-                print(f"Error running scan_httpx: {e}")
+        if not any(scan_flags.values()):
+            messages.error(request, 'Please select at least one scanner.')
+            return redirect(reverse('findings:assets'))
 
-        def scan_playwright():
-            try:
-                command = 'scan_playwright'
-                args = f'--projectid {project_id}'
-                if selected_uuids:
-                    args += f' --uuids {",".join(selected_uuids)}'
-                if scan_new_assets:
-                    args += ' --new-assets'
-                run_job(command, args, project_id, request.user)
-            except Exception as e:
-                print(f"Error running scan_playwright: {e}")
-
-        def scan_shepherdai():
-            try:
-                command = 'scan_shepherdai'
-                args = f'--projectid {project_id}'
-                if selected_uuids:
-                    args += f' --uuids {",".join(selected_uuids)}'
-                if scan_new_assets:
-                    args += ' --new-assets'
-                run_job(command, args, project_id, request.user)
-            except Exception as e:
-                print(f"Error running scan_shepherdai: {e}")
-
-        def scan_nuclei():
-            try:
-                command = 'scan_nuclei'
-                args = f'--projectid {project_id}'
-                if selected_uuids:
-                    args += f' --uuids {",".join(selected_uuids)}'
-                if scan_new_assets:
-                    args += ' --new-assets'
-                run_job(command, args, project_id, request.user)
-            except Exception as e:
-                print(f"Error running scan_nuclei: {e}")
-
-        def scan_nuclei_nt():
-            try:
-                command = 'scan_nuclei'
-                args = f'--projectid {project_id} --nt'
-                if selected_uuids:
-                    args += f' --uuids {",".join(selected_uuids)}'
-                if scan_new_assets:
-                    args += ' --new-assets'
-                run_job(command, args, project_id, request.user)
-            except Exception as e:
-                print(f"Error running scan_nuclei: {e}")
-
-        # Prepare threads for parallel jobs
-        threads = []
-
-        # If both scan_nmap and scan_httpx are selected, run them sequentially in a single thread
-        if "scan_nmap" in request.POST and "scan_httpx" in request.POST:
-            def chained_jobs():
-                scan_nmap()
-                scan_httpx()
-            threads.append(threading.Thread(target=chained_jobs))
-            messages.info(request, 'Nmap scan followed by a Httpx scan have been triggered in the background. (check jobs)')
-        # If both scan_nmap and scan_playwright are selected, run them sequentially in a single thread
-        elif "scan_nmap" in request.POST and "scan_playwright" in request.POST:
-            def chained_jobs():
-                scan_nmap()
-                scan_playwright()
-            threads.append(threading.Thread(target=chained_jobs))
-            messages.info(request, 'Nmap scan followed by a Playwright scan have been triggered in the background. (check jobs)')
-        # If both scan_nmap and scan_shepherdai are selected, run them sequentially in a single thread
-        elif "scan_nmap" in request.POST and "scan_shepherdai" in request.POST:
-            def chained_jobs():
-                scan_nmap()
-                scan_shepherdai()
-            threads.append(threading.Thread(target=chained_jobs))
-            messages.info(request, 'Nmap scan followed by a Shepherd AI scan have been triggered in the background. (check jobs)')
-        else:
-            if "scan_nmap" in request.POST:
-                threads.append(threading.Thread(target=scan_nmap))
-                messages.info(request, 'Nmap scan has been triggered in the background. (check jobs)')
-            if "scan_httpx" in request.POST:
-                threads.append(threading.Thread(target=scan_httpx))
-                messages.info(request, 'Httpx scan has been triggered in the background. (check jobs)')
-            if "scan_playwright" in request.POST:
-                threads.append(threading.Thread(target=scan_playwright))
-                messages.info(request, 'Playwright scan has been triggered in the background. (check jobs)')
-            if "scan_shepherdai" in request.POST:
-                threads.append(threading.Thread(target=scan_shepherdai))
-                messages.info(request, 'Shepherd AI scan has been triggered in the background. (check jobs)')
-
-        # Nuclei scans can always be parallelized
-        if "scan_nuclei" in request.POST:
-            if "scan_nuclei_new_templates" in request.POST:
-                threads.append(threading.Thread(target=scan_nuclei_nt))
-                messages.info(request, 'Nuclei scan for new templates has been triggered in the background. (check jobs)')
-            else:
-                threads.append(threading.Thread(target=scan_nuclei))
-                messages.info(request, 'Nuclei scan has been triggered in the background. (check jobs)')
-
-        # Start all threads
-        for thread in threads:
-            thread.start()
+        triggered_msgs = _run_scan_jobs(project_id, request.user, selected_uuids, scan_new_assets, scan_flags)
+        for msg in triggered_msgs:
+            messages.info(request, msg)
 
     return redirect(reverse('findings:assets'))
 
@@ -552,6 +550,97 @@ def httpx_results(request):
     }
 
     return render(request, 'findings/list_screenshots.html', context)
+
+@login_required
+def control_center(request):
+    if not request.user.has_perm('project.view_asset'):
+        return HttpResponseForbidden("You do not have permission.")
+    project_id = request.session.get('current_project', {}).get('prj_id', None)
+    source_options = []
+    if project_id:
+        raw_sources = (
+            Asset.objects.filter(related_project_id=project_id)
+            .exclude(source__isnull=True)
+            .exclude(source__exact='')
+            .values_list('source', flat=True)
+            .distinct()
+        )
+        unique_sources = set()
+        for entry in raw_sources:
+            parts = [part.strip() for part in entry.split(',') if part.strip()]
+            unique_sources.update(parts)
+        source_options = sorted(unique_sources)
+
+    context = {
+        'projectid': project_id,
+        'source_options': source_options,
+    }
+    return render(request, 'findings/control_center.html', context)
+
+
+@login_required
+def control_center_preview(request):
+    if not request.user.has_perm('project.view_asset'):
+        return HttpResponseForbidden("You do not have permission.")
+    project_id = request.session.get('current_project', {}).get('prj_id')
+    if not project_id:
+        return JsonResponse({'error': 'No project selected.'}, status=400)
+
+    sources = request.GET.getlist('sources[]') or request.GET.getlist('sources')
+    filters = {
+        'type': request.GET.get('type'),
+        'scope': request.GET.get('scope'),
+        'sources': sources,
+        'name': request.GET.get('name'),
+    }
+    queryset = _filter_assets_for_project(project_id, filters)
+    count = queryset.count()
+    sample = list(
+        queryset.values('uuid', 'value', 'type', 'scope', 'source')[:25]
+    )
+    return JsonResponse({'count': count, 'sample': sample})
+
+
+@login_required
+@require_POST
+def control_center_launch(request):
+    if not request.user.has_perm('project.view_asset'):
+        return HttpResponseForbidden("You do not have permission.")
+    project_id = request.session.get('current_project', {}).get('prj_id')
+    if not project_id:
+        return JsonResponse({'success': False, 'message': 'No project selected.'}, status=400)
+
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid JSON payload.'}, status=400)
+
+    filters = payload.get('filters', {})
+    scans = payload.get('scans', {})
+
+    queryset = _filter_assets_for_project(project_id, filters)
+    asset_ids = list(queryset.values_list('uuid', flat=True))
+    if not asset_ids:
+        return JsonResponse({'success': False, 'message': 'No assets match the filters.'}, status=400)
+
+    scan_flags = {
+        'scan_nmap': bool(scans.get('scan_nmap')),
+        'scan_httpx': bool(scans.get('scan_httpx')),
+        'scan_playwright': bool(scans.get('scan_playwright')),
+        'scan_shepherdai': bool(scans.get('scan_shepherdai')),
+        'scan_nuclei': bool(scans.get('scan_nuclei')),
+        'scan_nuclei_new_templates': bool(scans.get('scan_nuclei_new_templates')),
+    }
+
+    if not any(scan_flags.values()):
+        return JsonResponse({'success': False, 'message': 'Select at least one scanner.'}, status=400)
+
+    triggered = _run_scan_jobs(project_id, request.user, asset_ids, False, scan_flags)
+    return JsonResponse({
+        'success': True,
+        'asset_count': len(asset_ids),
+        'messages': triggered,
+    })
 
 @login_required
 def export_technologies_csv(request):
@@ -597,6 +686,49 @@ def export_technologies_csv(request):
         content_type="text/csv"
     )
     response['Content-Disposition'] = 'attachment; filename="httpx_technologies.csv"'
+    return response
+
+@login_required
+def export_dns_records_csv(request):
+    """Export all DNS records as CSV."""
+    if not request.user.has_perm('findings.view_finding'):
+        return HttpResponseForbidden("You do not have permission.")
+
+    # Get current project id from session
+    projectid = request.session.get('current_project', {}).get('prj_id', None)
+    if not projectid:
+        return HttpResponseForbidden("No project selected.")
+    try:
+        prj = Project.objects.get(id=projectid)
+    except Project.DoesNotExist:
+        return HttpResponseForbidden("Project does not exist.")
+
+    # Get all DNS records for the project
+    dns_records = DNSRecord.objects.filter(related_project=prj).select_related('related_asset').order_by('-last_checked')
+
+    # Prepare CSV response
+    def dns_row(record):
+        return [
+            record.related_asset.value,
+            record.record_type,
+            record.record_value,
+            record.ttl if record.ttl else '',
+            record.last_checked.strftime('%Y-%m-%d %H:%M:%S') if record.last_checked else '',
+        ]
+
+    class Echo:
+        def write(self, value):
+            return value
+
+    pseudo_buffer = Echo()
+    writer = csv.writer(pseudo_buffer)
+    header = ['Asset', 'Record Type', 'Record Value', 'TTL', 'Last Checked']
+    rows = (dns_row(r) for r in dns_records)
+    response = StreamingHttpResponse(
+        (writer.writerow(row) for row in ([header] + list(rows))),
+        content_type="text/csv"
+    )
+    response['Content-Disposition'] = 'attachment; filename="dns_records.csv"'
     return response
 
 @login_required

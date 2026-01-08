@@ -121,7 +121,7 @@ $(document).ready( function () {
     // Monitored findings
     var findingsTable = $('#table_list_findings').DataTable({
         processing: true, serverSide: true, pageLength: 25,
-        orderCellsTop: false,
+        orderCellsTop: true,
         oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
         order: [[ 1, "asc" ]],
         ajax: {
@@ -196,8 +196,9 @@ $(document).ready( function () {
     });
 
     // Apply the search
-    // Use the global debounced column search from base.html
-    applyDebouncedColumnSearch(findingsTable, 'input.column-search', 'select.column-search');
+    // Find the second header row (filter row) and bind to its inputs/selects
+    var $filterRow = $('#table_list_findings thead tr:eq(1)');
+    applyDebouncedColumnSearch(findingsTable, 'input.column-search', 'select.column-search', 400, $filterRow);
 
     // Apply the severity filter (if it exists)
     $('#severity-filter').on('change', function () {

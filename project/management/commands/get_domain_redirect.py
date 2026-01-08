@@ -80,6 +80,8 @@ class Command(BaseCommand):
                     final_asset.last_seen_time = make_aware(dateparser.parse(datetime.now().isoformat(sep=" ", timespec="seconds")))
                     if not 'redirect' in final_asset.source:
                         final_asset.source = final_asset.source + ", redirect"
+                    if not asset_data["description"] in final_asset.description:
+                        final_asset.description = "\n".join([final_asset.description, asset_data["description"]])
                     final_asset.save()
 
                 self.stdout.write(f"{domain} redirects to {final_domain}")
@@ -111,7 +113,7 @@ class Command(BaseCommand):
                     response = requests.get(url, allow_redirects=True, timeout=10)
                     final_url = response.url
                     parsed_url = urlparse(final_url)
-                    return parsed_url.netloc  # Return the final domain
+                    return parsed_url.hostname  # Return the final domain (without port)
             except (socket.error, requests.RequestException):
                 continue  # Try the next scheme/port
             except Exception as e:

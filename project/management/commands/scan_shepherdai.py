@@ -223,10 +223,10 @@ class Command(BaseCommand):
             severity_raw = finding.get("severity", "Info") or "Info"
             severity_normalized = severity_raw.lower()
             finding_type = finding.get("type", "other") or "other"
-            evidence = finding.get("evidence", "")
-            reasoning = finding.get("reasoning", "")
-            recommendation = finding.get("recommendation", "")
-            reference = finding.get("reference", "")
+            evidence = finding.get("evidence", "") or ""
+            reasoning = finding.get("reasoning", "") or ""
+            recommendation = finding.get("recommendation", "") or ""
+            reference = finding.get("reference", "") or ""
 
             description_parts = [
                 reasoning or "",

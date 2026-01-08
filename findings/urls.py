@@ -24,6 +24,9 @@ urlpatterns = [
 
     # HTTPX Results
     path('httpx/results/', views.httpx_results, name='httpx_results'),
+    path('control-center/', views.control_center, name='control_center'),
+    path('control-center/preview/', views.control_center_preview, name='control_center_preview'),
+    path('control-center/launch/', views.control_center_launch, name='control_center_launch'),
     path('technologies/export/', views.export_technologies_csv, name='export_technologies_csv'),
 
     # Scanner stuffs
@@ -39,4 +42,5 @@ urlpatterns = [
     
     # DNS records
     path('dns_records/', views.dns_records, name='dns_records'),
+    path('dns_records/export/', views.export_dns_records_csv, name='export_dns_records_csv'),
 ]

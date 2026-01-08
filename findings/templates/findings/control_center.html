@@ -1,0 +1,422 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block header %}
+<style>
+.control-card {
+    border: 1px solid #e5e5e5;
+    border-radius: 6px;
+    background: #fff;
+    padding: 16px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.control-card h4 {
+    margin-top: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.control-card.disabled {
+    opacity: 0.6;
+}
+.control-card .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.control-card .toggle-row:last-child {
+    margin-bottom: 0;
+}
+.control-card .meta {
+    color: #777;
+    font-size: 0.85em;
+}
+.hint-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #eef2ff;
+    color: #4353a4;
+    font-size: 0.75em;
+    margin-left: 6px;
+}
+.scanner-legend {
+    font-size: 0.78em;
+    color: #666;
+    margin: 2px 0 10px;
+}
+.scanner-note-inline {
+    font-size: 0.78em;
+    color: #666;
+    margin-left: 8px;
+}
+.scanner-section {
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f1f1f1;
+}
+.scanner-section:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+.scanner-section h5 {
+    margin-top: 0;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    font-size: 0.85em;
+    letter-spacing: 0.04em;
+    color: #555;
+}
+.source-checkboxes {
+    border: 1px solid #e5e5e5;
+    border-radius: 4px;
+    padding: 8px;
+    max-height: 220px;
+    overflow-y: auto;
+    background: #fafafa;
+}
+.source-checkboxes .checkbox {
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+.source-checkboxes .checkbox:first-child {
+    margin-top: 0;
+}
+.source-checkboxes .checkbox:last-child {
+    margin-bottom: 0;
+}
+.status-list li {
+    line-height: 1.4;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+{% spaceless %}
+<div class="page-header">
+    <div class="media">
+        <div class="media-left"></div>
+        <div class="media-body">
+            <h2 class="media-heading">🧠 Control Center</h2>
+            <p class="text-muted" style="margin-top:4px;">Central place to orchestrate scans and monitor recent activity</p>
+        </div>
+    </div>
+</div>
+
+{% if messages %}
+    {% for message in messages %}
+        <div {% if message.tags %} class="alert alert-{{ message.tags }}" {% endif %}>{{ message }}</div>
+    {% endfor %}
+{% endif %}
+
+<div class="control-card">
+    <h4>1. Choose Assets</h4>
+    <p class="meta">Filter the assets you want to scan. Shepherd will use these filters when launching scans.</p>
+    <div class="row">
+        <div class="col-sm-4">
+            <label>Asset Type</label>
+            <select class="form-control input-sm" id="filter-type">
+                <option value="">All</option>
+                <option value="domain">Domain</option>
+                <option value="starred_domain">Starred Domain</option>
+                <option value="certificate">Certificate</option>
+                <option value="url">URL</option>
+            </select>
+        </div>
+        <div class="col-sm-4">
+            <label>Scope</label>
+            <select class="form-control input-sm" id="filter-scope">
+                <option value="">All</option>
+                <option value="external">External</option>
+                <option value="internal">Internal</option>
+            </select>
+        </div>
+        <div class="col-sm-4">
+            <label>Asset Name Contains</label>
+            <input type="text" class="form-control input-sm" id="filter-name" placeholder="acme, portal, auth...">
+        </div>
+    </div>
+    <div class="row" style="margin-top:10px;">
+        <div class="col-sm-12">
+            <label>Source</label>
+            <div class="source-checkboxes" id="filter-source-group">
+                <div class="checkbox">
+                    <label>
+                        <input type="checkbox" id="source-all" checked>
+                        All sources
+                    </label>
+                </div>
+                {% if source_options %}
+                    <hr style="margin:6px 0;">
+                    {% for source in source_options %}
+                        <div class="checkbox">
+                            <label>
+                                <input type="checkbox" class="source-option" value="{{ source }}" checked>
+                                {{ source }}
+                            </label>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="meta" style="margin:0;">No sources detected yet.</p>
+                {% endif %}
+            </div>
+            <span class="meta">Uncheck “All sources” to refine by individual sources.</span>
+        </div>
+    </div>
+    <div style="margin-top:12px;">
+        <button class="btn btn-default btn-sm" id="btn-preview-assets">Preview assets</button>
+        <span class="meta" id="selected-assets-hint">No filter applied yet.</span>
+    </div>
+    <div class="table-responsive" id="preview-container" style="display:none; margin-top:12px;">
+        <table class="table table-condensed table-striped table-bordered" id="preview-table" style="font-size:0.85em;">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Scope</th>
+                    <th>Source</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="control-card">
+    <h4>2. Select Scanners</h4>
+    <p class="meta">Scans run in parallel. Badges highlight dependencies and exclusive choices.</p>
+
+    <div class="scanner-section">
+        <h5>Baseline discovery</h5>
+        <div class="toggle-row">
+            <input type="checkbox" id="scan-nmap" checked>
+            <label for="scan-nmap">Nmap (ports)</label>
+        </div>
+    </div>
+
+    <div class="scanner-section">
+        <h5>Screenshot engine <span class="hint-pill">Pick one</span></h5>
+        <div class="scanner-legend" id="screenshot-nmap-warning" style="display:none; color:#c9302c;">⚠️ Warning: Screenshot engine requires pre-existing Nmap scan results to work.</div>
+        <div class="toggle-row">
+            <input type="checkbox" id="scan-playwright" class="scanner-exclusive" data-exclusive-group="screenshots" checked>
+            <label for="scan-playwright">Playwright (deep screenshots)</label>
+        </div>
+        <div class="toggle-row">
+            <input type="checkbox" id="scan-httpx" class="scanner-exclusive" data-exclusive-group="screenshots">
+            <label for="scan-httpx">HTTPX (screenshots & tech)</label>
+            <span class="scanner-note-inline" style="color:#b58105;">⚠️ Less reliable</span>
+        </div>
+    </div>
+
+    <div class="scanner-section">
+        <h5>Vulnerability templates <span class="hint-pill">Pick one</span></h5>
+        <div class="scanner-legend">Choose full run or only new templates.</div>
+        <div class="toggle-row">
+            <input type="checkbox" id="scan-nuclei" class="scanner-exclusive" data-exclusive-group="nuclei" checked>
+            <label for="scan-nuclei">Nuclei (all templates)</label>
+        </div>
+        <div class="toggle-row">
+            <input type="checkbox" id="scan-nuclei-new" class="scanner-exclusive" data-exclusive-group="nuclei">
+            <label for="scan-nuclei-new">Nuclei – new templates only</label>
+        </div>
+    </div>
+
+    <div class="scanner-section">
+        <h5>Shepherd AI <span class="hint-pill">Uses gathered data</span></h5>
+        <div class="scanner-legend">Reviews ports, screenshots, and findings for extra insights.</div>
+        <div class="toggle-row">
+            <input type="checkbox" id="scan-shepherdai" checked>
+            <label for="scan-shepherdai">Shepherd AI (finding review)</label>
+        </div>
+    </div>
+
+    <div class="toggle-row">
+        <input type="checkbox" id="scan-burp" disabled>
+        <label class="text-muted" for="scan-burp">Burp scan (coming soon)</label>
+    </div>
+</div>
+
+<div class="control-card">
+    <h4>3. Launch</h4>
+    <p class="meta">Review your selections and trigger the scans. This will launch background jobs and you can monitor them under Jobs.</p>
+    <div class="row">
+        <div class="col-sm-6">
+            <button class="btn btn-primary btn-sm" id="btn-launch-scans">Launch scans</button>
+        </div>
+        <div class="col-sm-6 text-right">
+            <a class="btn btn-link btn-sm" href="{% url 'jobs:jobs' %}">View jobs →</a>
+        </div>
+    </div>
+    <div id="scan-feedback" class="meta" style="margin-top:10px;"></div>
+</div>
+{% endspaceless %}
+{% endblock %}
+
+{% block javascript %}
+<script src="{% static 'js/bootbox.min.js' %}"></script>
+<script type="text/javascript">
+$(document).ready(function () {
+    function syncSourceAllCheckbox() {
+        var total = $('.source-option').length;
+        var checkedCount = $('.source-option:checked').length;
+        $('#source-all').prop('checked', total > 0 && checkedCount === total);
+    }
+
+    function getSelectedSources() {
+        if ($('#source-all').is(':checked')) {
+            return [];
+        }
+        var values = [];
+        $('.source-option:checked').each(function () {
+            values.push($(this).val());
+        });
+        return values;
+    }
+
+    function enforceExclusiveGroups() {
+        $('[data-exclusive-group]').on('change', function () {
+            var group = $(this).data('exclusive-group');
+            if ($(this).is(':checked')) {
+                $('[data-exclusive-group="' + group + '"]').not(this).prop('checked', false);
+            }
+            updateScreenshotWarning();
+        });
+    }
+
+    function updateScreenshotWarning() {
+        var screenshotSelected = $('[data-exclusive-group="screenshots"]:checked').length > 0;
+        var nmapSelected = $('#scan-nmap').is(':checked');
+        if (screenshotSelected && !nmapSelected) {
+            $('#screenshot-nmap-warning').show();
+        } else {
+            $('#screenshot-nmap-warning').hide();
+        }
+    }
+
+    function getFilters() {
+        return {
+            type: $('#filter-type').val(),
+            scope: $('#filter-scope').val(),
+            sources: getSelectedSources(),
+            name: $('#filter-name').val()
+        };
+    }
+
+    function getScans() {
+        return {
+            scan_nmap: $('#scan-nmap').is(':checked'),
+            scan_httpx: $('#scan-httpx').is(':checked'),
+            scan_playwright: $('#scan-playwright').is(':checked'),
+            scan_shepherdai: $('#scan-shepherdai').is(':checked'),
+            scan_nuclei: $('#scan-nuclei').is(':checked'),
+            scan_nuclei_new_templates: $('#scan-nuclei-new').is(':checked')
+        };
+    }
+
+    function getCookie(name) {
+        var cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            var cookies = document.cookie.split(';');
+            for (var i = 0; i < cookies.length; i++) {
+                var cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    $('#source-all').on('change', function () {
+        var isChecked = $(this).is(':checked');
+        $('.source-option').prop('checked', isChecked);
+    });
+
+    $(document).on('change', '.source-option', function () {
+        if (!$(this).is(':checked')) {
+            $('#source-all').prop('checked', false);
+        } else {
+            syncSourceAllCheckbox();
+        }
+    });
+
+    syncSourceAllCheckbox();
+    enforceExclusiveGroups();
+    updateScreenshotWarning();
+
+    $('#scan-nmap').on('change', function () {
+        updateScreenshotWarning();
+    });
+
+    $('#btn-preview-assets').on('click', function(e) {
+        e.preventDefault();
+        var filters = getFilters();
+        $('#selected-assets-hint').text('Loading preview...');
+        $('#preview-container').hide();
+        $.ajax({
+            url: "{% url 'findings:control_center_preview' %}",
+            data: filters,
+            success: function(resp) {
+                $('#selected-assets-hint').text(resp.count + ' asset(s) match the filters.');
+                var $tbody = $('#preview-table tbody');
+                $tbody.empty();
+                if (resp.sample && resp.sample.length) {
+                    resp.sample.forEach(function(item) {
+                        $tbody.append(
+                            '<tr>' +
+                                '<td>' + $('<div/>').text(item.value || '').html() + '</td>' +
+                                '<td>' + $('<div/>').text(item.type || '').html() + '</td>' +
+                                '<td>' + $('<div/>').text(item.scope || '').html() + '</td>' +
+                                '<td>' + $('<div/>').text(item.source || '').html() + '</td>' +
+                            '</tr>'
+                        );
+                    });
+                    $('#preview-container').show();
+                } else {
+                    $('#preview-container').hide();
+                }
+            },
+            error: function() {
+                $('#selected-assets-hint').text('Failed to load preview.');
+                $('#preview-container').hide();
+            }
+        });
+    });
+
+    $('#btn-launch-scans').on('click', function() {
+        var scans = getScans();
+        if (!Object.values(scans).some(Boolean)) {
+            bootbox.alert('Select at least one scanner to launch.');
+            return;
+        }
+        var filters = getFilters();
+        $('#btn-launch-scans').prop('disabled', true).text('Launching...');
+        $('#scan-feedback').text('');
+        fetch("{% url 'findings:control_center_launch' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({filters: filters, scans: scans})
+        }).then(function(response) {
+            return response.json().then(function(data) {
+                if (!response.ok) {
+                    throw data;
+                }
+                var msg = data.asset_count + ' asset(s) queued. ' + (data.messages || []).join(' ');
+                $('#scan-feedback').text(msg);
+            });
+        }).catch(function(err) {
+            var errorText = (err && err.message) ? err.message : 'Failed to launch scans.';
+            $('#scan-feedback').text(errorText);
+        }).finally(function() {
+            $('#btn-launch-scans').prop('disabled', false).text('Launch scans');
+        });
+    });
+});
+</script>
+{% endblock %}
