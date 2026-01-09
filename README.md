@@ -1,9 +1,23 @@
-# Install and quick run
+```
+╔═════════════════════════════════════════════════════════════════╗
+║                                                                 ║
+║    ▓▓▓▓▓▓▓        ╔═╗ ╦ ╦ ╔═╗ ╔═╗ ╦ ╦ ╔═╗ ╦═╗ ╔╦╗               ║
+║   ▓▓(• •)▓▓       ╚═╗ ╠═╣ ╠═  ╠═╝ ╠═╣ ╠═  ╠╦╝  ║║               ║
+║    ▓▓▓▓▓▓▓        ╚═╝ ╩ ╩ ╚═╝ ╩   ╩ ╩ ╚═╝ ╩╚═ ═╩╝               ║
+║     ┃┃  ┃┃        External Attack Surface Management            ║
+║                                                                 ║
+╚═════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## 🚀 Quick Start
 
 ```bash
-git clone https://github.com/zeroq/shepherd
+git clone https://github.com/Cameleon037/shepherd
+cd shepherd
 cp shepherd/clean_settings.py shepherd/settings.py
-# Set DEBUG to False for use in Production
+# Set DEBUG to False for Production
 
 python3 -m venv venv
 source venv/bin/activate
@@ -14,46 +28,70 @@ pip3 install -r requirements.txt
 python3 manage.py runserver 127.0.0.1:80
 ```
 
-# Dependency tools (can all be installed as a single user for quick runs)
+---
+
+## 📦 Dependencies
+
+<details>
+<summary><b>System packages (as root)</b></summary>
 
 ```bash
-# As root
 apt install nmap redis npm
 wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
 apt install ./google-chrome-stable_current_amd64.deb
 wget https://go.dev/dl/go1.24.4.linux-amd64.tar.gz -O /tmp/go1.24.4.linux-amd64.tar.gz
 rm -rf /usr/local/go
 tar -C /usr/local -xzf /tmp/go1.24.4.linux-amd64.tar.gz
+```
 
-# Switch to www-data
+</details>
+
+<details>
+<summary><b>Go tools (as www-data)</b></summary>
+
+```bash
 mkdir /var/www/
 sudo chown -R www-data:www-data /var/www/
 sudo -u www-data bash
 
-# As www-data
 export PATH=/opt/shepherd/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/usr/local/go/bin:/var/www/go/bin
-cd
+cd ~
 go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
 go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
 go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
-# AI capabilities
+```
+
+</details>
+
+<details>
+<summary><b>AI capabilities (optional)</b></summary>
+
+```bash
+sudo -u www-data bash
 cd ~
 touch ~/.bashrc
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
 source ~/.bashrc
 nvm install node
-# Enter (y) and install PLaywright MCP
-npx @playwright/mcp@latest
+npx @playwright/mcp@latest  # Enter (y) to install Playwright MCP
 ```
 
-# For production
+</details>
+
+---
+
+## 🏭 Production Deployment
+
+### Initial Setup
+
 ```bash
 # As root
 cd /opt
-git clone https://github.com/zeroq/shepherd
+git clone https://github.com/Cameleon037/shepherd
 cp shepherd/clean_settings.py shepherd/settings.py
 chown -R www-data:www-data /opt/shepherd/
 apt install python3-pip python3-venv libpq-dev postgresql postgresql-contrib nginx
+
 cd /opt/shepherd
 python3 -m venv venv
 source venv/bin/activate
@@ -63,10 +101,15 @@ pip3 install -r requirements.txt
 sudo -u www-data bash
 source venv/bin/activate
 playwright install
+```
 
-# Psql
+### PostgreSQL Setup
+
+```bash
 sudo -u postgres psql
-# In the psql shell:
+```
+
+```sql
 CREATE DATABASE shepherddb;
 CREATE USER shepherd WITH PASSWORD 'mypassword';
 ALTER ROLE shepherd SET client_encoding TO 'utf8';
@@ -76,8 +119,12 @@ GRANT ALL PRIVILEGES ON DATABASE shepherddb TO shepherd;
 \q
 ```
 
-## shepherd/settings.py
-```py
+### Configuration Files
+
+<details>
+<summary><code>shepherd/settings.py</code></summary>
+
+```python
 DEBUG = False
 
 DATABASES = {
@@ -98,8 +145,12 @@ RATELIMIT_IP_META_KEY = 'HTTP_X_FORWARDED_FOR'
 RATELIMIT_TRUSTED_PROXIES = ['127.0.0.1', '::1']
 ```
 
-## /etc/systemd/system/gunicorn.service
-```conf
+</details>
+
+<details>
+<summary><code>/etc/systemd/system/gunicorn.service</code></summary>
+
+```ini
 [Unit]
 Description=gunicorn daemon
 After=network.target
@@ -115,8 +166,12 @@ ExecStart=/bin/bash -c "source /var/www/.bashrc && /opt/shepherd/venv/bin/gunico
 WantedBy=multi-user.target
 ```
 
-## /etc/systemd/system/celery-beat.service
-```conf
+</details>
+
+<details>
+<summary><code>/etc/systemd/system/celery-beat.service</code></summary>
+
+```ini
 [Unit]
 Description=Celery Beat Service
 After=network.target
@@ -132,8 +187,12 @@ ExecStart=/bin/bash -c "source /var/www/.bashrc && /opt/shepherd/venv/bin/celery
 WantedBy=multi-user.target
 ```
 
-## /etc/systemd/system/celery-worker.service
-```conf
+</details>
+
+<details>
+<summary><code>/etc/systemd/system/celery-worker.service</code></summary>
+
+```ini
 [Unit]
 Description=Celery Worker Service
 After=network.target
@@ -150,28 +209,30 @@ ExecStart=/bin/bash -c "source /var/www/.bashrc && /opt/shepherd/venv/bin/celery
 WantedBy=multi-user.target
 ```
 
-## Enable services
+</details>
+
+### Enable Services
+
 ```bash
-systemctl enable gunicorn
-systemctl start gunicorn
-
-systemctl enable redis-server
-systemctl start redis-server
-
-systemctl enable celery-beat
-systemctl start celery-beat
-
-systemctl enable celery-worker
-systemctl start celery-worker
+systemctl enable --now gunicorn
+systemctl enable --now redis-server
+systemctl enable --now celery-beat
+systemctl enable --now celery-worker
 ```
 
-## SSL cert
+### SSL & Nginx
+
 ```bash
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/shepherd.key -out /etc/ssl/certs/shepherd.crt
+# Generate self-signed cert
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /etc/ssl/private/shepherd.key \
+  -out /etc/ssl/certs/shepherd.crt
 ```
 
-## /etc/nginx/sites-available/shepherd
-```conf
+<details>
+<summary><code>/etc/nginx/sites-available/shepherd</code></summary>
+
+```nginx
 server {
     listen 80;
     server_name your_domain.com;
@@ -192,21 +253,27 @@ server {
 
     location / {
         include proxy_params;
-        # proxy_set_header X-Forwarded-For;
         proxy_pass http://unix:/opt/shepherd/gunicorn.sock;
     }
 }
 ```
 
-## Enable the site and restard Nginx
+</details>
+
 ```bash
 rm /etc/nginx/sites-enabled/default
 ln -s /etc/nginx/sites-available/shepherd /etc/nginx/sites-enabled
-nginx -t
-systemctl restart nginx
+nginx -t && systemctl restart nginx
 ```
 
-## Setup the Shepherd
-```
+### Initialize Database
+
+```bash
 ./clean_all.sh
 ```
+
+---
+
+## 📄 License
+
+MIT
