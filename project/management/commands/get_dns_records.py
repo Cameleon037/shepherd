@@ -32,6 +32,12 @@ class Command(BaseCommand):
             dest='flush_old_records',
             help='Do not flush old DNS records before scanning',
         )
+        parser.add_argument(
+            '--scope',
+            type=str,
+            help='Filter by scope (e.g., external, internal)',
+            required=False,
+        )
 
     def handle(self, *args, **kwargs):
         project_filter = {}
@@ -40,9 +46,13 @@ class Command(BaseCommand):
 
         uuids_arg = kwargs.get('uuids')
         flush_old_records = kwargs.get('flush_old_records', True)
+        scope_filter = kwargs.get('scope')
 
         # Get total count without loading all objects
-        assets_query = Asset.objects.filter(**project_filter).filter(scope='external', type='domain')
+        assets_query = Asset.objects.filter(**project_filter).filter(type='domain')
+        # Filter by scope if provided
+        if scope_filter:
+            assets_query = assets_query.filter(scope=scope_filter)
         if uuids_arg:
             uuid_list = [u.strip() for u in uuids_arg.split(",") if u.strip()]
             assets_query = assets_query.filter(uuid__in=uuid_list)

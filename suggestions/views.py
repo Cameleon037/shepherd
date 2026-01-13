@@ -97,9 +97,9 @@ def suggestions(request):
         return redirect(reverse('suggestions:suggestions'))
     else:
         prj = Project.objects.get(id=request.session['current_project']['prj_id'])
-        context['domain_count'] = prj.asset_set.filter(scope='external', type='domain', ignore=False).count()
-        context['secondleveldomain_count'] = prj.asset_set.filter(scope='external', type='domain', subtype='domain', ignore=False).count()
-        context['starreddomain_count'] = prj.asset_set.filter(scope='external', type='starred_domain', ignore=False).count()
+        context['domain_count'] = prj.asset_set.filter(type='domain', ignore=False).count()
+        context['secondleveldomain_count'] = prj.asset_set.filter(type='domain', subtype='domain', ignore=False).count()
+        context['starreddomain_count'] = prj.asset_set.filter(type='starred_domain', ignore=False).count()
         context['ip_count'] = 0
         context['activetab'] = 'domain'
     return render(request, 'suggestions/list_suggestions.html', context)
