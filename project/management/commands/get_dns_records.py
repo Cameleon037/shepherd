@@ -56,6 +56,8 @@ class Command(BaseCommand):
             record_types = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SOA', 'PTR']
             found_records = []
             has_any_records = False
+            ipv4_addresses = []
+            ipv6_addresses = []
             
             # Flush old DNS records for this asset if requested
             if flush_old_records:
@@ -71,6 +73,12 @@ class Command(BaseCommand):
                         for answer in answers:
                             record_value = str(answer)
                             ttl = answer.ttl if hasattr(answer, 'ttl') else None
+                            
+                            # Collect IPv4 and IPv6 addresses
+                            if record_type == 'A':
+                                ipv4_addresses.append(record_value)
+                            elif record_type == 'AAAA':
+                                ipv6_addresses.append(record_value)
                             
                             # Store the DNS record
                             dns_record, created = DNSRecord.objects.get_or_create(
@@ -98,11 +106,11 @@ class Command(BaseCommand):
                         self.stderr.write(f"Error checking {record_type} for {asset.value}: {e}")
                         continue
                 
-                return asset, has_any_records, found_records
+                return asset, has_any_records, found_records, ipv4_addresses, ipv6_addresses
                 
             except Exception as e:
                 self.stderr.write(f"Error checking {asset.value}: {e}")
-                return asset, asset.active, []  # Keep the current status if an error occurs
+                return asset, asset.active, [], [], []  # Keep the current status if an error occurs
 
         # Process in batches to reduce memory usage
         batch_size = 1000  # Process 100 assets at a time
@@ -123,8 +131,12 @@ class Command(BaseCommand):
                 
                 # Process results for this batch
                 for future in concurrent.futures.as_completed(future_to_asset):
-                    asset, has_dns, found_records = future.result()
+                    asset, has_dns, found_records, ipv4_list, ipv6_list = future.result()
                     print(f"{asset.value}: {len(found_records)} records found, active={has_dns}")
+                    
+                    # Update IPv4 and IPv6 fields
+                    asset.ipv4 = ','.join(ipv4_list) if ipv4_list else ''
+                    asset.ipv6 = ','.join(ipv6_list) if ipv6_list else ''
                     
                     if not has_dns:
                         asset.active = False

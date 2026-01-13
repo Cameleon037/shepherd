@@ -15,9 +15,19 @@ class KeywordSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class SuggestionSerializer(serializers.ModelSerializer):
+    ip = serializers.SerializerMethodField()
+
     class Meta:
         model = Asset
         fields = '__all__'
+
+    def get_ip(self, obj):
+        ips = []
+        if obj.ipv4:
+            ips.append(obj.ipv4)
+        if obj.ipv6:
+            ips.append(obj.ipv6)
+        return ', '.join(ips) if ips else ''
 
 class PortSerializer(serializers.ModelSerializer):
     domain_uuid = serializers.SerializerMethodField()
@@ -36,6 +46,7 @@ class AssetSerializer(serializers.ModelSerializer):
     vuln_low = serializers.IntegerField()
     vuln_info = serializers.IntegerField()
     vulns = serializers.SerializerMethodField()
+    ip = serializers.SerializerMethodField()
 
     class Meta:
         model = Asset
@@ -43,6 +54,14 @@ class AssetSerializer(serializers.ModelSerializer):
 
     def get_vulns(self, obj):
         return '<span class="label label-default">'+str(obj.vuln_critical)+'</span><span class="label label-danger">'+str(obj.vuln_high)+'</span><span class="label label-warning">'+str(obj.vuln_medium)+'</span><span class="label label-success">'+str(obj.vuln_low)+'</span><span  class="label label-primary">'+str(obj.vuln_info)+'</span>'
+
+    def get_ip(self, obj):
+        ips = []
+        if obj.ipv4:
+            ips.append(obj.ipv4)
+        if obj.ipv6:
+            ips.append(obj.ipv6)
+        return ', '.join(ips) if ips else ''
 
 class FindingSerializer(serializers.ModelSerializer):
     asset = serializers.SerializerMethodField()

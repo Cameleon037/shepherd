@@ -38,6 +38,12 @@ class Command(BaseCommand):
             required=False,
         )
         parser.add_argument(
+            '--scope',
+            type=str,
+            help='Filter by scope (e.g., external, internal)',
+            required=False,
+        )
+        parser.add_argument(
             '--new-assets',
             action='store_true',
             help='Only scan assets with empty last_scan_time',
@@ -48,6 +54,7 @@ class Command(BaseCommand):
         update = kwargs.get('update')
         nt_option = kwargs.get('nt')
         uuids_arg = kwargs.get('uuids')
+        scope_filter = kwargs.get('scope')
         new_assets_only = kwargs.get('new_assets')
 
         # Handle the update argument
@@ -70,6 +77,10 @@ class Command(BaseCommand):
         if uuids_arg:
             uuid_list = [u.strip() for u in uuids_arg.split(",") if u.strip()]
             active_domains = active_domains.filter(uuid__in=uuid_list)
+
+        # Filter by scope if provided
+        if scope_filter:
+            active_domains = active_domains.filter(scope=scope_filter)
 
         # Filter by new_assets_only if set
         if new_assets_only:

@@ -41,6 +41,12 @@ class Command(BaseCommand):
             required=False,
         )
         parser.add_argument(
+            '--scope',
+            type=str,
+            help='Filter by scope (e.g., external, internal)',
+            required=False,
+        )
+        parser.add_argument(
             '--new-assets',
             action='store_true',
             help='Only scan assets with empty last_scan_time',
@@ -66,6 +72,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         projectid = options.get('projectid')
         uuids_arg = options.get('uuids')
+        scope_filter = options.get('scope')
         new_assets_only = options.get('new_assets')
 
         # Get the projects to scan
@@ -79,6 +86,9 @@ class Command(BaseCommand):
 
         for prj in projects:
             domains_qs = prj.asset_set.filter(monitor=True)
+            # Filter by scope if provided
+            if scope_filter:
+                domains_qs = domains_qs.filter(scope=scope_filter)
             # Filter by uuids if provided
             if uuids_arg:
                 uuid_list = [u.strip() for u in uuids_arg.split(",") if u.strip()]

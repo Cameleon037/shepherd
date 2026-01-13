@@ -164,3 +164,19 @@
 .findings-table td {
     vertical-align: top;
 }
+
+/* Truncated cell styles for DataTables */
+.truncated-cell,
+.ip-cell {
+    max-width: 150px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+
+.truncated-cell:hover,
+.ip-cell:hover {
+    white-space: normal;
+    word-break: break-all;
+}

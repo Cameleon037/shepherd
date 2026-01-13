@@ -1,0 +1,418 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block header %}
+<style>
+.control-card {
+    border: 1px solid #e5e5e5;
+    border-radius: 6px;
+    background: #fff;
+    padding: 16px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.control-card h4 {
+    margin-top: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.control-card.disabled {
+    opacity: 0.6;
+}
+.control-card .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.control-card .toggle-row:last-child {
+    margin-bottom: 0;
+}
+.control-card .meta {
+    color: #777;
+    font-size: 0.85em;
+}
+.hint-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #eef2ff;
+    color: #4353a4;
+    font-size: 0.75em;
+    margin-left: 6px;
+}
+.scanner-legend {
+    font-size: 0.78em;
+    color: #666;
+    margin: 2px 0 10px;
+}
+.scanner-note-inline {
+    font-size: 0.78em;
+    color: #666;
+    margin-left: 8px;
+}
+.scanner-section {
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f1f1f1;
+}
+.scanner-section:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+.scanner-section h5 {
+    margin-top: 0;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    font-size: 0.85em;
+    letter-spacing: 0.04em;
+    color: #555;
+}
+.keyword-checkboxes {
+    border: 1px solid #e5e5e5;
+    border-radius: 4px;
+    padding: 8px;
+    max-height: 250px;
+    overflow-y: auto;
+    background: #fafafa;
+}
+.keyword-checkboxes .checkbox {
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+.keyword-checkboxes .checkbox:first-child {
+    margin-top: 0;
+}
+.keyword-checkboxes .checkbox:last-child {
+    margin-bottom: 0;
+}
+.keyword-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: #e0e0e0;
+    color: #555;
+    font-size: 0.75em;
+    margin-left: 6px;
+}
+.keyword-disabled {
+    color: #999;
+    text-decoration: line-through;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+{% spaceless %}
+<div class="page-header">
+    <div class="media">
+        <div class="media-left"></div>
+        <div class="media-body">
+            <h2 class="media-heading">🔍 Discovery Control Center</h2>
+            <p class="text-muted" style="margin-top:4px;">Discover new assets using keywords and external data sources</p>
+        </div>
+    </div>
+</div>
+
+{% if messages %}
+    {% for message in messages %}
+        <div {% if message.tags %} class="alert alert-{{ message.tags }}" {% endif %}>{{ message }}</div>
+    {% endfor %}
+{% endif %}
+
+<div class="control-card">
+    <h4>1. Choose Keywords</h4>
+    <p class="meta">Select which keywords to use for discovery. Only enabled keywords are shown.</p>
+    <div class="keyword-checkboxes" id="keyword-selection">
+        <div class="checkbox">
+            <label>
+                <input type="checkbox" id="keyword-all" checked>
+                <strong>All enabled keywords</strong>
+            </label>
+        </div>
+        {% if keywords %}
+            <hr style="margin:6px 0;">
+            {% for kw in keywords %}
+                <div class="checkbox">
+                    <label>
+                        <input type="checkbox" class="keyword-option" value="{{ kw.id }}" checked>
+                        {{ kw.keyword }}
+                        <span class="keyword-badge">{{ kw.ktype }}</span>
+                    </label>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p class="meta" style="margin:0;">No enabled keywords found. <a href="{% url 'keywords:keywords' %}">Add keywords first.</a></p>
+        {% endif %}
+    </div>
+    <span class="meta">Uncheck "All enabled keywords" to select specific keywords.</span>
+</div>
+
+<div class="control-card">
+    <h4>2. Select Discovery Sources</h4>
+    <p class="meta">Choose which external sources to query for asset discovery.</p>
+
+    <div class="scanner-section">
+        <div class="toggle-row">
+            <input type="checkbox" id="group-domain-discovery" class="scanner-group" data-group="domain-discovery" checked>
+            <label for="group-domain-discovery"><strong>Domain Discovery</strong></label>
+        </div>
+        <div class="scanner-children" style="margin-left: 24px;">
+            <div class="toggle-row">
+                <input type="checkbox" id="scan-crtsh" class="scanner-child" data-group="domain-discovery" checked>
+                <label for="scan-crtsh">Crt.sh</label>
+                <span class="scanner-note-inline">Certificate transparency logs - discovers subdomains</span>
+            </div>
+            <div class="toggle-row">
+                <input type="checkbox" id="scan-domaintools" class="scanner-child" data-group="domain-discovery" checked>
+                <label for="scan-domaintools">DomainTools</label>
+                <span class="scanner-note-inline">Reverse WHOIS lookups - discovers related domains</span>
+            </div>
+            <div class="toggle-row">
+                <input type="checkbox" id="scan-shodan" class="scanner-child" data-group="domain-discovery" checked>
+                <label for="scan-shodan">Shodan</label>
+                <span class="scanner-note-inline">Internet-wide scanning data - discovers exposed services</span>
+            </div>
+            <div class="toggle-row">
+                <input type="checkbox" id="scan-servicenow" class="scanner-child" data-group="domain-discovery" checked>
+                <label for="scan-servicenow">ServiceNow CMDB</label>
+                <span class="scanner-note-inline">Import internal servers from ServiceNow CMDB</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="scanner-section">
+        <div class="toggle-row">
+            <input type="checkbox" id="group-data-leakage" class="scanner-group" data-group="data-leakage" checked>
+            <label for="group-data-leakage"><strong>Data Leakage Detection</strong></label>
+        </div>
+        <div class="scanner-children" style="margin-left: 24px;">
+            <div class="toggle-row">
+                <input type="checkbox" id="scan-porch-pirate" class="scanner-child" data-group="data-leakage">
+                <label for="scan-porch-pirate">Porch-pirate</label>
+                <span class="scanner-note-inline">Postman collections - API documentation leaks</span>
+            </div>
+            <div class="toggle-row">
+                <input type="checkbox" id="scan-swaggerhub" class="scanner-child" data-group="data-leakage">
+                <label for="scan-swaggerhub">SwaggerHub</label>
+                <span class="scanner-note-inline">API specifications - documentation leaks</span>
+            </div>
+            <div class="toggle-row">
+                <input type="checkbox" id="scan-ai-scribd" class="scanner-child" data-group="data-leakage">
+                <label for="scan-ai-scribd">ShepherdAI + Scribd</label>
+                <span class="scanner-note-inline">AI-powered document analysis for sensitive data</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="control-card">
+    <h4>3. Subdomain Enumeration</h4>
+    <p class="meta">Discover subdomains for starred (⭐) root domains after initial discovery.</p>
+    <div class="toggle-row">
+        <input type="checkbox" id="scan-subfinder" checked>
+        <label for="scan-subfinder"><strong>Subfinder</strong></label>
+        <span class="scanner-note-inline">Fast passive subdomain enumeration tool</span>
+    </div>
+</div>
+
+<div class="control-card">
+    <h4>4. Post-Discovery Actions</h4>
+    <p class="meta">Optional actions to perform after discovery completes.</p>
+    
+    <div class="scanner-section">
+        <h5>Enrichment Scans</h5>
+        <div class="toggle-row">
+            <input type="checkbox" id="post-domain-redirect" checked>
+            <label for="post-domain-redirect">Domain Redirect</label>
+            <span class="scanner-note-inline">Check HTTP redirects and identify final destination domains</span>
+        </div>
+        <div class="toggle-row">
+            <input type="checkbox" id="post-dns-records" checked>
+            <label for="post-dns-records">DNS Records</label>
+            <span class="scanner-note-inline">Resolve DNS records (A, AAAA, MX, TXT, etc.) for discovered domains</span>
+        </div>
+    </div>
+
+    <div class="scanner-section">
+        <h5>Monitoring</h5>
+        <div class="toggle-row">
+            <input type="checkbox" id="auto-monitor">
+            <label for="auto-monitor"><strong>Auto-monitor new domains</strong></label>
+            <span class="scanner-note-inline">Set <code>monitor=True</code> for discovered domains that are not ignored and not inactive</span>
+        </div>
+    </div>
+</div>
+
+<div class="control-card">
+    <h4>5. Launch</h4>
+    <p class="meta">Review your selections and trigger the discovery scans. Results will appear in Asset Suggestions.</p>
+    <div class="row">
+        <div class="col-sm-6">
+            <button class="btn btn-primary btn-sm" id="btn-launch-discovery">Launch discovery</button>
+        </div>
+        <div class="col-sm-6 text-right">
+            <a class="btn btn-link btn-sm" href="{% url 'jobs:jobs' %}">View jobs →</a>
+        </div>
+    </div>
+    <div id="scan-feedback" class="meta" style="margin-top:10px;"></div>
+</div>
+{% endspaceless %}
+{% endblock %}
+
+{% block javascript %}
+<script src="{% static 'js/bootbox.min.js' %}"></script>
+<script type="text/javascript">
+$(document).ready(function () {
+    function syncKeywordAllCheckbox() {
+        var total = $('.keyword-option').length;
+        var checkedCount = $('.keyword-option:checked').length;
+        $('#keyword-all').prop('checked', total > 0 && checkedCount === total);
+    }
+
+    function getSelectedKeywords() {
+        if ($('#keyword-all').is(':checked')) {
+            return [];  // Empty means all
+        }
+        var values = [];
+        $('.keyword-option:checked').each(function () {
+            values.push($(this).val());
+        });
+        return values;
+    }
+
+    function getScans() {
+        return {
+            scan_crtsh: $('#scan-crtsh').is(':checked'),
+            scan_domaintools: $('#scan-domaintools').is(':checked'),
+            scan_shodan: $('#scan-shodan').is(':checked'),
+            scan_servicenow: $('#scan-servicenow').is(':checked'),
+            scan_porch_pirate: $('#scan-porch-pirate').is(':checked'),
+            scan_swaggerhub: $('#scan-swaggerhub').is(':checked'),
+            scan_ai_scribd: $('#scan-ai-scribd').is(':checked'),
+            scan_subfinder: $('#scan-subfinder').is(':checked')
+        };
+    }
+
+    function getCookie(name) {
+        var cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            var cookies = document.cookie.split(';');
+            for (var i = 0; i < cookies.length; i++) {
+                var cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    $('#keyword-all').on('change', function () {
+        var isChecked = $(this).is(':checked');
+        $('.keyword-option').prop('checked', isChecked);
+    });
+
+    $(document).on('change', '.keyword-option', function () {
+        if (!$(this).is(':checked')) {
+            $('#keyword-all').prop('checked', false);
+        } else {
+            syncKeywordAllCheckbox();
+        }
+    });
+
+    syncKeywordAllCheckbox();
+
+    // Scanner group checkbox logic
+    function syncScannerGroupCheckbox(group) {
+        var $children = $('.scanner-child[data-group="' + group + '"]');
+        var total = $children.length;
+        var checkedCount = $children.filter(':checked').length;
+        var $groupCheckbox = $('.scanner-group[data-group="' + group + '"]');
+        
+        if (checkedCount === 0) {
+            $groupCheckbox.prop('checked', false);
+            $groupCheckbox.prop('indeterminate', false);
+        } else if (checkedCount === total) {
+            $groupCheckbox.prop('checked', true);
+            $groupCheckbox.prop('indeterminate', false);
+        } else {
+            $groupCheckbox.prop('checked', false);
+            $groupCheckbox.prop('indeterminate', true);
+        }
+    }
+
+    // When group checkbox is clicked, toggle all children
+    $('.scanner-group').on('change', function() {
+        var group = $(this).data('group');
+        var isChecked = $(this).is(':checked');
+        $('.scanner-child[data-group="' + group + '"]').prop('checked', isChecked);
+        $(this).prop('indeterminate', false);
+    });
+
+    // When child checkbox is clicked, update group checkbox state
+    $('.scanner-child').on('change', function() {
+        var group = $(this).data('group');
+        syncScannerGroupCheckbox(group);
+    });
+
+    // Initialize group checkbox states
+    syncScannerGroupCheckbox('domain-discovery');
+    syncScannerGroupCheckbox('data-leakage');
+
+    $('#btn-launch-discovery').on('click', function() {
+        var scans = getScans();
+        var postActions = {
+            dns_records: $('#post-dns-records').is(':checked'),
+            domain_redirect: $('#post-domain-redirect').is(':checked')
+        };
+        var autoMonitor = $('#auto-monitor').is(':checked');
+        
+        // Check if at least one scan or post-action is selected
+        var hasDiscoveryScans = scans.scan_crtsh || scans.scan_domaintools || scans.scan_shodan || 
+                                scans.scan_servicenow || scans.scan_porch_pirate || scans.scan_swaggerhub || scans.scan_ai_scribd;
+        var hasSubfinder = scans.scan_subfinder;
+        var hasPostActions = postActions.dns_records || postActions.domain_redirect || autoMonitor;
+        
+        if (!hasDiscoveryScans && !hasSubfinder && !hasPostActions) {
+            bootbox.alert('Select at least one scan or action to launch.');
+            return;
+        }
+        
+        var keywords = getSelectedKeywords();
+        if ($('.keyword-option').length > 0 && !$('#keyword-all').is(':checked') && keywords.length === 0) {
+            bootbox.alert('Select at least one keyword or check "All enabled keywords".');
+            return;
+        }
+
+        $('#btn-launch-discovery').prop('disabled', true).text('Launching...');
+        $('#scan-feedback').text('');
+        
+        fetch("{% url 'keywords:discovery_control_center_launch' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({keywords: keywords, scans: scans, auto_monitor: autoMonitor, post_actions: postActions})
+        }).then(function(response) {
+            return response.json().then(function(data) {
+                if (!response.ok) {
+                    throw data;
+                }
+                var msg = (data.messages || []).join(' ');
+                $('#scan-feedback').text(msg || 'Discovery scans launched successfully.');
+            });
+        }).catch(function(err) {
+            var errorText = (err && err.message) ? err.message : 'Failed to launch discovery.';
+            $('#scan-feedback').text(errorText);
+        }).finally(function() {
+            $('#btn-launch-discovery').prop('disabled', false).text('Launch discovery');
+        });
+    });
+});
+</script>
+{% endblock %}
+

@@ -116,21 +116,21 @@ def get_dns_records_task():
 @shared_task
 def scan_nmap_task():
     command = 'scan_nmap'
-    args = f'--projectid {project_id}'
+    args = f'--projectid {project_id} --scope external'
     run_job(command, args, project_id, user=scheduler_user)
     return "scan_nmap completed"
 
 @shared_task
 def scan_httpx_task():
     command = 'scan_httpx'
-    args = f'--projectid {project_id}'
+    args = f'--projectid {project_id} --scope external'
     run_job(command, args, project_id, user=scheduler_user)
     return "scan_httpx completed"
 
 @shared_task
 def scan_playwright_task():
     command = 'scan_playwright'
-    args = f'--projectid {project_id}'
+    args = f'--projectid {project_id} --scope external'
     run_job(command, args, project_id, user=scheduler_user)
     return "scan_playwright completed"
 
@@ -144,14 +144,14 @@ def scan_shepherdai_task():
 @shared_task
 def scan_nuclei_task():
     command = 'scan_nuclei'
-    args = f'--projectid {project_id} --nt'
+    args = f'--projectid {project_id} --nt --scope external'
     run_job(command, args, project_id, user=scheduler_user)
     return "scan_nuclei for new templates completed"
 
 @shared_task
 def scan_nuclei_new_assets_task():
     command = 'scan_nuclei'
-    args = f'--projectid {project_id} --new-assets'
+    args = f'--projectid {project_id} --new-assets --scope external'
     run_job(command, args, project_id, user=scheduler_user)
     return "scan_nuclei for new templates completed"
 
@@ -165,6 +165,6 @@ def scan_nuclei_update_task():
 @shared_task
 def scan_httpx_missing_screenshots_task():
     command = 'scan_httpx'
-    args = f'--projectid {project_id} --missing-screenshots'
+    args = f'--projectid {project_id} --missing-screenshots --scope external'
     run_job(command, args, project_id, user=scheduler_user)
     return "scan_httpx --missing-screenshots completed"

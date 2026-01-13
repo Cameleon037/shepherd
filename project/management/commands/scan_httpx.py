@@ -28,6 +28,12 @@ class Command(BaseCommand):
             required=False,
         )
         parser.add_argument(
+            '--scope',
+            type=str,
+            help='Filter by scope (e.g., external, internal)',
+            required=False,
+        )
+        parser.add_argument(
             '--new-assets',
             action='store_true',
             help='Only scan assets with empty last_scan_time',
@@ -41,6 +47,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         projectid = options.get('projectid')
         uuids_arg = options.get('uuids')
+        scope_filter = options.get('scope')
         new_assets_only = options.get('new_assets')
         missing_screenshots = options.get('missing_screenshots')
 
@@ -55,6 +62,8 @@ class Command(BaseCommand):
             if uuids_arg:
                 uuid_list = [u.strip() for u in uuids_arg.split(",") if u.strip()]
                 active_domains = active_domains.filter(uuid__in=uuid_list)
+            if scope_filter:
+                active_domains = active_domains.filter(scope=scope_filter)
         else:
             if projectid:
                 try:
@@ -69,6 +78,9 @@ class Command(BaseCommand):
             if uuids_arg:
                 uuid_list = [u.strip() for u in uuids_arg.split(",") if u.strip()]
                 active_domains = active_domains.filter(uuid__in=uuid_list)
+            # Filter by scope if provided
+            if scope_filter:
+                active_domains = active_domains.filter(scope=scope_filter)
             # Filter by new_assets_only if set
             if new_assets_only:
                 active_domains = active_domains.filter(last_scan_time__isnull=True)

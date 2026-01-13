@@ -25,6 +25,8 @@
                     <li><span class="detail-label">Created</span><span>{{ asset.creation_time|date:"Y-m-d H:i" }}</span></li>
                     <li><span class="detail-label">Last Scan</span><span>{{ asset.last_scan_time|date:"Y-m-d H:i" }}</span></li>
                     <li><span class="detail-label">Monitored</span><span>{{ asset.monitor|yesno:"Yes,No" }}</span></li>
+                    <li><span class="detail-label">IPs</span><span>{{ asset.ip|default:"-" }}</span></li>
+                    <li><span class="detail-label">Owners</span><span>{{ asset.owner|default:"-" }}</span></li>
                 </ul>
             </div>
         </div>

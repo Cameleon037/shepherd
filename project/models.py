@@ -85,6 +85,13 @@ class Asset(models.Model):
     # Redirect field
     redirects_to = models.ForeignKey("Asset", on_delete=models.SET_NULL, null=True, blank=True)
     
+    # IP address fields (populated by get_dns_records)
+    ipv4 = models.CharField(max_length=512, blank=True, default='')  # Comma-separated list of IPv4 addresses
+    ipv6 = models.CharField(max_length=1024, blank=True, default='')  # Comma-separated list of IPv6 addresses
+    
+    # Owner field (comma-separated list of email addresses of responsible people)
+    owner = models.TextField(blank=True, default='')
+    
     raw = models.JSONField(null=True, default=None)
     
     def __str__(self):

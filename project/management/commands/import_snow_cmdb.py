@@ -3,6 +3,7 @@ import json
 import base64
 import uuid
 import tldextract
+import re
 from datetime import datetime, timezone
 import dateparser
 
@@ -43,7 +44,7 @@ class Command(BaseCommand):
         # Query for operational servers
         params = {
             'sysparm_query': 'operational_status=1^ORoperational_status=2',  # Active or Inactive but operational
-            'sysparm_fields': 'name,host_name,fqdn,ip_address,operational_status,state,classification,os_name,os_version,location,serial_number,sys_id',
+            'sysparm_fields': 'name,host_name,fqdn,ip_address,operational_status,state,classification,os_name,os_version,location,serial_number,sys_id,u_application_owner',
             'sysparm_limit': 1000
         }
         
@@ -91,6 +92,27 @@ class Command(BaseCommand):
         # If it's just a hostname, add the internal domain from settings
         internal_domain = settings.SNOW_INTERNAL_DOMAIN
         return f"{hostname}.{internal_domain}"
+
+    def extract_emails(self, raw_value):
+        """Extract valid email addresses from a potentially messy string"""
+        if not raw_value or not isinstance(raw_value, str):
+            return ''
+        
+        # Simple email regex pattern
+        email_pattern = re.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
+        
+        # Find all potential emails in the string
+        found_emails = email_pattern.findall(raw_value.lower())
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_emails = []
+        for email in found_emails:
+            if email not in seen:
+                seen.add(email)
+                unique_emails.append(email)
+        
+        return ', '.join(unique_emails)
 
     def handle(self, *args, **options):
         # Get ServiceNow credentials from settings
@@ -154,6 +176,9 @@ class Command(BaseCommand):
                 if not parsed_obj.domain or not parsed_obj.suffix:
                     continue
                 
+                # Extract owner emails
+                owner_emails = self.extract_emails(server.get('u_application_owner', ''))
+                
                 # Create asset details
                 asset_data = {
                     "related_keyword": None,  # No keyword for internal assets
@@ -166,6 +191,7 @@ class Command(BaseCommand):
                     "link": f"{snow_url}/nav_to.do?uri=cmdb_ci_server.do?sys_id={server.get('sys_id', '')}",
                     "raw": server,
                     "monitor": True,
+                    "owner": owner_emails,
                     "creation_time": make_aware(dateparser.parse(datetime.now().isoformat(sep=" ", timespec="seconds"))),
                     "last_seen_time": make_aware(dateparser.parse(datetime.now().isoformat(sep=" ", timespec="seconds"))),
                 }
@@ -225,6 +251,7 @@ class Command(BaseCommand):
                     asset.active = asset_data["active"]
                     asset.link = asset_data["link"]
                     asset.monitor = asset_data["monitor"]
+                    asset.owner = owner_emails
                     
                     # Update source if not already present
                     if 'servicenow_cmdb' not in asset.source:

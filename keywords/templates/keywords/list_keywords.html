@@ -6,8 +6,48 @@
 #table_list_projects tbody tr.selected td {background-color:#B0BED9}
 #table_list_projects tbody tr.odd.selected td {background-color:#acbad4}
 .scrollable-panel {
-    max-height: 300px; /* Adjust the height as needed */
+    max-height: 300px;
     overflow-y: auto;
+}
+.keyword-editor-list {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #e5e5e5;
+    border-radius: 4px;
+    padding: 10px;
+    background: #fafafa;
+}
+.keyword-editor-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid #eee;
+}
+.keyword-editor-row:last-child {
+    border-bottom: none;
+}
+.keyword-editor-row input[type="text"] {
+    flex: 2;
+}
+.keyword-editor-row select {
+    flex: 1;
+}
+.keyword-editor-row .btn-remove {
+    color: #c9302c;
+    cursor: pointer;
+    padding: 4px 8px;
+}
+.keyword-editor-row .btn-remove:hover {
+    background: #f8d7da;
+    border-radius: 3px;
+}
+.keyword-editor-row.disabled-keyword {
+    opacity: 0.6;
+    background: #f5f5f5;
+}
+.new-keyword-row {
+    background: #e8f5e9;
 }
 </style>
 {% endblock %}
@@ -32,7 +72,7 @@
       <div class="panel panel-default">
         <div class="panel-heading">// General Actions</div>
         <div class="panel-body">
-            <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#KeywordModal">Add Keyword</button>&nbsp;
+            <button type="button" class="btn btn-primary btn-xs" id="btn-manage-keywords">Manage Keywords</button>&nbsp;
             <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#ScanKeywordsModal">Scan keywords</button>&nbsp;
         </div>
       </div>
@@ -93,20 +133,32 @@
   </div>
 </div>
 
-<!-- Add Keyword Modal -->
-<div class="modal fade bs-example-modal-sm" id="KeywordModal" tabindex="-1" role="dialog" aria-labelledby="addKeywordModal">
-  <div class="modal-dialog modal-sm" role="document">
+<!-- Manage Keywords Modal -->
+<div class="modal fade" id="ManageKeywordsModal" tabindex="-1" role="dialog" aria-labelledby="manageKeywordsModal">
+  <div class="modal-dialog modal-lg" role="document">
     <div class="modal-content">
         <div class="modal-header">
-            <h4> New Keyword </h4>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+            <h4>Manage Keywords</h4>
         </div>
         <div class="modal-body">
-           <form action="{% url 'keywords:add_keyword' %}" method="post" class="KeywordAdd"> 
-                {% csrf_token %}
-                {{ addkeywordform }}
-                <br/>
-                <input type="submit" class="btn btn-primary" value="Add Keyword" />
-            </form>
+            <p class="text-muted">Add, edit, or remove keywords. Changes are saved when you click "Save Changes".</p>
+            
+            <div class="keyword-editor-list" id="keyword-editor-list">
+                <!-- Keywords will be loaded here dynamically -->
+                <div class="text-center text-muted" id="keywords-loading">Loading keywords...</div>
+            </div>
+            
+            <div style="margin-top: 12px;">
+                <button type="button" class="btn btn-success btn-sm" id="btn-add-keyword-row">
+                    <span class="glyphicon glyphicon-plus"></span> Add Keyword
+                </button>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <span id="keywords-save-status" class="text-muted" style="margin-right: 10px;"></span>
+            <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" id="btn-save-keywords">Save Changes</button>
         </div>
     </div>
   </div>
@@ -196,7 +248,7 @@ $(document).ready( function () {
     var pTable = $('#table_list_keywords').DataTable({
         processing: true, serverSide: true, pageLength: 25, select: true,
         oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
-        order: [[ 4, "desc" ]],
+        order: [[ 0, "asc" ]],
         ajax: {
             processing: true,
             url: "/api/v1/project/{{ projectid }}/keywords/enabled/",
@@ -250,7 +302,7 @@ $(document).ready( function () {
     var pTable = $('#table_disabled_keywords').DataTable({
         processing: true, serverSide: true, pageLength: 25, select: true,
         oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
-        order: [[ 4, "desc" ]],
+        order: [[ 0, "asc" ]],
         ajax: {
             processing: true,
             url: "/api/v1/project/{{ projectid }}/keywords/disabled/",
@@ -319,7 +371,164 @@ $(document).ready( function () {
         $keywords.show();
         $(this).remove();
     });
+
+    // ========== Manage Keywords Modal ==========
+    var keywordTypes = [
+        { value: 'domaintools_registrant_org', label: 'DomainTools - Registrant Organization' },
+        { value: 'domaintools_registrant_email', label: 'DomainTools - Registrant Email' },
+        { value: 'domaintools_registrant_email_domain', label: 'DomainTools - Registrant Email Domain' },
+        { value: 'crtsh_domain', label: 'CRTSH - Domain' },
+        { value: 'shodan_keyword', label: 'Shodan - query keyword' },
+        { value: 'porch-pirate_keyword', label: 'Porch-pirate - query keyword' },
+        { value: 'swaggerhub_keyword', label: 'SwaggerHub - query keyword' },
+        { value: 'ai_scribd_keyword', label: 'ShepherdAI - Scribd search' }
+    ];
+
+    function createKeywordRow(keyword) {
+        var isNew = !keyword.id;
+        var rowClass = isNew ? 'keyword-editor-row new-keyword-row' : 'keyword-editor-row';
+        if (keyword.enabled === false) {
+            rowClass += ' disabled-keyword';
+        }
+        
+        var typeOptions = keywordTypes.map(function(t) {
+            var selected = (keyword.ktype === t.value) ? 'selected' : '';
+            return '<option value="' + t.value + '" ' + selected + '>' + t.label + '</option>';
+        }).join('');
+
+        var enabledChecked = (keyword.enabled !== false) ? 'checked' : '';
+        
+        return '<div class="' + rowClass + '" data-id="' + (keyword.id || 'new-' + Date.now()) + '">' +
+            '<input type="text" class="form-control input-sm keyword-value" placeholder="Keyword" value="' + (keyword.keyword || '') + '">' +
+            '<select class="form-control input-sm keyword-type">' + typeOptions + '</select>' +
+            '<input type="text" class="form-control input-sm keyword-description" placeholder="Description (optional)" value="' + (keyword.description || '') + '" style="flex:1.5;">' +
+            '<label style="margin:0; white-space:nowrap;"><input type="checkbox" class="keyword-enabled" ' + enabledChecked + '> Enabled</label>' +
+            '<span class="btn-remove glyphicon glyphicon-trash" title="Remove"></span>' +
+            '</div>';
+    }
+
+    function loadKeywordsIntoEditor() {
+        var $list = $('#keyword-editor-list');
+        $list.html('<div class="text-center text-muted">Loading keywords...</div>');
+        
+        $.ajax({
+            url: '/api/v1/project/{{ projectid }}/keywords/all/',
+            type: 'GET',
+            success: function(response) {
+                $list.empty();
+                var keywords = response.results || response;
+                if (keywords.length === 0) {
+                    $list.html('<div class="text-center text-muted">No keywords yet. Click "Add Keyword" to create one.</div>');
+                } else {
+                    // Sort by ID
+                    keywords.sort(function(a, b) { return a.id - b.id; });
+                    keywords.forEach(function(kw) {
+                        $list.append(createKeywordRow(kw));
+                    });
+                }
+            },
+            error: function() {
+                $list.html('<div class="text-center text-danger">Failed to load keywords.</div>');
+            }
+        });
+    }
+
+    $('#btn-manage-keywords').on('click', function() {
+        loadKeywordsIntoEditor();
+        $('#keywords-save-status').text('');
+        $('#ManageKeywordsModal').modal('show');
+    });
+
+    $('#btn-add-keyword-row').on('click', function() {
+        var $list = $('#keyword-editor-list');
+        // Remove "no keywords" message if present
+        $list.find('.text-muted').remove();
+        $list.append(createKeywordRow({ ktype: 'domaintools_registrant_org', enabled: true }));
+        // Scroll to bottom
+        $list.scrollTop($list[0].scrollHeight);
+    });
+
+    $(document).on('click', '.btn-remove', function() {
+        $(this).closest('.keyword-editor-row').remove();
+    });
+
+    $('#btn-save-keywords').on('click', function() {
+        var keywords = [];
+        var hasError = false;
+        
+        $('#keyword-editor-list .keyword-editor-row').each(function() {
+            var $row = $(this);
+            var value = $row.find('.keyword-value').val().trim();
+            if (!value) {
+                $row.find('.keyword-value').css('border-color', 'red');
+                hasError = true;
+                return;
+            }
+            $row.find('.keyword-value').css('border-color', '');
+            
+            var idAttr = $row.data('id');
+            var id = (typeof idAttr === 'string' && idAttr.startsWith('new-')) ? null : idAttr;
+            
+            keywords.push({
+                id: id,
+                keyword: value,
+                ktype: $row.find('.keyword-type').val(),
+                description: $row.find('.keyword-description').val().trim(),
+                enabled: $row.find('.keyword-enabled').is(':checked')
+            });
+        });
+
+        if (hasError) {
+            $('#keywords-save-status').text('Please fill in all keyword values.').css('color', 'red');
+            return;
+        }
+
+        $('#btn-save-keywords').prop('disabled', true).text('Saving...');
+        $('#keywords-save-status').text('').css('color', '');
+
+        $.ajax({
+            url: '{% url "keywords:bulk_update_keywords" %}',
+            type: 'POST',
+            contentType: 'application/json',
+            headers: { 'X-CSRFToken': getCookie('csrftoken') },
+            data: JSON.stringify({ keywords: keywords }),
+            success: function(response) {
+                $('#keywords-save-status').text('Saved successfully!').css('color', 'green');
+                $('#ManageKeywordsModal').modal('hide');
+                // Reload both tables
+                $('#table_list_keywords').DataTable().ajax.reload();
+                $('#table_disabled_keywords').DataTable().ajax.reload();
+            },
+            error: function(xhr) {
+                var msg = 'Failed to save.';
+                try {
+                    var resp = JSON.parse(xhr.responseText);
+                    msg = resp.message || msg;
+                } catch(e) {}
+                $('#keywords-save-status').text(msg).css('color', 'red');
+            },
+            complete: function() {
+                $('#btn-save-keywords').prop('disabled', false).text('Save Changes');
+            }
+        });
+    });
+
+    function getCookie(name) {
+        var cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            var cookies = document.cookie.split(';');
+            for (var i = 0; i < cookies.length; i++) {
+                var cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
 });
+
 $(document).on("click", ".confirm", function(e) {
     e.preventDefault();
     var title = $(this).attr('data-display');

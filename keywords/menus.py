@@ -7,7 +7,8 @@ def top_discovery(request):
     return '<span class="glyphicon glyphicon-search" aria-hidden="true"></span> Discovery'
 
 discovery_children = (
-    MenuItem("Discovery Keywords", reverse("keywords:keywords"), weight=10),
+    MenuItem("Discovery Keywords", reverse("keywords:keywords"), weight=5),
+    MenuItem("Control Center", reverse("keywords:discovery_control_center"), weight=10),
     MenuItem("Asset Suggestions", reverse("suggestions:suggestions"), weight=20),
     MenuItem("Assets Ignored ", reverse("suggestions:ignored_suggestions"), weight=30),
 )

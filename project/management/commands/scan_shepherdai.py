@@ -37,6 +37,12 @@ class Command(BaseCommand):
             help="Comma separated list of Asset UUIDs to process",
             required=False,
         )
+        parser.add_argument(
+            "--scope",
+            type=str,
+            help="Filter by scope (e.g., external, internal)",
+            required=False,
+        )
 
     def handle(self, *args, **options):
         assets = self._select_assets(options)
@@ -59,12 +65,15 @@ class Command(BaseCommand):
 
     def _select_assets(self, options):
         uuids_arg = options.get("uuids")
+        scope_filter = options.get("scope")
         queryset = Asset.objects.filter(monitor=True, type__in=["domain", "starred_domain"])
         if options.get("projectid"):
             queryset = queryset.filter(related_project_id=options["projectid"])
         if uuids_arg:
             uuid_list = [u.strip() for u in uuids_arg.split(",") if u.strip()]
             queryset = queryset.filter(uuid__in=uuid_list)
+        if scope_filter:
+            queryset = queryset.filter(scope=scope_filter)
         return list(queryset.order_by("value"))
 
     def _init_ai_client(self):

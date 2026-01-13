@@ -3,6 +3,70 @@
  * Used across multiple templates to reduce code duplication
  */
 
+/**
+ * Render a truncated cell with tooltip for long content
+ * @param {string} data - The data to render
+ * @param {string} type - DataTables render type ('display', 'sort', 'filter', etc.)
+ * @param {object} options - Configuration options
+ * @param {string} options.separator - Separator for splitting items (default: ', ')
+ * @param {number} options.maxItems - Max items to show before truncating (default: 2)
+ * @param {number} options.maxLength - Max character length before truncating (alternative to maxItems)
+ * @param {string} options.className - CSS class for the cell wrapper (default: 'truncated-cell')
+ * @returns {string} - Rendered HTML or raw data for sorting/filtering
+ * 
+ * Usage in DataTable column definition:
+ * { 
+ *   data: 'ip', 
+ *   render: function(data, type, row) {
+ *     return renderTruncatedCell(data, type, { separator: ', ', maxItems: 2 });
+ *   }
+ * }
+ */
+function renderTruncatedCell(data, type, options) {
+    if (!data) return '';
+    
+    // For sorting/filtering, return raw data
+    if (type !== 'display') return data;
+    
+    options = options || {};
+    var separator = options.separator || ', ';
+    var maxItems = options.maxItems || 2;
+    var maxLength = options.maxLength || null;
+    var className = options.className || 'truncated-cell';
+    
+    var escapedData = $('<div/>').text(data).html();
+    var needsTruncation = false;
+    var preview = data;
+    
+    if (maxLength && data.length > maxLength) {
+        // Truncate by character length
+        preview = data.substring(0, maxLength) + '...';
+        needsTruncation = true;
+    } else if (separator && data.indexOf(separator) !== -1) {
+        // Truncate by number of items
+        var items = data.split(separator);
+        if (items.length > maxItems) {
+            preview = items.slice(0, maxItems).join(separator) + '... (+' + (items.length - maxItems) + ')';
+            needsTruncation = true;
+        }
+    }
+    
+    var escapedPreview = $('<div/>').text(preview).html();
+    
+    if (needsTruncation) {
+        return '<div class="' + className + '" rel="tooltip" data-placement="left" title="' + escapedData + '">' + escapedPreview + '</div>';
+    }
+    return '<div class="' + className + '" title="' + escapedData + '">' + escapedPreview + '</div>';
+}
+
+/**
+ * Initialize tooltips for truncated cells after DataTable draw
+ * Call this in fnCreatedCell or drawCallback
+ */
+function initTruncatedCellTooltips(nTd) {
+    $('[rel="tooltip"]', nTd).tooltip();
+}
+
 // Helper function to get CSRF token
 function getCookie(name) {
     let cookieValue = null;

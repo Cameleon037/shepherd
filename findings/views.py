@@ -90,6 +90,14 @@ def _run_scan_jobs(project_id, user, selected_uuids, scan_new_assets, scans):
     def scan_nuclei_nt():
         launch('scan_nuclei', ' --nt')
 
+    def scan_dns_records():
+        launch('get_dns_records')
+
+    def scan_domain_redirect():
+        launch('get_domain_redirect')
+
+    scan_dns_records_flag = scans.get('scan_dns_records')
+    scan_domain_redirect_flag = scans.get('scan_domain_redirect')
     scan_nmap_flag = scans.get('scan_nmap')
     scan_httpx_flag = scans.get('scan_httpx')
     scan_playwright_flag = scans.get('scan_playwright')
@@ -97,29 +105,81 @@ def _run_scan_jobs(project_id, user, selected_uuids, scan_new_assets, scans):
     scan_nuclei_flag = scans.get('scan_nuclei')
     scan_nuclei_new_flag = scans.get('scan_nuclei_new_templates')
 
-    if scan_nmap_flag:
-        threads.append(threading.Thread(target=scan_nmap))
+    # Check if we need to chain Nmap -> Screenshot (HTTPX or Playwright)
+    screenshot_selected = scan_httpx_flag or scan_playwright_flag
+    nmap_then_screenshot = scan_nmap_flag and screenshot_selected
+
+    # Primary threads: all scans except Shepherd AI (which runs last)
+    primary_threads = []
+
+    if scan_dns_records_flag:
+        primary_threads.append(threading.Thread(target=scan_dns_records))
+        add_message('DNS Records scan has been triggered in the background. (check jobs)')
+
+    if scan_domain_redirect_flag:
+        primary_threads.append(threading.Thread(target=scan_domain_redirect))
+        add_message('Domain Redirect scan has been triggered in the background. (check jobs)')
+
+    if nmap_then_screenshot:
+        # Create a chained thread: Nmap runs first, then screenshot engine(s) after completion
+        def nmap_then_screenshots():
+            scan_nmap()  # This blocks until Nmap job completes
+            if scan_httpx_flag:
+                scan_httpx()
+            if scan_playwright_flag:
+                scan_playwright()
+        
+        primary_threads.append(threading.Thread(target=nmap_then_screenshots))
         add_message('Nmap scan has been triggered in the background. (check jobs)')
+        if scan_httpx_flag:
+            add_message('Httpx scan will start after Nmap completes. (check jobs)')
+        if scan_playwright_flag:
+            add_message('Playwright scan will start after Nmap completes. (check jobs)')
+    else:
+        # No dependency - run independently
+        if scan_nmap_flag:
+            primary_threads.append(threading.Thread(target=scan_nmap))
+            add_message('Nmap scan has been triggered in the background. (check jobs)')
 
-    if scan_httpx_flag:
-        threads.append(threading.Thread(target=scan_httpx))
-        add_message('Httpx scan has been triggered in the background. (check jobs)')
+        if scan_httpx_flag:
+            primary_threads.append(threading.Thread(target=scan_httpx))
+            add_message('Httpx scan has been triggered in the background. (check jobs)')
 
-    if scan_playwright_flag:
-        threads.append(threading.Thread(target=scan_playwright))
-        add_message('Playwright scan has been triggered in the background. (check jobs)')
-
-    if scan_shepherdai_flag:
-        threads.append(threading.Thread(target=scan_shepherdai))
-        add_message('Shepherd AI scan has been triggered in the background. (check jobs)')
+        if scan_playwright_flag:
+            primary_threads.append(threading.Thread(target=scan_playwright))
+            add_message('Playwright scan has been triggered in the background. (check jobs)')
 
     if scan_nuclei_flag:
-        threads.append(threading.Thread(target=scan_nuclei))
+        primary_threads.append(threading.Thread(target=scan_nuclei))
         add_message('Nuclei scan has been triggered in the background. (check jobs)')
 
     if scan_nuclei_new_flag:
-        threads.append(threading.Thread(target=scan_nuclei_nt))
+        primary_threads.append(threading.Thread(target=scan_nuclei_nt))
         add_message('Nuclei scan for new templates has been triggered in the background. (check jobs)')
+
+    # Handle Shepherd AI: it should run after all other scans complete
+    if scan_shepherdai_flag:
+        if primary_threads:
+            # Shepherd AI runs after all primary scans complete
+            def run_shepherdai_after_all():
+                # Start all primary threads
+                for t in primary_threads:
+                    t.start()
+                # Wait for all primary threads to complete
+                for t in primary_threads:
+                    t.join()
+                # Now run Shepherd AI
+                scan_shepherdai()
+            
+            threads.append(threading.Thread(target=run_shepherdai_after_all))
+            add_message('Shepherd AI will run after all other scans complete. (check jobs)')
+        else:
+            # No other scans selected, just run Shepherd AI directly
+            threads.append(threading.Thread(target=scan_shepherdai))
+            add_message('Shepherd AI scan has been triggered in the background. (check jobs)')
+    else:
+        # No Shepherd AI - just add all primary threads to be started
+        threads.extend(primary_threads)
 
     for thread in threads:
         thread.start()
@@ -604,7 +664,7 @@ def control_center_preview(request):
 @login_required
 @require_POST
 def control_center_launch(request):
-    if not request.user.has_perm('project.view_asset'):
+    if not request.user.has_perm('findings.add_finding'):
         return HttpResponseForbidden("You do not have permission.")
     project_id = request.session.get('current_project', {}).get('prj_id')
     if not project_id:
