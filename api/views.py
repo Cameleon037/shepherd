@@ -109,6 +109,8 @@ def list_suggestions(request, projectid, selection, vtype, format=None):
     search_creation_date = request.query_params.get('columns[6][search][value]', None)
     search_monitor = request.query_params.get('columns[7][search][value]', None)
     search_active = request.query_params.get('columns[8][search][value]', None)
+    search_ip = request.query_params.get('columns[9][search][value]', None)
+    search_owner = request.query_params.get('columns[10][search][value]', None)
     
     ### create queryset
     if selection in ['ignored']:
@@ -167,6 +169,17 @@ def list_suggestions(request, projectid, selection, vtype, format=None):
             queryset = queryset.filter(active=False)
         elif search_active.lower() == 'none':
             queryset = queryset.filter(active__isnull=True)
+    
+    if search_ip and len(search_ip) > 1:
+        queryset = queryset.filter(
+            Q(ipv4__icontains=search_ip) |
+            Q(ipv6__icontains=search_ip)
+        )
+    
+    if search_owner and len(search_owner) > 1:
+        queryset = queryset.filter(
+            Q(owner__icontains=search_owner)
+        )
 
     ### get variables
     order_by_column, order_direction = get_ordering_vars(request.query_params,
@@ -232,6 +245,8 @@ def list_assets(request, projectid, selection, format=None):
         'description': request.query_params.get('columns[5][search][value]', None),
         'last_scan_time': request.query_params.get('columns[6][search][value]', None),
         'creation_time': request.query_params.get('columns[7][search][value]', None),
+        'ip': request.query_params.get('columns[8][search][value]', None),
+        'owner': request.query_params.get('columns[9][search][value]', None),
     }
 
     ### create queryset
@@ -262,7 +277,10 @@ def list_assets(request, projectid, selection, format=None):
         queryset = queryset.filter(
             Q(value__icontains=search_value) |
             Q(description__icontains=search_value) |
-            Q(source__icontains=search_value)
+            Q(source__icontains=search_value) |
+            Q(ipv4__icontains=search_value) |
+            Q(ipv6__icontains=search_value) |
+            Q(owner__icontains=search_value)
         )
 
     ### filter by column-specific search values
@@ -293,6 +311,15 @@ def list_assets(request, projectid, selection, format=None):
 
     if search_columns['creation_time']:
         queryset = queryset.filter(creation_time__icontains=search_columns['creation_time'])
+
+    if search_columns['ip'] and len(search_columns['ip']) > 1:
+        queryset = queryset.filter(
+            Q(ipv4__icontains=search_columns['ip']) |
+            Q(ipv6__icontains=search_columns['ip'])
+        )
+
+    if search_columns['owner'] and len(search_columns['owner']) > 1:
+        queryset = queryset.filter(owner__icontains=search_columns['owner'])
 
     ### get variables
     order_by_column, order_direction = get_ordering_vars(
@@ -766,7 +793,7 @@ def list_data_leaks(request, projectid, format=None):
 
 
     # create queryset
-    data_leak_sources = ["porch-pirate", "swaggerhub", "ai_scribd"]
+    data_leak_sources = ["porch-pirate", "swaggerhub", "ai_scribd", "git-hound"]
     keywords = prj.keyword_set.all()#.filter(enabled=True)
     queryset = Finding.objects.filter(source__in=data_leak_sources, keyword__in=keywords)
 

@@ -203,6 +203,11 @@
                 <label for="scan-ai-scribd">ShepherdAI + Scribd</label>
                 <span class="scanner-note-inline">AI-powered document analysis for sensitive data</span>
             </div>
+            <div class="toggle-row">
+                <input type="checkbox" id="scan-git-hound" class="scanner-child" data-group="data-leakage">
+                <label for="scan-git-hound">GitHound</label>
+                <span class="scanner-note-inline">GitHub secret scanning - discovers leaked API keys and secrets</span>
+            </div>
         </div>
     </div>
 </div>
@@ -291,6 +296,7 @@ $(document).ready(function () {
             scan_porch_pirate: $('#scan-porch-pirate').is(':checked'),
             scan_swaggerhub: $('#scan-swaggerhub').is(':checked'),
             scan_ai_scribd: $('#scan-ai-scribd').is(':checked'),
+            scan_git_hound: $('#scan-git-hound').is(':checked'),
             scan_subfinder: $('#scan-subfinder').is(':checked')
         };
     }
@@ -372,7 +378,7 @@ $(document).ready(function () {
         
         // Check if at least one scan or post-action is selected
         var hasDiscoveryScans = scans.scan_crtsh || scans.scan_domaintools || scans.scan_shodan || 
-                                scans.scan_servicenow || scans.scan_porch_pirate || scans.scan_swaggerhub || scans.scan_ai_scribd;
+                                scans.scan_servicenow || scans.scan_porch_pirate || scans.scan_swaggerhub || scans.scan_ai_scribd || scans.scan_git_hound;
         var hasSubfinder = scans.scan_subfinder;
         var hasPostActions = postActions.dns_records || postActions.domain_redirect || autoMonitor;
         

@@ -167,7 +167,8 @@
 
 /* Truncated cell styles for DataTables */
 .truncated-cell,
-.ip-cell {
+.ip-cell,
+.record-value-cell {
     max-width: 150px;
     white-space: nowrap;
     overflow: hidden;
@@ -176,7 +177,9 @@
 }
 
 .truncated-cell:hover,
-.ip-cell:hover {
+.ip-cell:hover,
+.record-value-cell:hover {
+    max-width: none;
     white-space: normal;
     word-break: break-all;
 }

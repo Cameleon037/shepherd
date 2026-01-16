@@ -13,6 +13,7 @@ class AddKeywordForm(ModelForm):
         ('porch-pirate_keyword', 'Porch-pirate - query keyword'),
         ('swaggerhub_keyword', 'SwaggerHub - query keyword'),
         ('ai_scribd_keyword', 'ShepherdAI - Enable the ai search against Scribd for the given keyword'),
+        ('git-hound_keyword', 'GitHound - query keyword'),
 
     ]
 

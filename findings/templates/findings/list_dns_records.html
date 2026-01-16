@@ -120,9 +120,11 @@ $(document).ready(function() {
                 },
                 {
                     'data': 'record_value', 'sName': 'Record Value', 'aTargets': [3],
-                    "mRender": function (data, type, full) {
-                        var truncated = data.length > 50 ? data.substring(0, 50) + '...' : data;
-                        return '<span style="font-family: monospace; font-size: 12px;" rel="tooltip" data-placement="left" data-original-title="' + data + '">' + truncated + '</span>';
+                    'render': function(data, type, row) {
+                        return renderTruncatedCell(data, type, { separator: ', ', maxItems: 2, className: 'record-value-cell' });
+                    },
+                    'fnCreatedCell': function(nTd, sData, oData, iRow, iCol) {
+                        initTruncatedCellTooltips(nTd);
                     }
                 },
                 {

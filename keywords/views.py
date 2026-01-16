@@ -374,6 +374,10 @@ def discovery_control_center_launch(request):
         threads.append(threading.Thread(target=lambda: launch('scan_ai_scribd', keyword_args)))
         triggered_messages.append('ShepherdAI + Scribd scan triggered.')
 
+    if scans.get('scan_git_hound'):
+        threads.append(threading.Thread(target=lambda: launch('scan_git-hound', keyword_args)))
+        triggered_messages.append('GitHound scan triggered.')
+
     # Subfinder runs after discovery scans (step 3)
     run_subfinder = scans.get('scan_subfinder', False)
 
@@ -423,9 +427,9 @@ def discovery_control_center_launch(request):
         if run_subfinder:
             triggered_messages.append('Subfinder will run after discovery (on starred domains).')
         if run_domain_redirect:
-            triggered_messages.append('Domain Redirect scan will run after Subfinder.')
+            triggered_messages.append('Domain Redirect scan will run after Subfinder (if selected).')
         if run_dns_records:
-            triggered_messages.append('DNS Records scan will run after Domain Redirect.')
+            triggered_messages.append('DNS Records scan will run after Domain Redirect (if selected).')
         if auto_monitor:
             triggered_messages.append('Auto-monitor will be applied after all scans complete.')
 

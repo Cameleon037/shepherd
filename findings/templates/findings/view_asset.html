@@ -25,7 +25,16 @@
                     <li><span class="detail-label">Created</span><span>{{ asset.creation_time|date:"Y-m-d H:i" }}</span></li>
                     <li><span class="detail-label">Last Scan</span><span>{{ asset.last_scan_time|date:"Y-m-d H:i" }}</span></li>
                     <li><span class="detail-label">Monitored</span><span>{{ asset.monitor|yesno:"Yes,No" }}</span></li>
-                    <li><span class="detail-label">IPs</span><span>{{ asset.ip|default:"-" }}</span></li>
+                    <li>
+                        <span class="detail-label">IPs</span>
+                        <span>
+                            {% if asset.ipv4 or asset.ipv6 %}
+                                {% if asset.ipv4 %}{{ asset.ipv4 }}{% endif %}{% if asset.ipv4 and asset.ipv6 %}, {% endif %}{% if asset.ipv6 %}{{ asset.ipv6 }}{% endif %}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </span>
+                    </li>
                     <li><span class="detail-label">Owners</span><span>{{ asset.owner|default:"-" }}</span></li>
                 </ul>
             </div>
