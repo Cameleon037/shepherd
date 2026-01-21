@@ -10,6 +10,7 @@ from django.utils.html import escape
 import uuid as imported_uuid
 from project.models import Asset, Project
 from jobs.utils import run_job
+from suggestions.utils import export_assets_csv
 from suggestions.forms import AddSuggestionForm
 import requests
 import json
@@ -490,34 +491,5 @@ def export_suggestions_csv(request):
         return HttpResponseForbidden("You do not have permission.")
 
     project_id = request.session['current_project']['prj_id']
-    suggestions = Asset.objects.filter(related_project__id=project_id, scope='external')
 
-    response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = 'attachment; filename="suggestions.csv"'
-
-    writer = csv.writer(response)
-    # Write header
-    writer.writerow([
-        'UUID', 'Value', 'Related Project', 'Related Keyword', 'Type', 'Subtype',
-        'Source', 'Description', 'Link', 'Creation Time', 'Active', 'Ignore', 'Monitor', 'Redirects To', 'Scope'
-    ])
-    # Write data rows
-    for s in suggestions:
-        writer.writerow([
-            s.uuid,
-            s.value,
-            s.related_project.projectname if s.related_project else '',
-            s.related_keyword.keyword if s.related_keyword else '',
-            s.type,
-            s.subtype,
-            s.source,
-            s.description,
-            s.link,
-            s.creation_time,
-            s.active,
-            s.ignore,
-            s.monitor,
-            s.redirects_to.value if s.redirects_to else '',
-            s.scope,
-        ])
-    return response
+    return export_assets_csv(project_id, monitored_only=False, scope='external')

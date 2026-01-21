@@ -29,7 +29,7 @@ function renderTruncatedCell(data, type, options) {
     if (type !== 'display') return data;
     
     options = options || {};
-    var separator = options.separator || ', ';
+    var separator = options.separator || null;
     var maxItems = options.maxItems || 2;
     var maxLength = options.maxLength || null;
     var className = options.className || 'truncated-cell';
@@ -443,4 +443,109 @@ function initializeStandaloneFeatures(options) {
     if (options.selectAllSelector && options.tableSelector) {
         setupStandaloneSelectAll(options.selectAllSelector, options.tableSelector);
     }
+}
+
+/**
+ * Initialize upload modal with drag & drop functionality
+ * @param {object} config - Configuration object
+ * @param {string} config.modalId - Modal ID (e.g., '#UploadDomainsModal')
+ * @param {string} config.dropZoneId - Drop zone ID (e.g., '#upload-drop-zone')
+ * @param {string} config.fileInputId - File input ID (e.g., '#modal-domain-file')
+ * @param {string} config.fileInfoId - File info container ID (e.g., '#upload-file-info')
+ * @param {string} config.fileNameId - File name display ID (e.g., '#upload-file-name')
+ * @param {string} config.submitBtnId - Submit button ID (e.g., '#upload-submit-btn')
+ * @param {string} config.dropTextId - Drop zone text ID (e.g., '#upload-drop-text')
+ * @param {string} config.clearBtnId - Clear file button ID (e.g., '#upload-clear-file')
+ * @param {string} config.acceptedExtension - Accepted file extension (default: '.txt')
+ */
+function initializeUploadModal(config) {
+    config = config || {};
+    var modalId = config.modalId;
+    var dropZoneId = config.dropZoneId;
+    var fileInputId = config.fileInputId;
+    var fileInfoId = config.fileInfoId;
+    var fileNameId = config.fileNameId;
+    var submitBtnId = config.submitBtnId;
+    var dropTextId = config.dropTextId;
+    var clearBtnId = config.clearBtnId;
+    var acceptedExtension = config.acceptedExtension || '.txt';
+    
+    if (!modalId || !dropZoneId || !fileInputId || !fileInfoId || !fileNameId || !submitBtnId || !dropTextId || !clearBtnId) {
+        console.error('initializeUploadModal: Missing required configuration');
+        return;
+    }
+    
+    var $dropZone = $(dropZoneId);
+    var $fileInput = $(fileInputId);
+    var $fileInfo = $(fileInfoId);
+    var $fileName = $(fileNameId);
+    var $submitBtn = $(submitBtnId);
+    var $dropText = $(dropTextId);
+    
+    function updateFileDisplay(file) {
+        if (file) {
+            $fileName.text(file.name);
+            $fileInfo.show();
+            $dropZone.css({ 'border-color': '#4caf50', 'background': '#f1f8e9' });
+            $dropText.html('<span style="color: #4caf50;">File selected</span>');
+            $submitBtn.prop('disabled', false);
+        } else {
+            $fileInfo.hide();
+            $dropZone.css({ 'border-color': '#ccc', 'background': '#fafafa' });
+            $dropText.html('Drag & drop a .txt file here<br><small>or click to browse</small>');
+            $submitBtn.prop('disabled', true);
+        }
+    }
+    
+    // Click to browse
+    $dropZone.on('click', function() {
+        $fileInput.click();
+    });
+    
+    $fileInput.on('change', function() {
+        updateFileDisplay(this.files[0]);
+    });
+    
+    // Drag and drop
+    $dropZone.on('dragover', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        $(this).css({ 'border-color': '#2196f3', 'background': '#e3f2fd' });
+    });
+    
+    $dropZone.on('dragleave', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if ($fileInput[0].files.length) {
+            $(this).css({ 'border-color': '#4caf50', 'background': '#f1f8e9' });
+        } else {
+            $(this).css({ 'border-color': '#ccc', 'background': '#fafafa' });
+        }
+    });
+    
+    $dropZone.on('drop', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var files = e.originalEvent.dataTransfer.files;
+        if (files.length && files[0].name.endsWith(acceptedExtension)) {
+            $fileInput[0].files = files;
+            updateFileDisplay(files[0]);
+        } else {
+            bootbox.alert('Please upload a ' + acceptedExtension + ' file.');
+            $(this).css({ 'border-color': '#ccc', 'background': '#fafafa' });
+        }
+    });
+    
+    // Clear file
+    $(clearBtnId).on('click', function(e) {
+        e.stopPropagation();
+        $fileInput.val('');
+        updateFileDisplay(null);
+    });
+    
+    // Reset on modal close
+    $(modalId).on('hidden.bs.modal', function() {
+        $fileInput.val('');
+        updateFileDisplay(null);
+    });
 }

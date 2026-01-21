@@ -623,78 +623,16 @@
     });
 
     // ========== Upload Domains Modal ==========
-    var $dropZone = $('#upload-drop-zone');
-    var $fileInput = $('#modal-domain-file');
-    var $fileInfo = $('#upload-file-info');
-    var $fileName = $('#upload-file-name');
-    var $submitBtn = $('#upload-submit-btn');
-    var $dropText = $('#upload-drop-text');
-
-    function updateFileDisplay(file) {
-      if (file) {
-        $fileName.text(file.name);
-        $fileInfo.show();
-        $dropZone.css({ 'border-color': '#4caf50', 'background': '#f1f8e9' });
-        $dropText.html('<span style="color: #4caf50;">File selected</span>');
-        $submitBtn.prop('disabled', false);
-      } else {
-        $fileInfo.hide();
-        $dropZone.css({ 'border-color': '#ccc', 'background': '#fafafa' });
-        $dropText.html('Drag & drop a .txt file here<br><small>or click to browse</small>');
-        $submitBtn.prop('disabled', true);
-      }
-    }
-
-    // Click to browse
-    $dropZone.on('click', function() {
-      $fileInput.click();
-    });
-
-    $fileInput.on('change', function() {
-      updateFileDisplay(this.files[0]);
-    });
-
-    // Drag and drop
-    $dropZone.on('dragover', function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      $(this).css({ 'border-color': '#2196f3', 'background': '#e3f2fd' });
-    });
-
-    $dropZone.on('dragleave', function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      if ($fileInput[0].files.length) {
-        $(this).css({ 'border-color': '#4caf50', 'background': '#f1f8e9' });
-      } else {
-        $(this).css({ 'border-color': '#ccc', 'background': '#fafafa' });
-      }
-    });
-
-    $dropZone.on('drop', function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      var files = e.originalEvent.dataTransfer.files;
-      if (files.length && files[0].name.endsWith('.txt')) {
-        $fileInput[0].files = files;
-        updateFileDisplay(files[0]);
-      } else {
-        bootbox.alert('Please upload a .txt file.');
-        $(this).css({ 'border-color': '#ccc', 'background': '#fafafa' });
-      }
-    });
-
-    // Clear file
-    $('#upload-clear-file').on('click', function(e) {
-      e.stopPropagation();
-      $fileInput.val('');
-      updateFileDisplay(null);
-    });
-
-    // Reset on modal close
-    $('#UploadDomainsModal').on('hidden.bs.modal', function() {
-      $fileInput.val('');
-      updateFileDisplay(null);
+    initializeUploadModal({
+        modalId: '#UploadDomainsModal',
+        dropZoneId: '#upload-drop-zone',
+        fileInputId: '#modal-domain-file',
+        fileInfoId: '#upload-file-info',
+        fileNameId: '#upload-file-name',
+        submitBtnId: '#upload-submit-btn',
+        dropTextId: '#upload-drop-text',
+        clearBtnId: '#upload-clear-file',
+        acceptedExtension: '.txt'
     });
   });
 

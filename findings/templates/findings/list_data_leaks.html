@@ -175,7 +175,14 @@ $(document).ready( function () {
             {'data': 'keyword', 'sName': 'Keyword', 'aTargets': [ 1 ], 'bSortable': true},
             {'data': 'source', 'sName': 'Source', 'aTargets': [ 2 ], 'bSortable': true},
             {'data': 'name', 'sName': 'Name', 'aTargets': [ 3 ], 'bSortable': true},
-            {'data': 'description', 'sName': 'Description', 'aTargets': [ 4 ], 'bSortable': true},
+            {'data': 'description', 'sName': 'Description', 'aTargets': [ 4 ], 'bSortable': true,
+                'render': function(data, type, row) {
+                    return renderTruncatedCell(data, type, { maxLength: 1000, className: 'description-cell' });
+                },
+                'fnCreatedCell': function(nTd, sData, oData, iRow, iCol) {
+                    // No tooltip initialization - just let CSS handle expansion
+                }
+            },
             {'data': 'url', 'sName': 'URL', 'aTargets': [ 5 ], 'bSortable': true,
                 'mRender': function (data, type, full) {
                     if (!data) return '';

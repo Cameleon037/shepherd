@@ -1,6 +1,7 @@
 from celery import shared_task
 from jobs.utils import run_job
 from django.contrib.auth import get_user_model
+from suggestions.utils import auto_monitor_trusted_assets, auto_unmonitor_assets
 
 """
 # Assets population
@@ -58,6 +59,13 @@ def import_shodan_task():
     return "import_shodan completed"
 
 @shared_task
+def import_fofa_task():
+    command = 'import_fofa'
+    args = f'--projectid {project_id}'
+    run_job(command, args, project_id, user=scheduler_user)
+    return "import_fofa completed"
+
+@shared_task
 def import_snow_cmdb_task():
     command = 'import_snow_cmdb'
     args = f'--projectid {project_id}'
@@ -86,11 +94,18 @@ def scan_ai_scribd_task():
     return "scan_ai_scribd completed"
 
 @shared_task
-def import_fofa_task():
-    command = 'import_fofa'
+def scan_git_hound_task():
+    command = 'scan_git-hound'
     args = f'--projectid {project_id}'
     run_job(command, args, project_id, user=scheduler_user)
-    return "import_fofa completed"
+    return "scan_git-hound completed"
+
+@shared_task
+def scan_ransomlook_task():
+    command = 'scan_ransomlook'
+    args = f'--projectid {project_id}'
+    run_job(command, args, project_id, user=scheduler_user)
+    return "scan_ransomlook completed"
 
 @shared_task
 def scan_subfinder_task():
@@ -168,3 +183,21 @@ def scan_httpx_missing_screenshots_task():
     args = f'--projectid {project_id} --missing-screenshots --scope external'
     run_job(command, args, project_id, user=scheduler_user)
     return "scan_httpx --missing-screenshots completed"
+
+@shared_task
+def auto_monitor_trusted_assets_task(project_id=None):
+    """Automatically monitor trusted assets for a project"""
+    if project_id is None:
+        project_id = 1  # Default to project 1 if not specified
+    
+    count, assets = auto_monitor_trusted_assets(project_id)
+    return f"auto_monitor_trusted_assets completed: {count} assets updated"
+
+@shared_task
+def auto_unmonitor_assets_task(project_id=None):
+    """Automatically unmonitor inactive assets for a project"""
+    if project_id is None:
+        project_id = 1  # Default to project 1 if not specified
+    
+    count, assets = auto_unmonitor_assets(project_id)
+    return f"auto_unmonitor_assets completed: {count} assets unmonitored"

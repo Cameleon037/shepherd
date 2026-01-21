@@ -47,7 +47,7 @@ tar -C /usr/local -xzf /tmp/go1.24.4.linux-amd64.tar.gz
 </details>
 
 <details>
-<summary><b>Go tools (as www-data)</b></summary>
+<summary><b>Go and other tools (as www-data)</b></summary>
 
 ```bash
 mkdir /var/www/
@@ -59,6 +59,13 @@ cd ~
 go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
 go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
 go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
+
+cd /var/www/
+git clone https://github.com/tillson/git-hound
+cd git-hound
+wget https://github.com/tillson/git-hound/releases/download/v3.2/git-hound_linux_amd64.zip
+unzip git-hound_linux_amd64.zip
+# modify the config.yml to use a valid github access token
 ```
 
 </details>

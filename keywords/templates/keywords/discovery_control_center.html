@@ -175,7 +175,12 @@
                 <span class="scanner-note-inline">Internet-wide scanning data - discovers exposed services</span>
             </div>
             <div class="toggle-row">
-                <input type="checkbox" id="scan-servicenow" class="scanner-child" data-group="domain-discovery" checked>
+                <input type="checkbox" id="scan-fofa" class="scanner-child" data-group="domain-discovery" checked>
+                <label for="scan-fofa">FOFA</label>
+                <span class="scanner-note-inline">FOFA search engine - discovers exposed assets and services</span>
+            </div>
+            <div class="toggle-row">
+                <input type="checkbox" id="scan-servicenow" class="scanner-child" data-group="domain-discovery">
                 <label for="scan-servicenow">ServiceNow CMDB</label>
                 <span class="scanner-note-inline">Import internal servers from ServiceNow CMDB</span>
             </div>
@@ -208,6 +213,11 @@
                 <label for="scan-git-hound">GitHound</label>
                 <span class="scanner-note-inline">GitHub secret scanning - discovers leaked API keys and secrets</span>
             </div>
+            <div class="toggle-row">
+                <input type="checkbox" id="scan-ransomlook" class="scanner-child" data-group="data-leakage">
+                <label for="scan-ransomlook">RansomLook</label>
+                <span class="scanner-note-inline">Ransomware intelligence - monitors supplier breaches in leak sites</span>
+            </div>
         </div>
     </div>
 </div>
@@ -216,7 +226,7 @@
     <h4>3. Subdomain Enumeration</h4>
     <p class="meta">Discover subdomains for starred (⭐) root domains after initial discovery.</p>
     <div class="toggle-row">
-        <input type="checkbox" id="scan-subfinder" checked>
+        <input type="checkbox" id="scan-subfinder">
         <label for="scan-subfinder"><strong>Subfinder</strong></label>
         <span class="scanner-note-inline">Fast passive subdomain enumeration tool</span>
     </div>
@@ -229,12 +239,12 @@
     <div class="scanner-section">
         <h5>Enrichment Scans</h5>
         <div class="toggle-row">
-            <input type="checkbox" id="post-domain-redirect" checked>
+            <input type="checkbox" id="post-domain-redirect">
             <label for="post-domain-redirect">Domain Redirect</label>
             <span class="scanner-note-inline">Check HTTP redirects and identify final destination domains</span>
         </div>
         <div class="toggle-row">
-            <input type="checkbox" id="post-dns-records" checked>
+            <input type="checkbox" id="post-dns-records">
             <label for="post-dns-records">DNS Records</label>
             <span class="scanner-note-inline">Resolve DNS records (A, AAAA, MX, TXT, etc.) for discovered domains</span>
         </div>
@@ -293,10 +303,12 @@ $(document).ready(function () {
             scan_domaintools: $('#scan-domaintools').is(':checked'),
             scan_shodan: $('#scan-shodan').is(':checked'),
             scan_servicenow: $('#scan-servicenow').is(':checked'),
+            scan_fofa: $('#scan-fofa').is(':checked'),
             scan_porch_pirate: $('#scan-porch-pirate').is(':checked'),
             scan_swaggerhub: $('#scan-swaggerhub').is(':checked'),
             scan_ai_scribd: $('#scan-ai-scribd').is(':checked'),
             scan_git_hound: $('#scan-git-hound').is(':checked'),
+            scan_ransomlook: $('#scan-ransomlook').is(':checked'),
             scan_subfinder: $('#scan-subfinder').is(':checked')
         };
     }
@@ -378,7 +390,7 @@ $(document).ready(function () {
         
         // Check if at least one scan or post-action is selected
         var hasDiscoveryScans = scans.scan_crtsh || scans.scan_domaintools || scans.scan_shodan || 
-                                scans.scan_servicenow || scans.scan_porch_pirate || scans.scan_swaggerhub || scans.scan_ai_scribd || scans.scan_git_hound;
+                                scans.scan_servicenow || scans.scan_fofa || scans.scan_porch_pirate || scans.scan_swaggerhub || scans.scan_ai_scribd || scans.scan_git_hound || scans.scan_ransomlook;
         var hasSubfinder = scans.scan_subfinder;
         var hasPostActions = postActions.dns_records || postActions.domain_redirect || autoMonitor;
         

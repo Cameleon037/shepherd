@@ -62,7 +62,7 @@ class Asset(models.Model):
 
     value = models.CharField(max_length=2048, default='')
     source = models.CharField(max_length=200, default='')  # can be cert.sh for example
-    related_keyword = models.ForeignKey("Keyword", on_delete=models.CASCADE, null=True, blank=True)
+    related_keyword = models.ForeignKey("Keyword", on_delete=models.SET_NULL, null=True, blank=True)
     related_project = models.ForeignKey("Project", on_delete=models.CASCADE)  # relation to the project
     active = models.BooleanField(null=True)
     description = models.TextField(blank=True, default='', null=True)

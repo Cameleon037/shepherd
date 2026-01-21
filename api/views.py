@@ -450,11 +450,13 @@ def list_keywords(request, projectid, selection, format=None):
         search_value = None
     ### create queryset
     if selection in ['enabled']:
-        queryset = prj.keyword_set.all().filter(enabled=True)
+        queryset = prj.keyword_set.all().filter(enabled=True).exclude(ktype='ransomlook_supplier')
     elif selection in ['disabled']:
-        queryset = prj.keyword_set.all().filter(enabled=False)
+        queryset = prj.keyword_set.all().filter(enabled=False).exclude(ktype='ransomlook_supplier')
+    elif selection in ['suppliers']:
+        queryset = prj.keyword_set.all().filter(ktype='ransomlook_supplier')
     else:
-        queryset = prj.keyword_set.all()
+        queryset = prj.keyword_set.all().exclude(ktype='ransomlook_supplier')
     ### filter by search value
     if search_value and len(search_value)>1:
         queryset = queryset.filter(
@@ -463,11 +465,14 @@ def list_keywords(request, projectid, selection, format=None):
         )
     ### get variables
     order_by_column, order_direction = get_ordering_vars(request.query_params,
-                                                         default_column='last_modified',
-                                                         default_direction='-')
+                                                         default_column='ktype' if selection == 'all' else 'last_modified',
+                                                         default_direction='')
     ### order queryset
     if order_by_column:
         queryset = queryset.order_by('%s%s' % (order_direction, order_by_column))
+    elif selection == 'all':
+        # Default sort by ktype for 'all' selection
+        queryset = queryset.order_by('ktype')
     kwrds = paginator.paginate_queryset(queryset, request)
     serializer = KeywordSerializer(instance=kwrds, many=True)
     return paginator.get_paginated_response(serializer.data)
@@ -793,9 +798,9 @@ def list_data_leaks(request, projectid, format=None):
 
 
     # create queryset
-    data_leak_sources = ["porch-pirate", "swaggerhub", "ai_scribd", "git-hound"]
+    data_leak_sources = ["porch-pirate", "swaggerhub", "ai_scribd", "git-hound", "ransomlook"]
     keywords = prj.keyword_set.all()#.filter(enabled=True)
-    queryset = Finding.objects.filter(source__in=data_leak_sources, keyword__in=keywords)
+    queryset = Finding.objects.filter(source__in=data_leak_sources)
 
     # Filter by selection (monitored/ignored/all)
     selection_param = request.query_params.get('selection', 'monitored')

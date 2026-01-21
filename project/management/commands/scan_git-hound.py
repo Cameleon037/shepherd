@@ -68,14 +68,17 @@ class Command(BaseCommand):
         keyword = html.unescape(kw.keyword)
         
         # Build the git-hound command
-        command = ['git-hound', '--query', keyword, '--many-results', '--json']
+        command = ['./git-hound', '--query', keyword, '--many-results', '--json']
         
         # Add dig flags (enabled by default)
         command.append('--dig-files')
         command.append('--dig-commits')
         
         # Add other useful flags
-        command.extend(['--no-scoring'])  # Include all results, let user filter
+        # command.extend(['--no-scoring'])  # Include all results, let user filter
+        
+        # Get working directory from settings if configured
+        working_dir = getattr(settings, 'GITHOUND_WORKING_DIR', None)
         
         try:
             # Run git-hound and capture output
@@ -84,7 +87,8 @@ class Command(BaseCommand):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                timeout=300  # 5 minute timeout
+                timeout=300,  # 5 minute timeout
+                cwd=working_dir  # Set working directory if configured
             )
             
             if result.returncode != 0:
@@ -92,7 +96,8 @@ class Command(BaseCommand):
                 return
             
             output = result.stdout.strip()
-            
+            # self.stdout.write(output)
+
             if not output:
                 self.stdout.write(f'    [+] No results found for {keyword}')
                 return

@@ -9,6 +9,7 @@ urlpatterns = [
     path('scan_keywords/', views.scan_keywords, name='scan_keywords'),
     path('control-center/', views.discovery_control_center, name='discovery_control_center'),
     path('control-center/launch/', views.discovery_control_center_launch, name='discovery_control_center_launch'),
+    path('upload-ransomlook-suppliers/', views.upload_ransomlook_suppliers, name='upload_ransomlook_suppliers'),
 
     path('<int:keywordid>/toggle/', views.toggle_keyword, name='toggle_keyword'),
     path('<int:keywordid>/delete/', views.delete_keyword, name='delete_keyword'),

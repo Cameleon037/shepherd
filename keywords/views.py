@@ -1,19 +1,21 @@
 # vim: tabstop=4 expandtab shiftwidth=4 softtabstop=4
 
+import json
+
 from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.views.decorators.http import require_POST
-import json
 
 from project.models import Project, Keyword, Asset
 from keywords.forms import AddKeywordForm
 from django.core.management import call_command
 import threading
-from django.utils.html import escape
 
+from django.utils.html import escape
+from suggestions.utils import auto_monitor_trusted_assets
 from jobs.utils import run_job
 
 @login_required
@@ -86,6 +88,70 @@ def add_keyword(request):
             }
             Keyword.objects.get_or_create(**data)
             messages.info(request, "Comment successfully added")
+    return redirect(reverse('keywords:keywords'))
+
+@login_required
+@require_POST
+def upload_ransomlook_suppliers(request):
+    """Upload RansomLook suppliers from a text file"""
+    if not request.user.has_perm('project.add_keyword'):
+        return HttpResponseForbidden("You do not have permission.")
+    
+    project_id = request.session.get('current_project', {}).get('prj_id')
+    if not project_id:
+        messages.error(request, 'No project selected.')
+        return redirect(reverse('keywords:keywords'))
+    
+    try:
+        prj_obj = Project.objects.get(id=project_id)
+    except Project.DoesNotExist:
+        messages.error(request, 'Unknown Project.')
+        return redirect(reverse('keywords:keywords'))
+    
+    if request.method == "POST" and request.FILES.get("suppliers_file"):
+        suppliers_file = request.FILES["suppliers_file"]
+        
+        # Read all lines into memory
+        lines = [escape(line.decode("utf-8").strip()) for line in suppliers_file if line.strip()]
+        
+        def process_suppliers(lines, prj_obj):
+            # Delete all existing ransomlook_supplier keywords for this project
+            deleted_count = Keyword.objects.filter(
+                related_project=prj_obj,
+                ktype='ransomlook_supplier'
+            ).delete()[0]
+            
+            # Create new keywords from the uploaded file
+            created_cnt = 0
+            for supplier in lines:
+                if supplier:
+                    # Create keyword with ktype='ransomlook_supplier'
+                    keyword_data = {
+                        'keyword': supplier,
+                        'ktype': 'ransomlook_supplier',
+                        'description': 'RansomLook supplier - uploaded from file',
+                        'related_project': prj_obj,
+                        'enabled': True
+                    }
+                    Keyword.objects.create(**keyword_data)
+                    created_cnt += 1
+            
+            return deleted_count, created_cnt
+        
+        # Start processing in a background thread
+        def process_in_thread():
+            try:
+                deleted, created = process_suppliers(lines, prj_obj)
+                # Note: Messages won't work in background thread, but processing will complete
+            except Exception as e:
+                print(f"Error processing RansomLook suppliers: {e}")
+        
+        thread = threading.Thread(target=process_in_thread)
+        thread.start()
+        messages.success(request, f"RansomLook suppliers are being uploaded in the background ({len(lines)} suppliers). Previous suppliers will be replaced. Please refresh the page after a while.")
+    else:
+        messages.error(request, "No file uploaded.")
+    
     return redirect(reverse('keywords:keywords'))
 
 @login_required
@@ -206,6 +272,22 @@ def scan_keywords(request):
             except Exception as e:
                 messages.error(request, f'Error: {e}')
 
+        if "ransomlook" in request.POST:
+            messages.info(request, 'RansomLook scan against monitored keywords has been triggered in the background.')
+            try:
+                projectid = context['projectid']
+                def run_command():
+                    try:
+                        command = 'scan_ransomlook'
+                        args = f'--projectid {projectid}'
+                        run_job(command, args, projectid, request.user)
+                    except Exception as e:
+                        print(f"Error running scan_ransomlook: {e}")
+                thread = threading.Thread(target=run_command)
+                thread.start()
+            except Exception as e:
+                messages.error(request, f'Error: {e}')
+
 
     return redirect(reverse('keywords:keywords'))
 
@@ -303,7 +385,7 @@ def discovery_control_center(request):
         keywords = Keyword.objects.filter(
             related_project_id=project_id,
             enabled=True
-        ).order_by('keyword')
+        ).exclude(ktype='ransomlook_supplier').order_by('keyword')
     
     context = {
         'projectid': project_id,
@@ -362,6 +444,10 @@ def discovery_control_center_launch(request):
         threads.append(threading.Thread(target=lambda: launch('import_snow_cmdb')))
         triggered_messages.append('ServiceNow CMDB import triggered.')
 
+    if scans.get('scan_fofa'):
+        threads.append(threading.Thread(target=lambda: launch('import_fofa', keyword_args)))
+        triggered_messages.append('FOFA scan triggered.')
+
     if scans.get('scan_porch_pirate'):
         threads.append(threading.Thread(target=lambda: launch('scan_porch-pirate', keyword_args)))
         triggered_messages.append('Porch-pirate scan triggered.')
@@ -377,6 +463,10 @@ def discovery_control_center_launch(request):
     if scans.get('scan_git_hound'):
         threads.append(threading.Thread(target=lambda: launch('scan_git-hound', keyword_args)))
         triggered_messages.append('GitHound scan triggered.')
+
+    if scans.get('scan_ransomlook'):
+        threads.append(threading.Thread(target=lambda: launch('scan_ransomlook', keyword_args)))
+        triggered_messages.append('RansomLook scan triggered.')
 
     # Subfinder runs after discovery scans (step 3)
     run_subfinder = scans.get('scan_subfinder', False)
@@ -414,12 +504,10 @@ def discovery_control_center_launch(request):
             if run_dns_records:
                 launch('get_dns_records')
             
-            # Update assets: set monitor=True for domains that are not inactive and not ignored
+            # Auto-monitor trusted assets
             if auto_monitor:
-                Asset.objects.filter(
-                    related_project_id=project_id,
-                    type='domain'
-                ).exclude(active=False).exclude(ignore=True).update(monitor=True)
+                count, assets = auto_monitor_trusted_assets(project_id)
+                triggered_messages.append(f'Auto-monitor: {count} trusted assets enabled for monitoring.')
         
         post_thread = threading.Thread(target=run_sequential_actions)
         post_thread.start()

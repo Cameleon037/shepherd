@@ -180,6 +180,12 @@ FOFA_KEY = ""
 # HTTPX PATH
 HTTPX_PATH = ""
 
+# GitHound working directory
+GITHOUND_WORKING_DIR = ""
+
+# RansomLook API
+RANSOMLOOK_API_URL = "https://www.ransomlook.io/api/recent"
+
 # Nucleus API
 NUCLEUS_URL = ''
 NUCLEUS_KEY = ''

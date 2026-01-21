@@ -17,6 +17,7 @@ from django.views.decorators.http import require_POST
 from project.models import Project, Asset, DNSRecord
 from findings.models import Finding, Port, Screenshot
 from findings.utils import asset_get_or_create, asset_finding_get_or_create, ignore_asset, ignore_finding
+from suggestions.utils import export_assets_csv
 from findings.forms import AddAssetForm
 import threading
 from jobs.utils import run_job
@@ -790,6 +791,18 @@ def export_dns_records_csv(request):
     )
     response['Content-Disposition'] = 'attachment; filename="dns_records.csv"'
     return response
+
+@login_required
+def export_monitored_assets_csv(request):
+    """Export all monitored assets for the current project as a CSV file for download."""
+    if not request.user.has_perm('project.view_asset'):
+        return HttpResponseForbidden("You do not have permission.")
+
+    project_id = request.session.get('current_project', {}).get('prj_id')
+    if not project_id:
+        return HttpResponseForbidden("No project selected.")
+    
+    return export_assets_csv(project_id, monitored_only=True, scope='external')
 
 @login_required
 def data_leaks(request):

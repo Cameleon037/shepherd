@@ -74,6 +74,7 @@
         <div class="panel-body">
             <button type="button" class="btn btn-primary btn-xs" id="btn-manage-keywords">Manage Keywords</button>&nbsp;
             <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#ScanKeywordsModal">Scan keywords</button>&nbsp;
+            <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#UploadRansomlookSuppliersModal">Upload RansomLook Suppliers</button>&nbsp;
         </div>
       </div>
     </div>
@@ -83,12 +84,11 @@
 
 <div class="panel panel-default">
   <div class="panel-heading">
-    // Enabled Keywords
+    // Keywords
   </div>
   <div class="panel-body">
     <table id="table_list_keywords" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;">
     <thead>
-        <th>ID</th>
         <th>Keyword</th>
         <th>Type</th>
         <th>Enabled</th>
@@ -102,14 +102,12 @@
 
 <div class="panel panel-default">
   <div class="panel-heading">
-    // Disabled Keywords
+    // Suppliers
   </div>
   <div class="panel-body">
-    <table id="table_disabled_keywords" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;">
+    <table id="table_suppliers" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;">
     <thead>
-        <th>ID</th>
-        <th>Keyword</th>
-        <th>Type</th>
+        <th>Supplier</th>
         <th>Enabled</th>
         <th>Description</th>
         <th>Created</th>
@@ -238,6 +236,40 @@
     </div>
   </div>
 </div>
+
+<!-- Upload RansomLook Suppliers Modal -->
+<div class="modal fade" id="UploadRansomlookSuppliersModal" tabindex="-1" role="dialog" aria-labelledby="uploadRansomlookSuppliersModalLabel">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <form id="upload-ransomlook-suppliers-form" action="{% url 'keywords:upload_ransomlook_suppliers' %}" method="post" enctype="multipart/form-data">
+        <div class="modal-header">
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+          <h4>Upload RansomLook Suppliers</h4>
+        </div>
+        <div class="modal-body">
+          {% csrf_token %}
+          <p class="text-muted" style="margin-bottom: 12px;">Upload a text file with one supplier per line.</p>
+          
+          <div id="upload-suppliers-drop-zone" style="border: 2px dashed #ccc; border-radius: 6px; padding: 30px 20px; text-align: center; cursor: pointer; transition: all 0.2s ease; background: #fafafa;">
+            <span class="glyphicon glyphicon-cloud-upload" style="font-size: 32px; color: #999; display: block; margin-bottom: 10px;"></span>
+            <span id="upload-suppliers-drop-text" style="color: #666;">Drag & drop a .txt file here<br><small>or click to browse</small></span>
+            <input type="file" id="modal-suppliers-file" name="suppliers_file" accept=".txt" style="display: none;">
+          </div>
+          
+          <div id="upload-suppliers-file-info" style="display: none; margin-top: 12px; padding: 10px; background: #e8f5e9; border-radius: 4px;">
+            <span class="glyphicon glyphicon-file" style="color: #4caf50;"></span>
+            <span id="upload-suppliers-file-name" style="margin-left: 6px; font-weight: 500;"></span>
+            <button type="button" id="upload-suppliers-clear-file" class="btn btn-xs btn-link" style="float: right; color: #c9302c;">Remove</button>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="upload-suppliers-submit-btn" disabled>Upload</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 {% endspaceless%}
 {% endblock %}
 
@@ -245,33 +277,34 @@
 <script src="{% static 'js/bootbox.min.js' %}"></script>
 <script type="text/javascript" language="javascript" class="init">
 $(document).ready( function () {
-    var pTable = $('#table_list_keywords').DataTable({
+    var keywordsTable = $('#table_list_keywords').DataTable({
         processing: true, serverSide: true, pageLength: 25, select: true,
         oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
-        order: [[ 0, "asc" ]],
+        order: [[ 1, "asc" ]], // Sort by Type (column index 1)
         ajax: {
             processing: true,
-            url: "/api/v1/project/{{ projectid }}/keywords/enabled/",
+            url: "/api/v1/project/{{ projectid }}/keywords/all/",
             dataSrc: "results",
             type: "GET",
             dataType: "json"
         },
         columns: [
-            {'data': 'id', 'sName': 'ID', 'aTargets': [ 0 ]},
-            {'data': 'keyword', 'sName': 'Keyword', 'aTargets': [ 1 ],
+            {'data': 'keyword', 'sName': 'Keyword', 'aTargets': [ 0 ],
                 "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
                     $("div", nTd).tooltip();
                 },
             },
-            {'data': 'ktype', 'sName': 'Type', 'aTargets': [ 4 ]},
+            {'data': 'ktype', 'sName': 'Type', 'aTargets': [ 1 ]},
             {'data': 'enabled', 'sName': 'Enabled', 'aTargets': [ 2 ],
                 "mRender": function (data, type, full) {
                     var toggle_url = "{% url 'keywords:toggle_keyword' keywordid=0 %}".replace(0, full.id);
-                    return '<div rel="tooltip" data-placement="left" data-original-title="Disable Keyword"><a href="'+toggle_url+'"><span class="label label-success">'+data+'</span></a></div>';
+                    var labelClass = data ? 'label-success' : 'label-danger';
+                    var tooltip = data ? 'Disable Keyword' : 'Enable Keyword';
+                    return '<div rel="tooltip" data-placement="left" data-original-title="' + tooltip + '"><a href="'+toggle_url+'"><span class="label ' + labelClass + '">'+data+'</span></a></div>';
                 },
             },
             {'data': 'description', 'sName': 'Description', 'aTargets': [ 3 ]},
-            {'data': 'creation_time', 'sName': 'Created', 'aTargets': [ 6 ],
+            {'data': 'creation_time', 'sName': 'Created', 'aTargets': [ 4 ],
               'render': function(data, type, row) {
                 if (!data) return '';
                 if (window.moment) {
@@ -283,7 +316,7 @@ $(document).ready( function () {
                 return data;
               }
             },
-            {'data': 'id', 'sName': 'Operations', 'aTargets': [ 10 ],
+            {'data': 'id', 'sName': 'Operations', 'aTargets': [ 5 ],
                 'bSortable': false,
                 "mRender": function (data, type, full) {
                     var delete_url = "{% url 'keywords:delete_keyword' keywordid=0 %}".replace(0, full.id);
@@ -299,33 +332,33 @@ $(document).ready( function () {
             },
         ]
     });
-    var pTable = $('#table_disabled_keywords').DataTable({
+    var suppliersTable = $('#table_suppliers').DataTable({
         processing: true, serverSide: true, pageLength: 25, select: true,
         oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
-        order: [[ 0, "asc" ]],
+        order: [[ 0, "asc" ]], // Sort by Supplier (column index 0)
         ajax: {
             processing: true,
-            url: "/api/v1/project/{{ projectid }}/keywords/disabled/",
+            url: "/api/v1/project/{{ projectid }}/keywords/suppliers/",
             dataSrc: "results",
             type: "GET",
             dataType: "json"
         },
         columns: [
-            {'data': 'id', 'sName': 'ID', 'aTargets': [ 0 ]},
-            {'data': 'keyword', 'sName': 'Keyword', 'aTargets': [ 1 ],
+            {'data': 'keyword', 'sName': 'Supplier', 'aTargets': [ 0 ],
                 "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
                     $("div", nTd).tooltip();
                 },
             },
-            {'data': 'ktype', 'sName': 'Type', 'aTargets': [ 4 ]},
-            {'data': 'enabled', 'sName': 'Enabled', 'aTargets': [ 2 ],
+            {'data': 'enabled', 'sName': 'Enabled', 'aTargets': [ 1 ],
                 "mRender": function (data, type, full) {
                     var toggle_url = "{% url 'keywords:toggle_keyword' keywordid=0 %}".replace(0, full.id);
-                    return '<div rel="tooltip" data-placement="left" data-original-title="Enable Keyword"><a href="'+toggle_url+'"><span class="label label-danger">'+data+'</span></a></div>';
+                    var labelClass = data ? 'label-success' : 'label-danger';
+                    var tooltip = data ? 'Disable Supplier' : 'Enable Supplier';
+                    return '<div rel="tooltip" data-placement="left" data-original-title="' + tooltip + '"><a href="'+toggle_url+'"><span class="label ' + labelClass + '">'+data+'</span></a></div>';
                 },
             },
-            {'data': 'description', 'sName': 'Description', 'aTargets': [ 3 ]},
-            {'data': 'creation_time', 'sName': 'Created', 'aTargets': [ 6 ],
+            {'data': 'description', 'sName': 'Description', 'aTargets': [ 2 ]},
+            {'data': 'creation_time', 'sName': 'Created', 'aTargets': [ 3 ],
               'render': function(data, type, row) {
                 if (!data) return '';
                 if (window.moment) {
@@ -337,12 +370,12 @@ $(document).ready( function () {
                 return data;
               }
             },
-            {'data': 'id', 'sName': 'Operations', 'aTargets': [ 10 ],
+            {'data': 'id', 'sName': 'Operations', 'aTargets': [ 4 ],
                 'bSortable': false,
                 "mRender": function (data, type, full) {
                     var delete_url = "{% url 'keywords:delete_keyword' keywordid=0 %}".replace(0, full.id);
                     return '<div class="btn-group1">' +
-                        '<a class="btn btn-xs confirm" rel="tooltip" data-placement="right" data-original-title="Delete Keyword" data-display="'+full.keyword+'" data-href="'+delete_url+'" href="#">' +
+                        '<a class="btn btn-xs confirm" rel="tooltip" data-placement="right" data-original-title="Delete Supplier" data-display="'+full.keyword+'" data-href="'+delete_url+'" href="#">' +
                         '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
                         '</a> ' +
                         '</div>';
@@ -382,7 +415,8 @@ $(document).ready( function () {
         { value: 'porch-pirate_keyword', label: 'Porch-pirate - query keyword' },
         { value: 'swaggerhub_keyword', label: 'SwaggerHub - query keyword' },
         { value: 'ai_scribd_keyword', label: 'ShepherdAI - Scribd search' },
-        { value: 'git-hound_keyword', label: 'GitHound - query keyword' }
+        { value: 'git-hound_keyword', label: 'GitHound - query keyword' },
+        { value: 'fofa_keyword', label: 'FOFA - query keyword' },
     ];
 
     function createKeywordRow(keyword) {
@@ -497,8 +531,8 @@ $(document).ready( function () {
                 $('#keywords-save-status').text('Saved successfully!').css('color', 'green');
                 $('#ManageKeywordsModal').modal('hide');
                 // Reload both tables
-                $('#table_list_keywords').DataTable().ajax.reload();
-                $('#table_disabled_keywords').DataTable().ajax.reload();
+                keywordsTable.ajax.reload();
+                suppliersTable.ajax.reload();
             },
             error: function(xhr) {
                 var msg = 'Failed to save.';
@@ -528,6 +562,19 @@ $(document).ready( function () {
         }
         return cookieValue;
     }
+
+    // ========== Upload RansomLook Suppliers Modal ==========
+    initializeUploadModal({
+        modalId: '#UploadRansomlookSuppliersModal',
+        dropZoneId: '#upload-suppliers-drop-zone',
+        fileInputId: '#modal-suppliers-file',
+        fileInfoId: '#upload-suppliers-file-info',
+        fileNameId: '#upload-suppliers-file-name',
+        submitBtnId: '#upload-suppliers-submit-btn',
+        dropTextId: '#upload-suppliers-drop-text',
+        clearBtnId: '#upload-suppliers-clear-file',
+        acceptedExtension: '.txt'
+    });
 });
 
 $(document).on("click", ".confirm", function(e) {
