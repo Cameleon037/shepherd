@@ -24,39 +24,33 @@
  */
 function renderTruncatedCell(data, type, options) {
     if (!data) return '';
-    
-    // For sorting/filtering, return raw data
     if (type !== 'display') return data;
     
     options = options || {};
-    var separator = options.separator || null;
+    var separator = options.separator;
     var maxItems = options.maxItems || 2;
-    var maxLength = options.maxLength || null;
+    var maxLength = options.maxLength;
     var className = options.className || 'truncated-cell';
     
     var escapedData = $('<div/>').text(data).html();
-    var needsTruncation = false;
-    var preview = data;
     
+    // For maxLength: show truncated text but store full data for hover expansion
     if (maxLength && data.length > maxLength) {
-        // Truncate by character length
-        preview = data.substring(0, maxLength) + '...';
-        needsTruncation = true;
-    } else if (separator && data.indexOf(separator) !== -1) {
-        // Truncate by number of items
+        var truncated = data.substring(0, maxLength) + '...';
+        var escapedTruncated = $('<div/>').text(truncated).html();
+        return '<div class="' + className + '" data-full="' + escapedData.replace(/"/g, '&quot;') + '">' + escapedTruncated + '</div>';
+    }
+    
+    // For separator: show preview with count
+    if (separator && data.indexOf(separator) !== -1) {
         var items = data.split(separator);
         if (items.length > maxItems) {
-            preview = items.slice(0, maxItems).join(separator) + '... (+' + (items.length - maxItems) + ')';
-            needsTruncation = true;
+            var preview = items.slice(0, maxItems).join(separator) + '... (+' + (items.length - maxItems) + ')';
+            return '<div class="' + className + '" rel="tooltip" data-placement="left" title="' + escapedData + '">' + $('<div/>').text(preview).html() + '</div>';
         }
     }
     
-    var escapedPreview = $('<div/>').text(preview).html();
-    
-    if (needsTruncation) {
-        return '<div class="' + className + '" rel="tooltip" data-placement="left" title="' + escapedData + '">' + escapedPreview + '</div>';
-    }
-    return '<div class="' + className + '" title="' + escapedData + '">' + escapedPreview + '</div>';
+    return '<div class="' + className + '">' + escapedData + '</div>';
 }
 
 /**
@@ -65,6 +59,23 @@ function renderTruncatedCell(data, type, options) {
  */
 function initTruncatedCellTooltips(nTd) {
     $('[rel="tooltip"]', nTd).tooltip();
+}
+
+/**
+ * Initialize hover expansion for truncated cells with maxLength
+ * Call this in fnCreatedCell for cells that use maxLength truncation
+ */
+function initTruncatedCellHover(nTd, className) {
+    className = className || 'description-cell';
+    var $cell = $(nTd).find('.' + className);
+    if ($cell.length && $cell.data('full')) {
+        var fullText = $cell.data('full');
+        var truncatedText = $cell.text();
+        $cell.hover(
+            function() { $(this).text(fullText); },
+            function() { $(this).text(truncatedText); }
+        );
+    }
 }
 
 // Helper function to get CSRF token

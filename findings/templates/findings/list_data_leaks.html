@@ -177,10 +177,10 @@ $(document).ready( function () {
             {'data': 'name', 'sName': 'Name', 'aTargets': [ 3 ], 'bSortable': true},
             {'data': 'description', 'sName': 'Description', 'aTargets': [ 4 ], 'bSortable': true,
                 'render': function(data, type, row) {
-                    return renderTruncatedCell(data, type, { maxLength: 1000, className: 'description-cell' });
+                    return renderTruncatedCell(data, type, { maxLength: 40, className: 'description-cell' });
                 },
                 'fnCreatedCell': function(nTd, sData, oData, iRow, iCol) {
-                    // No tooltip initialization - just let CSS handle expansion
+                    initTruncatedCellHover(nTd, 'description-cell');
                 }
             },
             {'data': 'url', 'sName': 'URL', 'aTargets': [ 5 ], 'bSortable': true,

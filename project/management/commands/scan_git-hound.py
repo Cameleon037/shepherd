@@ -87,7 +87,7 @@ class Command(BaseCommand):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                timeout=300,  # 5 minute timeout
+                # timeout=300,  # 5 minute timeout
                 cwd=working_dir  # Set working directory if configured
             )
             
@@ -139,27 +139,31 @@ class Command(BaseCommand):
                     # Build URL (GitHub file URL)
                     file_url = json_result.get('url', repo_url)
                     
+                    # Determine severity based on secret type
+                    severity = 'high' if ('api' in secret_type.lower() or 'key' in secret_type.lower()) else 'medium'
+                    
                     # Store the result as a Finding object
-                    content = {
+                    defaults = {
                         'keyword': kw,
                         'source': 'git-hound',
                         'name': finding_name,
                         'type': 'data_leak',
-                        'url': file_url,
-                        'description': description,
+                        'severity': severity,
+                        'scan_date': make_aware(datetime.now()),
+                        'last_seen': make_aware(datetime.now()),
                     }
                     
-                    finding_obj, created = Finding.objects.get_or_create(**content)
-                    finding_obj.scan_date = make_aware(datetime.now())
-                    finding_obj.last_seen = finding_obj.scan_date
+                    finding_obj, created = Finding.objects.get_or_create(
+                        url=file_url,
+                        description=description,
+                        defaults=defaults
+                    )
                     
-                    # Set severity based on secret type
-                    if 'api' in secret_type.lower() or 'key' in secret_type.lower():
-                        finding_obj.severity = 'high'
-                    else:
-                        finding_obj.severity = 'medium'
-                    
-                    finding_obj.save()
+                    # Update dates for existing findings
+                    if not created:
+                        finding_obj.scan_date = make_aware(datetime.now())
+                        finding_obj.last_seen = finding_obj.scan_date
+                        finding_obj.save()
                     findings_count += 1
                     
                     if created:
