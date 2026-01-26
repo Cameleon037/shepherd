@@ -20,12 +20,8 @@ def projects(request):
         #print(prj)
         context['project_name'] = prj.projectname
         # get suggestions
-        context['num_total_domains'] = prj.suggestion_set.filter(finding_type='domain').count()
-        context['num_ignored_domains'] = prj.suggestion_set.filter(finding_type='domain', ignore=True).count()
-        # context['num_total_subdomains'] = prj.suggestion_set.filter(finding_type='domain', finding_subtype='subdomain').count()
-        # context['num_ignored_subdomains'] = prj.suggestion_set.filter(finding_type='domain', finding_subtype='subdomain', ignore=True).count()
-        #context['num_total_ipaddresses'] = prj.suggestion_set.filter(finding_type='domain', finding_subtype='subdomain').count()
-        #context['num_total_ipaddresses'] = prj.suggestion_set.filter(finding_type='domain', finding_subtype='subdomain', ignore=True).count()
+        context['num_total_domains'] = prj.asset_set.filter(type='domain').count()
+        context['num_ignored_domains'] = prj.asset_set.filter(type='domain', ignore=True).count()
         context['num_total_total'] = context['num_total_domains']+context['num_total_subdomains']+context['num_total_ipaddresses']
         context['num_ignored_total'] = context['num_ignored_domains']+context['num_ignored_subdomains']+context['num_ignored_ipaddresses']
 

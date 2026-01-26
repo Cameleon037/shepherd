@@ -169,6 +169,14 @@
         <button class="btn btn-default btn-sm" id="btn-preview-assets">Preview assets</button>
         <span class="meta" id="selected-assets-hint">No filter applied yet.</span>
     </div>
+    <div style="margin-top:12px;">
+        <div class="checkbox">
+            <label>
+                <input type="checkbox" id="scan-all-assets">
+                <strong>Scan all assets</strong> (ignores asset filters)
+            </label>
+        </div>
+    </div>
     <div class="table-responsive" id="preview-container" style="display:none; margin-top:12px;">
         <table class="table table-condensed table-striped table-bordered" id="preview-table" style="font-size:0.85em;">
             <thead>
@@ -351,6 +359,23 @@ $(document).ready(function () {
         updateScreenshotWarning();
     });
 
+    function toggleFiltersDisabled() {
+        var scanAllChecked = $('#scan-all-assets').is(':checked');
+        $('#filter-type, #filter-scope, #filter-name, #btn-preview-assets').prop('disabled', scanAllChecked);
+        $('.source-option, #source-all').prop('disabled', scanAllChecked);
+        if (scanAllChecked) {
+            $('#selected-assets-hint').text('Scanning all assets - filters are ignored.');
+            $('#preview-container').hide();
+        } else {
+            $('#selected-assets-hint').text('No filter applied yet.');
+        }
+    }
+
+    $('#scan-all-assets').on('change', function() {
+        toggleFiltersDisabled();
+    });
+    toggleFiltersDisabled(); // Initialize on page load
+
     $('#btn-preview-assets').on('click', function(e) {
         e.preventDefault();
         var filters = getFilters();
@@ -393,6 +418,7 @@ $(document).ready(function () {
             return;
         }
         var filters = getFilters();
+        var scanAllAssets = $('#scan-all-assets').is(':checked');
         $('#btn-launch-scans').prop('disabled', true).text('Launching...');
         $('#scan-feedback').text('');
         fetch("{% url 'findings:control_center_launch' %}", {
@@ -401,7 +427,7 @@ $(document).ready(function () {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': getCookie('csrftoken')
             },
-            body: JSON.stringify({filters: filters, scans: scans})
+            body: JSON.stringify({filters: filters, scans: scans, scan_all_assets: scanAllAssets})
         }).then(function(response) {
             return response.json().then(function(data) {
                 if (!response.ok) {

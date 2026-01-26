@@ -82,6 +82,13 @@
     font-weight: 600;
 }
 
+.detail-list li > span:last-child {
+    text-align: right;
+    word-break: break-all;
+    flex: 1;
+    margin-left: 12px;
+}
+
 .screenshot-grid {
     display: flex;
     flex-wrap: wrap;

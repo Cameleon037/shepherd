@@ -140,6 +140,18 @@
           {% csrf_token %}
           <p class="text-muted" style="margin-bottom: 12px;">Upload a text file with one domain per line.</p>
           
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label for="upload-source">Source (optional):</label>
+            <input type="text" class="form-control" id="upload-source" name="custom_source" placeholder="Leave empty to use 'file_upload'" pattern="[a-zA-Z0-9_]+" title="Only alphanumeric characters and underscores are allowed">
+            <small class="text-muted">If provided, assets with only this source that are not in the upload file will be deleted. Only alphanumeric characters and underscores allowed.</small>
+          </div>
+          
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label for="upload-tags">Tags (optional, comma-separated):</label>
+            <input type="text" class="form-control" id="upload-tags" name="tags" placeholder="tag1, tag2, tag3">
+            <small class="text-muted">Comma-separated tags to add to uploaded assets. Each tag can only contain alphanumeric characters and underscores.</small>
+          </div>
+          
           <div id="upload-drop-zone" style="border: 2px dashed #ccc; border-radius: 6px; padding: 30px 20px; text-align: center; cursor: pointer; transition: all 0.2s ease; background: #fafafa;">
             <span class="glyphicon glyphicon-cloud-upload" style="font-size: 32px; color: #999; display: block; margin-bottom: 10px;"></span>
             <span id="upload-drop-text" style="color: #666;">Drag & drop a .txt file here<br><small>or click to browse</small></span>
@@ -191,13 +203,14 @@
           <th><input type="checkbox" name="select_all" value="1" id="select-all-items">&nbsp; Operations</th>
           <th>Value</th>
           <th>Vulnerabilities</th>
-          <th>Scope</th>
+          <th>Tag</th>
           <th>Source</th>
           <th>Description</th>
           <th>Last Scan</th>
           <th>Created</th>
           <th>IP</th>
           <th>Owner</th>
+          <th>Scope</th>
         </tr>
       </thead>
       <thead>
@@ -214,6 +227,13 @@
               <option value="critical">Critical</option>
             </select>
           </th>
+          <th><input type="text" placeholder="Search Tag" class="column-search-input"></th>
+          <th><input type="text" placeholder="Search Source" class="column-search-input"></th>
+          <th><input type="text" placeholder="Search Description" class="column-search-input"></th>
+          <th><input type="text" placeholder="Search Last Scan" class="column-search-input"></th>
+          <th><input type="text" placeholder="Search Created" class="column-search-input"></th>
+          <th><input type="text" placeholder="Search IP" class="column-search-input"></th>
+          <th><input type="text" placeholder="Search Owner" class="column-search-input"></th>
           <th>
             <select id="scope-filter" class="form-control input-sm">
               <option value="">All Scopes</option>
@@ -221,12 +241,6 @@
               <option value="internal">Internal</option>
             </select>
           </th>
-          <th><input type="text" placeholder="Search Source" class="column-search-input"></th>
-          <th><input type="text" placeholder="Search Description" class="column-search-input"></th>
-          <th><input type="text" placeholder="Search Last Scan" class="column-search-input"></th>
-          <th><input type="text" placeholder="Search Created" class="column-search-input"></th>
-          <th><input type="text" placeholder="Search IP" class="column-search-input"></th>
-          <th><input type="text" placeholder="Search Owner" class="column-search-input"></th>
         </tr>
       </thead>
   </table>
@@ -292,7 +306,14 @@ $(document).ready(function () {
             },
         },
         {'data': 'vulns', 'sName': 'Vulnerabilities'},
-        {'data': 'scope', 'sName': 'Scope'},
+        {'data': 'tag', 'sName': 'Tag',
+          'render': function(data, type, row) {
+            return renderTruncatedCell(data, type, { separator: ', ', maxItems: 2, className: 'tag-cell' });
+          },
+          'fnCreatedCell': function(nTd, sData, oData, iRow, iCol) {
+            initTruncatedCellTooltips(nTd);
+          }
+        },
         {'data': 'source', 'sName': 'Source'},
         {'data': 'description', 'sName': 'Description'},
         {'data': 'last_scan_time', 'sName': 'Last Scan',
@@ -334,7 +355,8 @@ $(document).ready(function () {
           'fnCreatedCell': function(nTd, sData, oData, iRow, iCol) {
             initTruncatedCellTooltips(nTd);
           }
-        }
+        },
+        {'data': 'scope', 'sName': 'Scope'}
     ];
 
     // Define columns for the ignored assets table
@@ -379,6 +401,14 @@ $(document).ready(function () {
               return moment(data).format('DD-MM-YYYY HH:mm');
             }
             return data;
+          }
+        },
+        {'data': 'tag', 'sName': 'Tag',
+          'render': function(data, type, row) {
+            return renderTruncatedCell(data, type, { separator: ', ', maxItems: 2, className: 'tag-cell' });
+          },
+          'fnCreatedCell': function(nTd, sData, oData, iRow, iCol) {
+            initTruncatedCellTooltips(nTd);
           }
         }
     ];

@@ -253,6 +253,9 @@ server {
     ssl_certificate /etc/ssl/certs/shepherd.crt;
     ssl_certificate_key /etc/ssl/private/shepherd.key;
 
+    # Increase upload size limit (for large supplier lists, etc.)
+    client_max_body_size 5M;
+
     location = /favicon.ico { access_log off; log_not_found off; }
     location /static/ {
         root /opt/shepherd;

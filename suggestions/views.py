@@ -21,6 +21,7 @@ import threading
 import csv
 from django.http import HttpResponse
 from django.contrib.messages import get_messages, add_message, SUCCESS, ERROR
+import re
 
 @login_required
 def suggestions(request):
@@ -335,19 +336,45 @@ def upload_suggestions(request):
     
     if request.method == "POST" and request.FILES.get("domain_file"):
         domain_file = request.FILES["domain_file"]
+        custom_source = request.POST.get("custom_source", "").strip()
+        tags_input = request.POST.get("tags", "").strip()
+
+        # Validate custom source: only alphanumeric characters and underscores allowed
+        if custom_source:
+            if not re.match(r'^[a-zA-Z0-9_]+$', custom_source):
+                messages.error(request, "Custom source can only contain alphanumeric characters and underscores.")
+                return redirect(reverse('suggestions:suggestions'))
+
+        # Validate and parse tags
+        tags_list = []
+        if tags_input:
+            tag_strings = [tag.strip() for tag in tags_input.split(',') if tag.strip()]
+            for tag in tag_strings:
+                if not re.match(r'^[a-zA-Z0-9_]+$', tag):
+                    messages.error(request, f"Tag '{tag}' can only contain alphanumeric characters and underscores.")
+                    return redirect(reverse('suggestions:suggestions'))
+                tags_list.append(tag)
+            # Remove duplicates while preserving order
+            tags_list = list(dict.fromkeys(tags_list))
+
+        # Use custom source if provided, otherwise default to "file_upload"
+        upload_source = custom_source if custom_source else "file_upload"
 
         # Read all lines into memory (small files) or save to temp file for large files
         lines = [escape(line.decode("utf-8").strip().strip('.').lower()) for line in domain_file]
 
-        def process_domains(lines, prj_obj, user):
+        def process_domains(lines, prj_obj, user, source, tags):
             created_cnt = 0
             updated_cnt = 0
+            uploaded_domains = set()  # Track domains in upload file
+            
             for domain in lines:
                 if domain:
+                    uploaded_domains.add(domain.lower())
                     sugg_defaults = {
                         "related_project": prj_obj,
                         "value": domain,
-                        "source": "file_upload",
+                        "source": source,
                         "subtype": "domain",
                         "type": "domain",
                         "scope": "external",
@@ -369,19 +396,72 @@ def upload_suggestions(request):
                     sobj, created = Asset.objects.get_or_create(uuid=item_uuid, defaults=sugg_defaults)
 
                     if created:
+                        # Add tags to newly created asset
+                        if tags:
+                            sobj.tag = ', '.join(tags)
+                            sobj.save()
                         created_cnt += 1
                     else:
-                        if not "file_upload" in sobj.source:
-                            sobj.source = sobj.source + ", file_upload"
-                        sobj.creation_time = make_aware(dateparser.parse(datetime.now().isoformat(sep=" ", timespec="seconds")))
-                        sobj.save()
+                        # Add source if not already present
+                        needs_save = False
+                        if source not in sobj.source:
+                            sobj.source = sobj.source + ", " + source if sobj.source else source
+                            needs_save = True
+                        # Add tags if provided
+                        if tags:
+                            existing_tags = [t.strip() for t in sobj.tag.split(',') if t.strip()] if sobj.tag else []
+                            original_tags = existing_tags.copy()
+                            # Add new tags that don't already exist
+                            for tag in tags:
+                                if tag not in existing_tags:
+                                    existing_tags.append(tag)
+                            if existing_tags != original_tags:
+                                sobj.tag = ', '.join(existing_tags)
+                                needs_save = True
+                        if needs_save:
+                            sobj.save()
                         updated_cnt += 1
-            # Optionally, you could log or notify admins here
+            
+            # If custom source was used, remove custom source from assets not in upload
+            if source != "file_upload":
+                deleted_cnt = 0
+                updated_source_cnt = 0
+                # Get all assets for this project that contain the custom source
+                assets_to_check = Asset.objects.filter(
+                    related_project=prj_obj,
+                    source__contains=source
+                )
+                
+                for asset in assets_to_check:
+                    # Skip if domain was in the upload file (we just added/updated it)
+                    if asset.value.lower() in uploaded_domains:
+                        continue
+                    
+                    # Remove the custom source from the source field
+                    source_parts = [s.strip() for s in asset.source.split(',')]
+                    if source in source_parts:
+                        source_parts.remove(source)
+                        new_source = ', '.join(source_parts).strip()
+                        
+                        if not new_source:
+                            # Source is empty, delete the asset
+                            asset.delete()
+                            deleted_cnt += 1
+                        else:
+                            # Update the source field
+                            asset.source = new_source
+                            asset.save()
+                            updated_source_cnt += 1
+                
+                return created_cnt, updated_cnt, deleted_cnt
+            
+            return created_cnt, updated_cnt, 0
 
         # Start processing in a background thread
-        thread = threading.Thread(target=process_domains, args=(lines, prj_obj, request.user))
+        thread = threading.Thread(target=process_domains, args=(lines, prj_obj, request.user, upload_source, tags_list))
         thread.start()
-        messages.success(request, "Domains are being uploaded in the background. Please refresh the page after a while to see the results.")
+        tag_info = f", tags: {', '.join(tags_list)}" if tags_list else ""
+        messages.success(request, f"Domains are being uploaded in the background (source: {upload_source}{tag_info}). Please refresh the page after a while to see the results.")
     else:
         messages.error(request, "No file uploaded.")
     return redirect(reverse('suggestions:suggestions'))

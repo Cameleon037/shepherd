@@ -103,7 +103,7 @@ def list_suggestions(request, projectid, selection, vtype, format=None):
     ### get search parameters
     search_value = request.query_params.get('columns[1][search][value]', None)
     search_source = request.query_params.get('columns[2][search][value]', None)
-    search_scope = request.query_params.get('columns[3][search][value]', None)
+    search_tag = request.query_params.get('columns[3][search][value]', None)
     search_description = request.query_params.get('columns[4][search][value]', None)
     search_redirect_to = request.query_params.get('columns[5][search][value]', None)
     search_creation_date = request.query_params.get('columns[6][search][value]', None)
@@ -111,6 +111,7 @@ def list_suggestions(request, projectid, selection, vtype, format=None):
     search_active = request.query_params.get('columns[8][search][value]', None)
     search_ip = request.query_params.get('columns[9][search][value]', None)
     search_owner = request.query_params.get('columns[10][search][value]', None)
+    search_scope = request.query_params.get('columns[11][search][value]', None)
     
     ### create queryset
     if selection in ['ignored']:
@@ -125,14 +126,6 @@ def list_suggestions(request, projectid, selection, vtype, format=None):
     elif vtype in ['second_level_domain']:
         queryset = queryset.filter(type='domain', subtype='domain')
     
-    # Filter by scope if provided
-    if search_scope and search_scope != "":
-        if search_scope.lower() == 'external':
-            queryset = queryset.filter(scope='external')
-        elif search_scope.lower() == 'internal':
-            queryset = queryset.filter(scope='internal')
-        # 'all' returns all, no additional filter
-
     ### filter by search value
     if search_value and len(search_value) > 1:
         queryset = queryset.filter(
@@ -141,6 +134,10 @@ def list_suggestions(request, projectid, selection, vtype, format=None):
     if search_source and len(search_source) > 1:
         queryset = queryset.filter(
             Q(source__icontains=search_source)
+        )
+    if search_tag and len(search_tag) > 1:
+        queryset = queryset.filter(
+            Q(tag__icontains=search_tag)
         )
     if search_description and len(search_description) > 1:
         queryset = queryset.filter(
@@ -180,6 +177,14 @@ def list_suggestions(request, projectid, selection, vtype, format=None):
         queryset = queryset.filter(
             Q(owner__icontains=search_owner)
         )
+    
+    # Filter by scope if provided
+    if search_scope and search_scope != "":
+        if search_scope.lower() == 'external':
+            queryset = queryset.filter(scope='external')
+        elif search_scope.lower() == 'internal':
+            queryset = queryset.filter(scope='internal')
+        # 'all' returns all, no additional filter
 
     ### get variables
     order_by_column, order_direction = get_ordering_vars(request.query_params,
@@ -240,13 +245,14 @@ def list_assets(request, projectid, selection, format=None):
     search_columns = {
         'value': request.query_params.get('columns[1][search][value]', None),
         'vulns': request.query_params.get('columns[2][search][value]', None),
-        'scope': request.query_params.get('columns[3][search][value]', None),
+        'tag': request.query_params.get('columns[3][search][value]', None),
         'source': request.query_params.get('columns[4][search][value]', None),
         'description': request.query_params.get('columns[5][search][value]', None),
         'last_scan_time': request.query_params.get('columns[6][search][value]', None),
         'creation_time': request.query_params.get('columns[7][search][value]', None),
         'ip': request.query_params.get('columns[8][search][value]', None),
         'owner': request.query_params.get('columns[9][search][value]', None),
+        'scope': request.query_params.get('columns[10][search][value]', None),
     }
 
     ### create queryset
@@ -299,6 +305,9 @@ def list_assets(request, projectid, selection, format=None):
         severity_filter = search_columns['vulns'].lower()
         if severity_filter in severity_map:
             queryset = queryset.filter(**{f"{severity_map[severity_filter]}__gt": 0})
+
+    if search_columns['tag'] and len(search_columns['tag']) > 1:
+        queryset = queryset.filter(tag__icontains=search_columns['tag'])
 
     if search_columns['source']:
         queryset = queryset.filter(source__icontains=search_columns['source'])
