@@ -21,12 +21,12 @@
 
 .axis path, .axis line {
     fill: none;
-    stroke: #000;
+    stroke: var(--axis-stroke);
     shape-rendering: crispEdges;
 }
 
 .tick line {
-    stroke: #d5d5d5;
+    stroke: var(--tick-stroke);
     opacity: 0.7;
 }
 
@@ -56,7 +56,7 @@
 }
 
 .asset-header .asset-meta {
-    color: #888;
+    color: var(--text-disabled);
     margin-top: 4px;
 }
 
@@ -70,7 +70,7 @@
     display: flex;
     justify-content: space-between;
     padding: 6px 0;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--border-light);
 }
 
 .detail-list li:last-child {
@@ -78,7 +78,7 @@
 }
 
 .detail-label {
-    color: #777;
+    color: var(--text-muted);
     font-weight: 600;
 }
 
@@ -96,11 +96,11 @@
 }
 
 .screenshot-card {
-    border: 1px solid #e6e6e6;
+    border: 1px solid var(--border-secondary);
     border-radius: 6px;
     width: 280px;
-    background: #fff;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    background: var(--bg-primary);
+    box-shadow: 0 1px 2px var(--shadow);
 }
 
 .screenshot-card.compact-card {
@@ -109,8 +109,8 @@
 }
 
 .screenshot-preview {
-    border-bottom: 1px solid #e6e6e6;
-    background: #fafafa;
+    border-bottom: 1px solid var(--border-secondary);
+    background: var(--bg-secondary);
 }
 
 .screenshot-preview img {
@@ -127,7 +127,7 @@
     transform: scale(1.6);
     z-index: 10;
     position: relative;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 16px var(--shadow-hover);
 }
 
 .no-screenshot {
@@ -135,7 +135,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #999;
+    color: var(--text-placeholder);
     font-size: 0.9em;
 }
 
@@ -150,7 +150,7 @@
 .screenshot-meta .meta-line {
     display: block;
     font-size: 0.85em;
-    color: #777;
+    color: var(--text-muted);
 }
 
 .severity-badge {

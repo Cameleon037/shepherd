@@ -3,35 +3,9 @@
 
 {% block header %}
 <style>
-#table_list_projects tbody tr.selected td {background-color:#B0BED9}
-#table_list_projects tbody tr.odd.selected td {background-color:#acbad4}
 .scrollable-panel {
     max-height: 300px;
     overflow-y: auto;
-}
-.keyword-editor-list {
-    max-height: 400px;
-    overflow-y: auto;
-    border: 1px solid #e5e5e5;
-    border-radius: 4px;
-    padding: 10px;
-    background: #fafafa;
-}
-.keyword-editor-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 0;
-    border-bottom: 1px solid #eee;
-}
-.keyword-editor-row:last-child {
-    border-bottom: none;
-}
-.keyword-editor-row input[type="text"] {
-    flex: 2;
-}
-.keyword-editor-row select {
-    flex: 1;
 }
 .keyword-editor-row .btn-remove {
     color: #c9302c;
@@ -39,15 +13,8 @@
     padding: 4px 8px;
 }
 .keyword-editor-row .btn-remove:hover {
-    background: #f8d7da;
+    background: var(--bg-hover);
     border-radius: 3px;
-}
-.keyword-editor-row.disabled-keyword {
-    opacity: 0.6;
-    background: #f5f5f5;
-}
-.new-keyword-row {
-    background: #e8f5e9;
 }
 </style>
 {% endblock %}

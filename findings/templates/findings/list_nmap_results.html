@@ -2,10 +2,6 @@
 {% load static %}
 
 {% block header %}
-<style>
-#table_list_projects tbody tr.selected td {background-color:#B0BED9}
-#table_list_projects tbody tr.odd.selected td {background-color:#acbad4}
-</style>
 {% endblock %}
 
 {% block content %}
@@ -63,11 +59,11 @@
             </tr>
             <tr>
                 <th></th>
-                <th><input type="text" placeholder="Search Domain" class="column-search-input"></th>
-                <th><input type="text" placeholder="Search Port" class="column-search-input"></th>
-                <th><input type="text" placeholder="Search Banner" class="column-search-input"></th>
-                <th><input type="text" placeholder="Search CPE" class="column-search-input"></th>
-                <th><input type="text" placeholder="Search Last Scan" class="column-search-input"></th>
+                <th><input type="text" placeholder="Search Domain" class="column-search-input form-control input-sm"></th>
+                <th><input type="text" placeholder="Search Port" class="column-search-input form-control input-sm"></th>
+                <th><input type="text" placeholder="Search Banner" class="column-search-input form-control input-sm"></th>
+                <th><input type="text" placeholder="Search CPE" class="column-search-input form-control input-sm"></th>
+                <th><input type="text" placeholder="Search Last Scan" class="column-search-input form-control input-sm"></th>
             </tr>
         </thead>
   </table>

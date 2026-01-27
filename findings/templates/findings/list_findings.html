@@ -2,10 +2,6 @@
 {% load static %}
 
 {% block header %}
-<style>
-#table_list_findings tbody tr.selected td {background-color:#B0BED9}
-#table_list_findings tbody tr.odd.selected td {background-color:#acbad4}
-</style>
 {% endblock %}
 
 {% block content %}
@@ -76,13 +72,13 @@
         </tr>
         <tr>
           <th></th>
-          <th><input type="text" placeholder="Search Domain Name" class="column-search form-control input-sm"></th>
-          <th><input type="text" placeholder="Search Vulnerability Name" class="column-search form-control input-sm"></th>
-          <th><input type="text" placeholder="Search Type" class="column-search form-control input-sm"></th>
-          <th><input type="text" placeholder="Search Description" class="column-search form-control input-sm"></th>
-          <th><input type="text" placeholder="Search Source" class="column-search form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Domain Name" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Vulnerability Name" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Type" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Description" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Source" class="column-search-input form-control input-sm"></th>
           <th>
-            <select id="severity-filter" class="form-control input-sm">
+            <select id="severity-filter" class="column-search-input form-control input-sm">
               <option value="">All Severities</option>
               <option value="info">Info</option>
               <option value="low">Low</option>
@@ -91,9 +87,9 @@
               <option value="critical">Critical</option>
             </select>
           </th>
-          <th><input type="text" placeholder="Search Scan Date" class="column-search form-control input-sm"></th>
-          <th><input type="text" placeholder="Last reported" class="column-search form-control input-sm"></th>
-          <th><input type="text" placeholder="Search Comment" class="column-search form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Scan Date" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Last reported" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Comment" class="column-search-input form-control input-sm"></th>
         </tr>
       </thead>
     </table>
@@ -249,8 +245,9 @@ $(document).ready( function () {
     });
 
     // Apply the search
-    // Use the global debounced column search from base.html
-    applyDebouncedColumnSearch(findingsTable, 'input.column-search', 'select.column-search');
+    // Find the second header row (filter row) and bind to its inputs/selects
+    var $filterRow = $('#table_list_findings thead tr:eq(1)');
+    applyDebouncedColumnSearch(findingsTable, 'input.column-search-input', 'select.column-search-input', 400, $filterRow);
 
     // Apply the severity filter (server-side)
     $('#severity-filter').on('change', function () {

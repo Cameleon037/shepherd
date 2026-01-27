@@ -3,8 +3,6 @@
 
 {% block header %}
 <style>
-#table_list_httpx_results tbody tr.selected td {background-color:#B0BED9}
-#table_list_httpx_results tbody tr.odd.selected td {background-color:#acbad4}
 /* Enlarge screenshot on hover */
 #table_list_httpx_results img {
     transition: transform 0.2s ease;
@@ -51,16 +49,14 @@
                     <th>Webserver</th>
                     <th>Date</th>
                 </tr>
-            </thead>
-            <thead>
                 <tr>
-                    <th><input type="text" placeholder="Search URL" class="column-search-input"></th>
+                    <th><input type="text" placeholder="Search URL" class="column-search-input form-control input-sm"></th>
                     <th></th>
-                    <th><input type="text" placeholder="Search Technologies" class="column-search-input"></th>
-                    <th><input type="text" placeholder="Search Title" class="column-search-input"></th>
-                    <th><input type="text" placeholder="Search Status" class="column-search-input"></th>
-                    <th><input type="text" placeholder="Search Webserver" class="column-search-input"></th>
-                    <th><input type="text" placeholder="Search Date" class="column-search-input"></th>
+                    <th><input type="text" placeholder="Search Technologies" class="column-search-input form-control input-sm"></th>
+                    <th><input type="text" placeholder="Search Title" class="column-search-input form-control input-sm"></th>
+                    <th><input type="text" placeholder="Search Status" class="column-search-input form-control input-sm"></th>
+                    <th><input type="text" placeholder="Search Webserver" class="column-search-input form-control input-sm"></th>
+                    <th><input type="text" placeholder="Search Date" class="column-search-input form-control input-sm"></th>
                 </tr>
             </thead>
         </table>

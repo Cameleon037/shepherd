@@ -2,10 +2,6 @@
 {% load static %}
 
 {% block header %}
-<style>
-#table_list_projects tbody tr.selected td {background-color:#B0BED9}
-#table_list_projects tbody tr.odd.selected td {background-color:#acbad4}
-</style>
 {% endblock %}
 
 {% block content %}
@@ -48,11 +44,20 @@
 
     <table id="table_list_ignored_suggestions" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;">
         <thead>
-        <th><input type="checkbox" name="select_all" value="1" id="select-all-items">&nbsp; Operations</th>
-        <th>Value</th>
-        <th>Source</th>
-        <th>Description</th>
-        <th>Created</th>
+        <tr>
+          <th><input type="checkbox" name="select_all" value="1" id="select-all-items">&nbsp; Operations</th>
+          <th>Value</th>
+          <th>Source</th>
+          <th>Description</th>
+          <th>Created</th>
+        </tr>
+        <tr>
+          <th></th>
+          <th><input type="text" placeholder="Search Value" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Source" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Description" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Created" class="column-search-input form-control input-sm"></th>
+        </tr>
         </thead>
     </table>
     
@@ -69,6 +74,7 @@
 $(document).ready( function () {
     var pTable = $('#table_list_ignored_suggestions').DataTable({
         processing: true, serverSide: true, pageLength: 25, select: true,
+        orderCellsTop: true,
         oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
         order: [[ 4, "desc" ]],
         ajax: {
@@ -119,6 +125,11 @@ $(document).ready( function () {
             },
         ]
     });
+
+    // Find the second header row (filter row) and bind to its inputs/selects
+    var $filterRow = $('#table_list_ignored_suggestions thead tr:eq(1)');
+    applyDebouncedColumnSearch(pTable, 'input.column-search-input', 'select.column-search-input', 400, $filterRow);
+
     // Initialize common standalone features
     initializeStandaloneFeatures({
         selectAllSelector: '#select-all-items',

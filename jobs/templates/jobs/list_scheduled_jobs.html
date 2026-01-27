@@ -2,10 +2,6 @@
 {% load static %}
 
 {% block header %}
-<style>
-#table_list_scheduled_jobs tbody tr.selected td {background-color:#B0BED9}
-#table_list_scheduled_jobs tbody tr.odd.selected td {background-color:#acbad4}
-</style>
 {% endblock %}
 
 {% block content %}
@@ -48,6 +44,20 @@
           <th>Enabled</th>
           <th>Last Run</th>
           <th>Description</th>
+        </tr>
+        <tr>
+          <th><input type="text" placeholder="Search Name" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Task" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Schedule" class="column-search-input form-control input-sm"></th>
+          <th>
+            <select class="column-search-input form-control input-sm">
+              <option value="">All</option>
+              <option value="true">Enabled</option>
+              <option value="false">Disabled</option>
+            </select>
+          </th>
+          <th><input type="text" placeholder="Search Last Run" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Description" class="column-search-input form-control input-sm"></th>
         </tr>
       </thead>
     </table>
@@ -107,6 +117,10 @@ $(document).ready(function () {
         "/api/v1/scheduled_jobs/", // You must implement this API endpoint to return scheduled jobs in JSON
         scheduledJobColumns
     );
+
+    // Find the second header row (filter row) and bind to its inputs/selects
+    var $filterRow = $('#table_list_scheduled_jobs thead tr:eq(1)');
+    applyDebouncedColumnSearch(scheduledJobTable, 'input.column-search-input', 'select.column-search-input', 400, $filterRow);
 });
 </script>
 {% endblock %}

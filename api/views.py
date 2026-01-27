@@ -14,7 +14,7 @@ from rest_framework.authentication import SessionAuthentication, TokenAuthentica
 
 from api.pagination import CustomPaginator
 from api.serializer import JobSerializer, ProjectSerializer, KeywordSerializer, SuggestionSerializer, AssetSerializer, FindingSerializer, PortSerializer, ScreenshotSerializer, DNSRecordSerializer
-from api.utils import get_ordering_vars
+from api.utils import get_ordering_vars, apply_search_filter, apply_column_search
 
 from project.models import Project, Keyword, Asset, Job, DNSRecord
 from findings.models import Finding, Port, Screenshot
@@ -33,21 +33,17 @@ def list_projects(request, format=None):
     if not request.user.has_perm('project.view_project'):
         return HttpResponseForbidden("You do not have permission to view this project.")
     
-    if request.query_params:
-        if 'search[value]' in request.query_params:
-            search_value = request.query_params['search[value]']
-        else:
-            search_value = None
-    else:
-        search_value = None
+    search_value = request.query_params.get('search[value]', None)
+    
     ### create queryset
     queryset = Project.objects.all()
+    
     ### filter by search value
-    if search_value and len(search_value) > 1:
-        queryset = queryset.filter(
-            Q(projectname__icontains=search_value) |
-            Q(description__istartswith=search_value)
-        )
+    queryset = apply_search_filter(
+        queryset, search_value,
+        ['projectname__icontains', 'description__istartswith'],
+        min_length=1
+    )
     ### get variables
     order_by_column, order_direction = get_ordering_vars(request.query_params,
                                                          default_column='last_modified',
@@ -127,56 +123,61 @@ def list_suggestions(request, projectid, selection, vtype, format=None):
         queryset = queryset.filter(type='domain', subtype='domain')
     
     ### filter by search value
-    if search_value and len(search_value) > 1:
-        queryset = queryset.filter(
-            Q(value__icontains=search_value)
-        )
-    if search_source and len(search_source) > 1:
-        queryset = queryset.filter(
-            Q(source__icontains=search_source)
-        )
-    if search_tag and len(search_tag) > 1:
-        queryset = queryset.filter(
-            Q(tag__icontains=search_tag)
-        )
-    if search_description and len(search_description) > 1:
-        queryset = queryset.filter(
-            Q(description__icontains=search_description)
-        )
+    queryset = apply_column_search(queryset, search_value, 'value__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_source, 'source__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_tag, 'tag__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_description, 'description__icontains', min_length=1)
+    
     ### Don't use select_related as it causes performance issues with self-referencing FK
-    if search_redirect_to and len(search_redirect_to) > 1:
-        queryset = queryset.filter(
-            Q(redirects_to__value__icontains=search_redirect_to)
-        )
-    if search_creation_date and len(search_creation_date) > 1:
-        queryset = queryset.filter(
-            Q(creation_time__icontains=search_creation_date)
-        )
+    queryset = apply_column_search(queryset, search_redirect_to, 'redirects_to__value__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_creation_date, 'creation_time__icontains', min_length=1)
+    
     if search_monitor is not None and search_monitor != '':
-        if search_monitor.lower() == 'true':
-            queryset = queryset.filter(monitor=True)
-        elif search_monitor.lower() == 'false':
-            queryset = queryset.filter(monitor=False)
-        elif search_monitor.lower() == 'none':
-            queryset = queryset.filter(monitor__isnull=True)
+        is_negative = search_monitor.startswith('!')
+        monitor_value = search_monitor.lstrip('!').lower()
+        if monitor_value == 'true':
+            if is_negative:
+                queryset = queryset.exclude(monitor=True)
+            else:
+                queryset = queryset.filter(monitor=True)
+        elif monitor_value == 'false':
+            if is_negative:
+                queryset = queryset.exclude(monitor=False)
+            else:
+                queryset = queryset.filter(monitor=False)
+        elif monitor_value == 'none':
+            if is_negative:
+                queryset = queryset.exclude(monitor__isnull=True)
+            else:
+                queryset = queryset.filter(monitor__isnull=True)
+    
     if search_active is not None and search_active != '':
-        if search_active.lower() == 'true':
-            queryset = queryset.filter(active=True)
-        elif search_active.lower() == 'false':
-            queryset = queryset.filter(active=False)
-        elif search_active.lower() == 'none':
-            queryset = queryset.filter(active__isnull=True)
+        is_negative = search_active.startswith('!')
+        active_value = search_active.lstrip('!').lower()
+        if active_value == 'true':
+            if is_negative:
+                queryset = queryset.exclude(active=True)
+            else:
+                queryset = queryset.filter(active=True)
+        elif active_value == 'false':
+            if is_negative:
+                queryset = queryset.exclude(active=False)
+            else:
+                queryset = queryset.filter(active=False)
+        elif active_value == 'none':
+            if is_negative:
+                queryset = queryset.exclude(active__isnull=True)
+            else:
+                queryset = queryset.filter(active__isnull=True)
     
-    if search_ip and len(search_ip) > 1:
-        queryset = queryset.filter(
-            Q(ipv4__icontains=search_ip) |
-            Q(ipv6__icontains=search_ip)
-        )
+    # IP search (can be IPv4 or IPv6)
+    queryset = apply_search_filter(
+        queryset, search_ip,
+        ['ipv4__icontains', 'ipv6__icontains'],
+        min_length=1
+    )
     
-    if search_owner and len(search_owner) > 1:
-        queryset = queryset.filter(
-            Q(owner__icontains=search_owner)
-        )
+    queryset = apply_column_search(queryset, search_owner, 'owner__icontains', min_length=1)
     
     # Filter by scope if provided
     if search_scope and search_scope != "":
@@ -279,20 +280,16 @@ def list_assets(request, projectid, selection, format=None):
         # 'all' returns all, no additional filter
 
     ### filter by global search value
-    if search_value and len(search_value) > 1:
-        queryset = queryset.filter(
-            Q(value__icontains=search_value) |
-            Q(description__icontains=search_value) |
-            Q(source__icontains=search_value) |
-            Q(ipv4__icontains=search_value) |
-            Q(ipv6__icontains=search_value) |
-            Q(owner__icontains=search_value)
-        )
+    queryset = apply_search_filter(
+        queryset, search_value,
+        ['value__icontains', 'description__icontains', 'source__icontains',
+         'ipv4__icontains', 'ipv6__icontains', 'owner__icontains'],
+        min_length=1
+    )
 
     ### filter by column-specific search values
-    if search_columns['value']:
-        queryset = queryset.filter(value__icontains=search_columns['value'])
-
+    queryset = apply_column_search(queryset, search_columns['value'], 'value__icontains')
+    
     if search_columns['vulns']:
         # Map severity keywords to annotated fields
         severity_map = {
@@ -302,33 +299,29 @@ def list_assets(request, projectid, selection, format=None):
             'medium': 'vuln_medium',
             'low': 'vuln_low',
         }
-        severity_filter = search_columns['vulns'].lower()
+        severity_filter = search_columns['vulns'].lower().lstrip('!')
+        is_negative = search_columns['vulns'].startswith('!')
         if severity_filter in severity_map:
-            queryset = queryset.filter(**{f"{severity_map[severity_filter]}__gt": 0})
+            if is_negative:
+                queryset = queryset.filter(**{f"{severity_map[severity_filter]}": 0})
+            else:
+                queryset = queryset.filter(**{f"{severity_map[severity_filter]}__gt": 0})
 
-    if search_columns['tag'] and len(search_columns['tag']) > 1:
-        queryset = queryset.filter(tag__icontains=search_columns['tag'])
-
-    if search_columns['source']:
-        queryset = queryset.filter(source__icontains=search_columns['source'])
-
-    if search_columns['description']:
-        queryset = queryset.filter(description__icontains=search_columns['description'])
-
-    if search_columns['last_scan_time']:
-        queryset = queryset.filter(last_scan_time__icontains=search_columns['last_scan_time'])
-
-    if search_columns['creation_time']:
-        queryset = queryset.filter(creation_time__icontains=search_columns['creation_time'])
-
-    if search_columns['ip'] and len(search_columns['ip']) > 1:
-        queryset = queryset.filter(
-            Q(ipv4__icontains=search_columns['ip']) |
-            Q(ipv6__icontains=search_columns['ip'])
+    queryset = apply_column_search(queryset, search_columns['tag'], 'tag__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_columns['source'], 'source__icontains')
+    queryset = apply_column_search(queryset, search_columns['description'], 'description__icontains')
+    queryset = apply_column_search(queryset, search_columns['last_scan_time'], 'last_scan_time__icontains')
+    queryset = apply_column_search(queryset, search_columns['creation_time'], 'creation_time__icontains')
+    
+    # IP search (can be IPv4 or IPv6)
+    if search_columns['ip']:
+        queryset = apply_search_filter(
+            queryset, search_columns['ip'],
+            ['ipv4__icontains', 'ipv6__icontains'],
+            min_length=1
         )
-
-    if search_columns['owner'] and len(search_columns['owner']) > 1:
-        queryset = queryset.filter(owner__icontains=search_columns['owner'])
+    
+    queryset = apply_column_search(queryset, search_columns['owner'], 'owner__icontains', min_length=1)
 
     ### get variables
     order_by_column, order_direction = get_ordering_vars(
@@ -389,26 +382,21 @@ def list_dns_records(request, projectid, format=None):
     ).select_related('related_asset')
 
     ### filter by search parameters
-    if search_asset and len(search_asset) > 1:
-        queryset = queryset.filter(
-            Q(related_asset__value__icontains=search_asset)
-        )
-    if search_record_type and len(search_record_type) > 0:
-        queryset = queryset.filter(
-            Q(record_type__iexact=search_record_type)
-        )
-    if search_record_value and len(search_record_value) > 1:
-        queryset = queryset.filter(
-            Q(record_value__icontains=search_record_value)
-        )
-    if search_ttl and len(search_ttl) > 1:
-        queryset = queryset.filter(
-            Q(ttl__icontains=search_ttl)
-        )
-    if search_last_checked and len(search_last_checked) > 1:
-        queryset = queryset.filter(
-            Q(last_checked__icontains=search_last_checked)
-        )
+    queryset = apply_column_search(queryset, search_asset, 'related_asset__value__icontains', min_length=1)
+    
+    # Record type uses exact match (case-insensitive)
+    if search_record_type:
+        is_negative = search_record_type.startswith('!')
+        record_type_value = search_record_type.lstrip('!')
+        if len(record_type_value) > 0:
+            if is_negative:
+                queryset = queryset.exclude(record_type__iexact=record_type_value)
+            else:
+                queryset = queryset.filter(record_type__iexact=record_type_value)
+    
+    queryset = apply_column_search(queryset, search_record_value, 'record_value__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_ttl, 'ttl__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_last_checked, 'last_checked__icontains', min_length=1)
 
     ### get ordering variables
     order_by_column, order_direction = get_ordering_vars(
@@ -450,13 +438,8 @@ def list_keywords(request, projectid, selection, format=None):
         return JsonResponse({"status": True, "code": 200, "next": None, "previous": None, "count": 0, "iTotalRecords": 0, "iTotalDisplayRecords": 0, "results": []})
 
     ### get search parameters
-    if request.query_params:
-        if 'search[value]' in request.query_params:
-            search_value = request.query_params['search[value]']
-        else:
-            search_value = None
-    else:
-        search_value = None
+    search_value = request.query_params.get('search[value]', None)
+    
     ### create queryset
     if selection in ['enabled']:
         queryset = prj.keyword_set.all().filter(enabled=True).exclude(ktype='ransomlook_supplier')
@@ -466,12 +449,13 @@ def list_keywords(request, projectid, selection, format=None):
         queryset = prj.keyword_set.all().filter(ktype='ransomlook_supplier')
     else:
         queryset = prj.keyword_set.all().exclude(ktype='ransomlook_supplier')
+    
     ### filter by search value
-    if search_value and len(search_value)>1:
-        queryset = queryset.filter(
-            Q(keyword__icontains=search_value)|
-            Q(description__istartswith=search_value)
-        )
+    queryset = apply_search_filter(
+        queryset, search_value,
+        ['keyword__icontains', 'description__istartswith'],
+        min_length=1
+    )
     ### get variables
     order_by_column, order_direction = get_ordering_vars(request.query_params,
                                                          default_column='ktype' if selection == 'all' else 'last_modified',
@@ -546,47 +530,25 @@ def list_ports(request, projectid, format=None):
 
     # Get search parameters
     search_value = request.query_params.get('search[value]', None)
-    if search_value and len(search_value) > 1:
-        queryset = queryset.filter(
-            Q(port__icontains=search_value) |
-            Q(banner__icontains=search_value) |
-            Q(status__icontains=search_value) |
-            Q(product__icontains=search_value) |
-            Q(cpe__icontains=search_value)
-        )
+    queryset = apply_search_filter(
+        queryset, search_value,
+        ['port__icontains', 'banner__icontains', 'status__icontains',
+         'product__icontains', 'cpe__icontains'],
+        min_length=1
+    )
 
     search_domain_name = request.query_params.get('columns[1][search][value]', None)
     search_port = request.query_params.get('columns[2][search][value]', None)
     search_banner = request.query_params.get('columns[3][search][value]', None)
     search_cpe = request.query_params.get('columns[4][search][value]', None)
     search_last_scan = request.query_params.get('columns[5][search][value]', None)
-    # print(f"Search: {search_domain_name}, {search_port}, {search_banner}, {search_cpe}, {search_last_scan}")  # Debugging statement
 
-    ### filter by search value
-    if search_domain_name and len(search_domain_name) > 1:
-        queryset = queryset.filter(
-            Q(domain_name__icontains=search_domain_name)
-        )
-
-    if search_port and len(search_port) > 1:
-        queryset = queryset.filter(
-            Q(port__icontains=search_port)
-        )
-
-    if search_banner and len(search_banner) > 1:
-        queryset = queryset.filter(
-            Q(banner__icontains=search_banner)
-        )
-
-    if search_cpe and len(search_cpe) > 1:
-        queryset = queryset.filter(
-            Q(cpe__icontains=search_cpe)
-        )
-
-    if search_last_scan and len(search_last_scan) > 1:
-        queryset = queryset.filter(
-            Q(scan_date__icontains=search_last_scan)
-        )
+    ### filter by column-specific search values
+    queryset = apply_column_search(queryset, search_domain_name, 'domain_name__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_port, 'port__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_banner, 'banner__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_cpe, 'cpe__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_last_scan, 'scan_date__icontains', min_length=1)
 
     # Get ordering variables
     order_by_column, order_direction = get_ordering_vars(request.query_params, default_column='scan_date', default_direction='-')
@@ -714,12 +676,11 @@ def list_all_findings(request, projectid, format=None):
 
     # Get search parameters
     search_value = request.query_params.get('search[value]', None)
-    if search_value and len(search_value) > 1:
-        queryset = queryset.filter(
-            Q(name__icontains=search_value)|
-            Q(description__icontains=search_value)|
-            Q(source__icontains=search_value)
-        )
+    queryset = apply_search_filter(
+        queryset, search_value,
+        ['name__icontains', 'description__icontains', 'source__icontains'],
+        min_length=1
+    )
 
     search_domain_name = request.query_params.get('columns[1][search][value]', None)
     search_name = request.query_params.get('columns[2][search][value]', None)
@@ -730,53 +691,17 @@ def list_all_findings(request, projectid, format=None):
     search_scan_date = request.query_params.get('columns[7][search][value]', None)
     search_last_reported = request.query_params.get('columns[8][search][value]', None)
     search_comment = request.query_params.get('columns[9][search][value]', None)
-    # print(f"Search: {search_domain_name}, {search_port}, {search_banner}, {search_cpe}, {search_last_scan}")  # Debugging statement
 
-    ### filter by search value
-    if search_domain_name and len(search_domain_name) > 1:
-        queryset = queryset.filter(
-            Q(domain_name__icontains=search_domain_name)
-        )
-
-    if search_name and len(search_name) > 1:
-        queryset = queryset.filter(
-            Q(name__icontains=search_name)
-        )
-
-    if search_type and len(search_type) > 1:
-        queryset = queryset.filter(
-            Q(type__icontains=search_type)
-        )
-
-    if search_description and len(search_description) > 1:
-        queryset = queryset.filter(
-            Q(description__icontains=search_description)
-        )
-
-    if search_source and len(search_source) > 1:
-        queryset = queryset.filter(
-            Q(source__icontains=search_source)
-        )
-
-    if search_severity and len(search_severity) > 1:
-        queryset = queryset.filter(
-            Q(severity__icontains=search_severity)
-        )
-
-    if search_scan_date and len(search_scan_date) > 1:
-        queryset = queryset.filter(
-            Q(scan_date__icontains=search_scan_date)
-        )
-
-    if search_last_reported and len(search_last_reported) > 1:
-        queryset = queryset.filter(
-            Q(last_reported__icontains=search_last_reported)
-        )
-
-    if search_comment and len(search_comment) > 1:
-        queryset = queryset.filter(
-            Q(comment__icontains=search_comment)
-        )
+    ### filter by column-specific search values
+    queryset = apply_column_search(queryset, search_domain_name, 'domain_name__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_name, 'name__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_type, 'type__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_description, 'description__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_source, 'source__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_severity, 'severity__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_scan_date, 'scan_date__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_last_reported, 'last_reported__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_comment, 'comment__icontains', min_length=1)
 
     ### get variables
     order_by_column, order_direction = get_ordering_vars(request.query_params,
@@ -822,43 +747,29 @@ def list_data_leaks(request, projectid, format=None):
 
     # Global search
     search_value = request.query_params.get('search[value]', None)
-    if search_value and len(search_value) > 1:
-        queryset = queryset.filter(
-            Q(domain_name__icontains=search_value) |
-            Q(keyword__keyword__icontains=search_value) |
-            Q(source__icontains=search_value) |
-            Q(name__icontains=search_value) |
-            Q(description__icontains=search_value) |
-            Q(url__icontains=search_value) |
-            Q(scan_date__icontains=search_value)
-        )
+    queryset = apply_search_filter(
+        queryset, search_value,
+        ['domain_name__icontains', 'keyword__keyword__icontains', 'source__icontains',
+         'name__icontains', 'description__icontains', 'url__icontains', 'scan_date__icontains'],
+        min_length=1
+    )
 
     # Column-specific search
-    # search_domain_name = request.query_params.get('columns[1][search][value]', None)
     search_keyword = request.query_params.get('columns[1][search][value]', None)
     search_source = request.query_params.get('columns[2][search][value]', None)
     search_name = request.query_params.get('columns[3][search][value]', None)
     search_description = request.query_params.get('columns[4][search][value]', None)
     search_url = request.query_params.get('columns[5][search][value]', None)
     search_scan_date = request.query_params.get('columns[6][search][value]', None)
-    search_comment = request.query_params.get('columns[7][search][value]', None)  # Added comment
+    search_comment = request.query_params.get('columns[7][search][value]', None)
 
-    # if search_domain_name and len(search_domain_name) > 1:
-    #     queryset = queryset.filter(Q(domain_name__icontains=search_domain_name))
-    if search_keyword and len(search_keyword) > 1:
-        queryset = queryset.filter(Q(keyword__keyword__icontains=search_keyword))
-    if search_source and len(search_source) > 1:
-        queryset = queryset.filter(Q(source__icontains=search_source))
-    if search_name and len(search_name) > 1:
-        queryset = queryset.filter(Q(name__icontains=search_name))
-    if search_description and len(search_description) > 1:
-        queryset = queryset.filter(Q(description__icontains=search_description))
-    if search_url and len(search_url) > 1:
-        queryset = queryset.filter(Q(url__icontains=search_url))
-    if search_scan_date and len(search_scan_date) > 1:
-        queryset = queryset.filter(Q(scan_date__icontains=search_scan_date))
-    if search_comment and len(search_comment) > 1:
-        queryset = queryset.filter(Q(comment__icontains=search_comment))
+    queryset = apply_column_search(queryset, search_keyword, 'keyword__keyword__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_source, 'source__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_name, 'name__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_description, 'description__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_url, 'url__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_scan_date, 'scan_date__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_comment, 'comment__icontains', min_length=1)
 
     # Handle sorting
     order_column = request.query_params.get('order[0][column]', None)
@@ -1004,38 +915,27 @@ def list_screenshots(request, projectid, format=None):
     queryset = Screenshot.objects.filter(domain__in=domains).order_by('-date')
 
     # DataTables search on columns
-    search_columns = [
-        request.GET.get('columns[0][search][value]', ''),  # url
-        '',  # screenshot (not searchable)
-        request.GET.get('columns[2][search][value]', ''),  # technologies
-        request.GET.get('columns[3][search][value]', ''),  # title
-        request.GET.get('columns[4][search][value]', ''),  # status_code
-        request.GET.get('columns[5][search][value]', ''),  # webserver
-        request.GET.get('columns[6][search][value]', ''),  # date
-    ]
-    if search_columns[0]:
-        queryset = queryset.filter(url__icontains=search_columns[0])
-    if search_columns[2]:
-        queryset = queryset.filter(technologies__icontains=search_columns[2])
-    if search_columns[3]:
-        queryset = queryset.filter(title__icontains=search_columns[3])
-    if search_columns[4]:
-        queryset = queryset.filter(status_code__icontains=search_columns[4])
-    if search_columns[5]:
-        queryset = queryset.filter(webserver__icontains=search_columns[5])
-    if search_columns[6]:
-        queryset = queryset.filter(date__icontains=search_columns[6])
+    search_url = request.GET.get('columns[0][search][value]', '')
+    search_technologies = request.GET.get('columns[2][search][value]', '')
+    search_title = request.GET.get('columns[3][search][value]', '')
+    search_status_code = request.GET.get('columns[4][search][value]', '')
+    search_webserver = request.GET.get('columns[5][search][value]', '')
+    search_date = request.GET.get('columns[6][search][value]', '')
+    
+    queryset = apply_column_search(queryset, search_url, 'url__icontains')
+    queryset = apply_column_search(queryset, search_technologies, 'technologies__icontains')
+    queryset = apply_column_search(queryset, search_title, 'title__icontains')
+    queryset = apply_column_search(queryset, search_status_code, 'status_code__icontains')
+    queryset = apply_column_search(queryset, search_webserver, 'webserver__icontains')
+    queryset = apply_column_search(queryset, search_date, 'date__icontains')
 
     # Global search
     search_value = request.GET.get('search[value]', '')
-    if search_value:
-        queryset = queryset.filter(
-            Q(url__icontains=search_value) |
-            Q(technologies__icontains=search_value) |
-            Q(title__icontains=search_value) |
-            Q(status_code__icontains=search_value) |
-            Q(webserver__icontains=search_value)
-        )
+    queryset = apply_search_filter(
+        queryset, search_value,
+        ['url__icontains', 'technologies__icontains', 'title__icontains',
+         'status_code__icontains', 'webserver__icontains']
+    )
 
     # Ordering
     order_column_index = request.GET.get('order[0][column]', None)

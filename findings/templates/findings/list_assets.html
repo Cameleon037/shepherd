@@ -2,10 +2,6 @@
 {% load static %}
 
 {% block header %}
-<style>
-#table_list_projects tbody tr.selected td {background-color:#B0BED9}
-#table_list_projects tbody tr.odd.selected td {background-color:#acbad4}
-</style>
 {% endblock %}
 
 {% block content %}
@@ -212,13 +208,11 @@
           <th>Owner</th>
           <th>Scope</th>
         </tr>
-      </thead>
-      <thead>
         <tr>
           <th></th>
-          <th><input type="text" placeholder="Search Value" class="column-search-input"></th>
+          <th><input type="text" placeholder="Search Value" class="column-search-input form-control input-sm"></th>
           <th>
-            <select id="severity-filter" class="form-control input-sm">
+            <select id="severity-filter" class="column-search-input form-control input-sm">
               <option value="">All Severities</option>
               <option value="info">Info</option>
               <option value="low">Low</option>
@@ -227,15 +221,15 @@
               <option value="critical">Critical</option>
             </select>
           </th>
-          <th><input type="text" placeholder="Search Tag" class="column-search-input"></th>
-          <th><input type="text" placeholder="Search Source" class="column-search-input"></th>
-          <th><input type="text" placeholder="Search Description" class="column-search-input"></th>
-          <th><input type="text" placeholder="Search Last Scan" class="column-search-input"></th>
-          <th><input type="text" placeholder="Search Created" class="column-search-input"></th>
-          <th><input type="text" placeholder="Search IP" class="column-search-input"></th>
-          <th><input type="text" placeholder="Search Owner" class="column-search-input"></th>
+          <th><input type="text" placeholder="Search Tag" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Source" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Description" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Last Scan" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Created" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search IP" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Owner" class="column-search-input form-control input-sm"></th>
           <th>
-            <select id="scope-filter" class="form-control input-sm">
+            <select id="scope-filter" class="column-search-input form-control input-sm">
               <option value="">All Scopes</option>
               <option value="external">External</option>
               <option value="internal">Internal</option>
@@ -431,7 +425,7 @@ $(document).ready(function () {
     // Apply the scope filter for monitoredTable
     $('#scope-filter').on('change', function () {
       let selectedScope = $(this).val();
-      monitoredTable.column(3).search(selectedScope).draw();
+      monitoredTable.column(10).search(selectedScope).draw();
     });
 
     // Initialize common standalone features

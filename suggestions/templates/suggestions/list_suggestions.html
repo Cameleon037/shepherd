@@ -2,15 +2,6 @@
 {% load static %}
 
 {% block header %}
-<style>
-  #table_list_projects tbody tr.selected td {
-    background-color: #B0BED9
-  }
-
-  #table_list_projects tbody tr.odd.selected td {
-    background-color: #acbad4
-  }
-</style>
 {% endblock %}
 
 {% block content %}
@@ -105,18 +96,16 @@
                   <th>Owner</th>
                   <th>Scope</th>
                 </tr>
-              </thead>
-              <thead>
                 <tr>
                   <th></th>
-                  <th><input type="text" placeholder="Search Value" class="column-search-input" data-column="1"></th>
-                  <th><input type="text" placeholder="Search Source" class="column-search-input" data-column="2"></th>
-                  <th><input type="text" placeholder="Search Tag" class="column-search-input" data-column="3"></th>
-                  <th><input type="text" placeholder="Search Description" class="column-search-input" data-column="4"></th>
-                  <th><input type="text" placeholder="Search Redirect" class="column-search-input" data-column="5"></th>
-                  <th><input type="text" placeholder="Search Created" class="column-search-input" data-column="6"></th>
+                  <th><input type="text" placeholder="Search Value" class="column-search-input form-control input-sm" data-column="1"></th>
+                  <th><input type="text" placeholder="Search Source" class="column-search-input form-control input-sm" data-column="2"></th>
+                  <th><input type="text" placeholder="Search Tag" class="column-search-input form-control input-sm" data-column="3"></th>
+                  <th><input type="text" placeholder="Search Description" class="column-search-input form-control input-sm" data-column="4"></th>
+                  <th><input type="text" placeholder="Search Redirect" class="column-search-input form-control input-sm" data-column="5"></th>
+                  <th><input type="text" placeholder="Search Created" class="column-search-input form-control input-sm" data-column="6"></th>
                   <th>
-                    <select class="column-search-input" data-column="7">
+                    <select class="column-search-input form-control input-sm" data-column="7">
                       <option value="">All</option>
                       <option value="true">True</option>
                       <option value="false">False</option>
@@ -124,17 +113,17 @@
                     </select>
                   </th>
                   <th>
-                    <select class="column-search-input" data-column="8">
+                    <select class="column-search-input form-control input-sm" data-column="8">
                       <option value="">All</option>
                       <option value="true">True</option>
                       <option value="false">False</option>
                       <option value="none">None</option>
                     </select>
                   </th>
-                  <th><input type="text" placeholder="Search IP" class="column-search-input" data-column="9"></th>
-                  <th><input type="text" placeholder="Search Owner" class="column-search-input" data-column="10"></th>
+                  <th><input type="text" placeholder="Search IP" class="column-search-input form-control input-sm" data-column="9"></th>
+                  <th><input type="text" placeholder="Search Owner" class="column-search-input form-control input-sm" data-column="10"></th>
                   <th>
-                    <select class="column-search-input" data-column="11">
+                    <select class="column-search-input form-control input-sm" data-column="11">
                       <option value="">All Scopes</option>
                       <option value="external">External</option>
                       <option value="internal">Internal</option>
@@ -162,18 +151,16 @@
                   <th>Owner</th>
                   <th>Scope</th>
                 </tr>
-              </thead>
-              <thead>
                 <tr>
                   <th></th>
-                  <th><input type="text" placeholder="Search Value" class="column-search-input" data-column="1"></th>
-                  <th><input type="text" placeholder="Search Source" class="column-search-input" data-column="2"></th>
-                  <th><input type="text" placeholder="Search Tag" class="column-search-input" data-column="3"></th>
-                  <th><input type="text" placeholder="Search Description" class="column-search-input" data-column="4"></th>
-                  <th><input type="text" placeholder="Search Redirect" class="column-search-input" data-column="5"></th>
-                  <th><input type="text" placeholder="Search Created" class="column-search-input" data-column="6"></th>
+                  <th><input type="text" placeholder="Search Value" class="column-search-input form-control input-sm" data-column="1"></th>
+                  <th><input type="text" placeholder="Search Source" class="column-search-input form-control input-sm" data-column="2"></th>
+                  <th><input type="text" placeholder="Search Tag" class="column-search-input form-control input-sm" data-column="3"></th>
+                  <th><input type="text" placeholder="Search Description" class="column-search-input form-control input-sm" data-column="4"></th>
+                  <th><input type="text" placeholder="Search Redirect" class="column-search-input form-control input-sm" data-column="5"></th>
+                  <th><input type="text" placeholder="Search Created" class="column-search-input form-control input-sm" data-column="6"></th>
                   <th>
-                    <select class="column-search-input" data-column="7">
+                    <select class="column-search-input form-control input-sm" data-column="7">
                       <option value="">All</option>
                       <option value="true">True</option>
                       <option value="false">False</option>
@@ -181,17 +168,17 @@
                     </select>
                   </th>
                   <th>
-                    <select class="column-search-input" data-column="8">
+                    <select class="column-search-input form-control input-sm" data-column="8">
                       <option value="">All</option>
                       <option value="true">True</option>
                       <option value="false">False</option>
                       <option value="none">None</option>
                     </select>
                   </th>
-                  <th><input type="text" placeholder="Search IP" class="column-search-input" data-column="9"></th>
-                  <th><input type="text" placeholder="Search Owner" class="column-search-input" data-column="10"></th>
+                  <th><input type="text" placeholder="Search IP" class="column-search-input form-control input-sm" data-column="9"></th>
+                  <th><input type="text" placeholder="Search Owner" class="column-search-input form-control input-sm" data-column="10"></th>
                   <th>
-                    <select class="column-search-input" data-column="11">
+                    <select class="column-search-input form-control input-sm" data-column="11">
                       <option value="">All Scopes</option>
                       <option value="external">External</option>
                       <option value="internal">Internal</option>
@@ -219,18 +206,16 @@
                   <th>Owner</th>
                   <th>Scope</th>
                 </tr>
-              </thead>
-              <thead>
                 <tr>
                   <th></th>
-                  <th><input type="text" placeholder="Search Value" class="column-search-input" data-column="1"></th>
-                  <th><input type="text" placeholder="Search Source" class="column-search-input" data-column="2"></th>
-                  <th><input type="text" placeholder="Search Tag" class="column-search-input" data-column="3"></th>
-                  <th><input type="text" placeholder="Search Description" class="column-search-input" data-column="4"></th>
-                  <th><input type="text" placeholder="Search Redirect" class="column-search-input" data-column="5"></th>
-                  <th><input type="text" placeholder="Search Created" class="column-search-input" data-column="6"></th>
+                  <th><input type="text" placeholder="Search Value" class="column-search-input form-control input-sm" data-column="1"></th>
+                  <th><input type="text" placeholder="Search Source" class="column-search-input form-control input-sm" data-column="2"></th>
+                  <th><input type="text" placeholder="Search Tag" class="column-search-input form-control input-sm" data-column="3"></th>
+                  <th><input type="text" placeholder="Search Description" class="column-search-input form-control input-sm" data-column="4"></th>
+                  <th><input type="text" placeholder="Search Redirect" class="column-search-input form-control input-sm" data-column="5"></th>
+                  <th><input type="text" placeholder="Search Created" class="column-search-input form-control input-sm" data-column="6"></th>
                   <th>
-                    <select class="column-search-input" data-column="7">
+                    <select class="column-search-input form-control input-sm" data-column="7">
                       <option value="">All</option>
                       <option value="true">True</option>
                       <option value="false">False</option>
@@ -238,17 +223,17 @@
                     </select>
                   </th>
                   <th>
-                    <select class="column-search-input" data-column="8">
+                    <select class="column-search-input form-control input-sm" data-column="8">
                       <option value="">All</option>
                       <option value="true">True</option>
                       <option value="false">False</option>
                       <option value="none">None</option>
                     </select>
                   </th>
-                  <th><input type="text" placeholder="Search IP" class="column-search-input" data-column="9"></th>
-                  <th><input type="text" placeholder="Search Owner" class="column-search-input" data-column="10"></th>
+                  <th><input type="text" placeholder="Search IP" class="column-search-input form-control input-sm" data-column="9"></th>
+                  <th><input type="text" placeholder="Search Owner" class="column-search-input form-control input-sm" data-column="10"></th>
                   <th>
-                    <select class="column-search-input" data-column="11">
+                    <select class="column-search-input form-control input-sm" data-column="11">
                       <option value="">All Scopes</option>
                       <option value="external">External</option>
                       <option value="internal">Internal</option>

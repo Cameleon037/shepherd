@@ -2,10 +2,6 @@
 {% load static %}
 
 {% block header %}
-<style>
-#table_list_projects tbody tr.selected td {background-color:#B0BED9}
-#table_list_projects tbody tr.odd.selected td {background-color:#acbad4}
-</style>
 {% endblock %}
 
 {% block content %}
@@ -36,6 +32,14 @@
           <th>Finished at</th>
           <th>Status</th>
           <th>User</th>
+        </tr>
+        <tr>
+          <th></th>
+          <th><input type="text" placeholder="Search Command" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Start time" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Finished at" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Status" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search User" class="column-search-input form-control input-sm"></th>
         </tr>
       </thead>
     </table>
@@ -124,21 +128,9 @@ $(document).ready(function () {
     // Initialize DataTables
     var jobTable = initializeDataTable('#table_list_jobs', "/api/v1/project/{{ projectid }}/jobs/all/", jobColumns);
 
-    // Function to apply search functionality to a DataTable
-    function applySearch(table, searchInputsSelector) {
-        table.columns().every(function () {
-            var that = this;
-            $(searchInputsSelector).on('keyup change', function () {
-                let columnIndex = $(this).parent().index();
-                table.column(columnIndex).search(this.value).draw();
-            });
-        });
-      // Apply the severity filter
-      $('#severity-filter').on('change', function () {
-        let selectedSeverity = $(this).val();
-        table.column(2).search(selectedSeverity).draw();
-      });
-    }
+    // Find the second header row (filter row) and bind to its inputs/selects
+    var $filterRow = $('#table_list_jobs thead tr:eq(1)');
+    applyDebouncedColumnSearch(jobTable, 'input.column-search-input', 'select.column-search-input', 400, $filterRow);
 
     // Initialize common standalone features
     initializeStandaloneFeatures({

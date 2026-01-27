@@ -1,0 +1,423 @@
+/* CSS Variables for Light Theme (default) */
+:root {
+    --bg-primary: #fff;
+    --bg-secondary: #fafafa;
+    --bg-tertiary: #f5f5f5;
+    --bg-selected: #B0BED9;
+    --bg-selected-alt: #acbad4;
+    --bg-hover: #f8d7da;
+    --bg-success: #e8f5e9;
+    --bg-pill: #eef2ff;
+    
+    --text-primary: #000;
+    --text-secondary: #555;
+    --text-tertiary: #666;
+    --text-muted: #777;
+    --text-disabled: #888;
+    --text-placeholder: #999;
+    --text-pill: #4353a4;
+    
+    --border-primary: #e5e5e5;
+    --border-secondary: #e6e6e6;
+    --border-tertiary: #eee;
+    --border-light: #f0f0f0;
+    --border-lighter: #f1f1f1;
+    
+    --shadow: rgba(0, 0, 0, 0.05);
+    --shadow-hover: rgba(0, 0, 0, 0.3);
+    
+    --axis-stroke: #000;
+    --tick-stroke: #d5d5d5;
+}
+
+/* Dark Theme */
+[data-theme="dark"] {
+    --bg-primary: #1e1e1e;
+    --bg-secondary: #252525;
+    --bg-tertiary: #2d2d2d;
+    --bg-selected: #3a4a6b;
+    --bg-selected-alt: #354463;
+    --bg-hover: #4a2a2a;
+    --bg-success: #1e3a1e;
+    --bg-pill: #2a3a5a;
+    
+    --text-primary: #e0e0e0;
+    --text-secondary: #b0b0b0;
+    --text-tertiary: #999;
+    --text-muted: #888;
+    --text-disabled: #666;
+    --text-placeholder: #555;
+    --text-pill: #8ba3ff;
+    
+    --border-primary: #404040;
+    --border-secondary: #3a3a3a;
+    --border-tertiary: #333;
+    --border-light: #2a2a2a;
+    --border-lighter: #252525;
+    
+    --shadow: rgba(0, 0, 0, 0.3);
+    --shadow-hover: rgba(0, 0, 0, 0.6);
+    
+    --axis-stroke: #e0e0e0;
+    --tick-stroke: #555;
+}
+
+/* Apply theme colors to body */
+body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Bootstrap panel overrides for dark mode */
+[data-theme="dark"] .panel-default {
+    background-color: var(--bg-secondary);
+    border-color: var(--border-primary);
+}
+
+[data-theme="dark"] .panel-heading,
+[data-theme="dark"] .panel-default > .panel-heading {
+    background-color: var(--bg-tertiary);
+    border-color: var(--border-primary);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .panel-title {
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .panel-body {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .panel-footer {
+    background-color: var(--bg-tertiary);
+    border-color: var(--border-primary);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .table {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .table > tbody > tr > td,
+[data-theme="dark"] .table > tbody > tr > th,
+[data-theme="dark"] .table > tfoot > tr > td,
+[data-theme="dark"] .table > tfoot > tr > th,
+[data-theme="dark"] .table > thead > tr > td,
+[data-theme="dark"] .table > thead > tr > th {
+    border-color: var(--border-primary);
+}
+
+[data-theme="dark"] .form-control {
+    background-color: var(--bg-tertiary);
+    border-color: var(--border-primary);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .alert {
+    border-color: var(--border-primary);
+}
+
+[data-theme="dark"] .modal-content {
+    background-color: var(--bg-secondary);
+    border-color: var(--border-primary);
+}
+
+[data-theme="dark"] .modal-header,
+[data-theme="dark"] .modal-body,
+[data-theme="dark"] .modal-footer {
+    border-color: var(--border-primary);
+}
+
+[data-theme="dark"] .dropdown-menu {
+    background-color: var(--bg-secondary);
+    border-color: var(--border-primary);
+}
+
+[data-theme="dark"] .dropdown-menu > li > a {
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .dropdown-menu > li > a:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .page-header {
+    border-bottom-color: var(--border-primary);
+}
+
+/* Pagination buttons for dark mode */
+[data-theme="dark"] .pagination > li > a,
+[data-theme="dark"] .pagination > li > span {
+    background-color: var(--bg-tertiary);
+    border-color: var(--border-primary);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .pagination > li > a:hover,
+[data-theme="dark"] .pagination > li > a:focus,
+[data-theme="dark"] .pagination > li > span:hover,
+[data-theme="dark"] .pagination > li > span:focus {
+    background-color: var(--bg-secondary);
+    border-color: var(--border-primary);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .pagination > .active > a,
+[data-theme="dark"] .pagination > .active > a:focus,
+[data-theme="dark"] .pagination > .active > a:hover,
+[data-theme="dark"] .pagination > .active > span,
+[data-theme="dark"] .pagination > .active > span:focus,
+[data-theme="dark"] .pagination > .active > span:hover {
+    background-color: #337ab7;
+    border-color: #337ab7;
+    color: #fff;
+}
+
+[data-theme="dark"] .pagination > .disabled > a,
+[data-theme="dark"] .pagination > .disabled > a:focus,
+[data-theme="dark"] .pagination > .disabled > a:hover,
+[data-theme="dark"] .pagination > .disabled > span,
+[data-theme="dark"] .pagination > .disabled > span:focus,
+[data-theme="dark"] .pagination > .disabled > span:hover {
+    background-color: var(--bg-tertiary);
+    border-color: var(--border-primary);
+    color: var(--text-muted);
+    opacity: 0.6;
+}
+
+/* Striped table rows for dark mode */
+[data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd),
+[data-theme="dark"] .table-striped.dataTable > tbody > tr:nth-of-type(odd) > td,
+[data-theme="dark"] .table-striped.dataTable > tbody > tr:nth-of-type(odd) > th {
+    background-color: var(--bg-tertiary);
+}
+
+[data-theme="dark"] .table-striped > tbody > tr:nth-of-type(even),
+[data-theme="dark"] .table-striped.dataTable > tbody > tr:nth-of-type(even) > td,
+[data-theme="dark"] .table-striped.dataTable > tbody > tr:nth-of-type(even) > th {
+    background-color: var(--bg-secondary);
+}
+
+[data-theme="dark"] .table-hover > tbody > tr:hover {
+    background-color: var(--bg-tertiary);
+}
+
+[data-theme="dark"] div.dataTables_processing {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    background: linear-gradient(to right, rgba(30,30,30,0) 0%, rgba(37,37,37,0.9) 25%, rgba(37,37,37,0.9) 75%, rgba(30,30,30,0) 100%);
+}
+
+[data-theme="dark"] table.DTFC_Cloned tr.even {
+    background-color: var(--bg-secondary);
+}
+
+/* DataTables and column search inputs */
+[data-theme="dark"] div.dataTables_info,
+[data-theme="dark"] div.dataTables_length label,
+[data-theme="dark"] div.dataTables_filter label {
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .column-search-input,
+[data-theme="dark"] input.column-search-input,
+[data-theme="dark"] select.column-search-input,
+[data-theme="dark"] div.dataTables_filter input,
+[data-theme="dark"] div.dataTables_length select {
+    background-color: var(--bg-tertiary);
+    border-color: var(--border-primary);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .column-search-input:focus,
+[data-theme="dark"] input.column-search-input:focus,
+[data-theme="dark"] select.column-search-input:focus,
+[data-theme="dark"] div.dataTables_filter input:focus,
+[data-theme="dark"] div.dataTables_length select:focus {
+    background-color: var(--bg-tertiary);
+    border-color: #337ab7;
+    color: var(--text-primary);
+    outline: 0;
+    box-shadow: inset 0 1px 1px rgba(0,0,0,.075), 0 0 8px rgba(51, 122, 183, 0.3);
+}
+
+/* Common component styles using CSS variables */
+.control-card {
+    border: 1px solid var(--border-primary);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    padding: 16px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 2px var(--shadow);
+}
+
+.control-card h4 {
+    margin-top: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.control-card.disabled {
+    opacity: 0.6;
+}
+
+.control-card .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.control-card .toggle-row:last-child {
+    margin-bottom: 0;
+}
+
+.control-card .meta {
+    color: var(--text-muted);
+    font-size: 0.85em;
+}
+
+.hint-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--bg-pill);
+    color: var(--text-pill);
+    font-size: 0.75em;
+    margin-left: 6px;
+}
+
+.scanner-legend,
+.scanner-note-inline {
+    font-size: 0.78em;
+    color: var(--text-tertiary);
+}
+
+.scanner-legend {
+    margin: 2px 0 10px;
+}
+
+.scanner-note-inline {
+    margin-left: 8px;
+}
+
+.scanner-section {
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-lighter);
+}
+
+.scanner-section:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.scanner-section h5 {
+    margin-top: 0;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    font-size: 0.85em;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+}
+
+.source-checkboxes,
+.keyword-checkboxes {
+    border: 1px solid var(--border-primary);
+    border-radius: 4px;
+    padding: 8px;
+    overflow-y: auto;
+    background: var(--bg-secondary);
+}
+
+.source-checkboxes {
+    max-height: 220px;
+}
+
+.keyword-checkboxes {
+    max-height: 250px;
+}
+
+.source-checkboxes .checkbox,
+.keyword-checkboxes .checkbox {
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+.source-checkboxes .checkbox:first-child,
+.keyword-checkboxes .checkbox:first-child {
+    margin-top: 0;
+}
+
+.source-checkboxes .checkbox:last-child,
+.keyword-checkboxes .checkbox:last-child {
+    margin-bottom: 0;
+}
+
+.keyword-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-size: 0.75em;
+    margin-left: 6px;
+}
+
+.keyword-disabled {
+    color: var(--text-placeholder);
+    text-decoration: line-through;
+}
+
+.keyword-editor-list {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid var(--border-primary);
+    border-radius: 4px;
+    padding: 10px;
+    background: var(--bg-secondary);
+}
+
+.keyword-editor-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border-tertiary);
+}
+
+.keyword-editor-row:last-child {
+    border-bottom: none;
+}
+
+.keyword-editor-row input[type="text"] {
+    flex: 2;
+}
+
+.keyword-editor-row select {
+    flex: 1;
+}
+
+.keyword-editor-row.disabled-keyword {
+    opacity: 0.6;
+    background: var(--bg-tertiary);
+}
+
+.new-keyword-row {
+    background: var(--bg-success);
+}
+
+/* Table row selection styles */
+table tbody tr.selected td {
+    background-color: var(--bg-selected);
+}
+
+table tbody tr.odd.selected td {
+    background-color: var(--bg-selected-alt);
+}
