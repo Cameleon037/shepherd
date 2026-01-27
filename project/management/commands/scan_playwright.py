@@ -49,6 +49,12 @@ class Command(BaseCommand):
             help='Maximum number of concurrent browser contexts (default: 20)',
         )
         parser.add_argument(
+            '--batch-size',
+            type=int,
+            default=100,
+            help='Process URLs in batches to prevent resource exhaustion (default: 100)',
+        )
+        parser.add_argument(
             '--timeout',
             type=int,
             default=30000,
@@ -118,7 +124,6 @@ class Command(BaseCommand):
         for active_domain in active_domains:
             active_domain_urls = []
             ports = active_domain.port_set.all()
-            self.stdout.write(f"Active Domain: {active_domain.value}")
             for port in ports:
                 if "https" in port.banner:
                     url = f"https://{active_domain.value}:{port.port}"
@@ -133,12 +138,9 @@ class Command(BaseCommand):
                         f"https://{active_domain.value}:{port.port}",
                     ]
             active_domain_urls = list(set(active_domain_urls))
-            for url in active_domain_urls:
-                self.stdout.write(f"  {url}")
-            
             playwright_urls += active_domain_urls
 
-        self.stdout.write(f"Total URLs: {len(playwright_urls)}")
+        self.stdout.write(f"Collected {len(playwright_urls)} URLs from {len(active_domains)} domains")
         
         if not playwright_urls:
             self.stdout.write("No URLs to process.")
@@ -150,23 +152,49 @@ class Command(BaseCommand):
         viewport_width = options.get('viewport_width', 1920)
         viewport_height = options.get('viewport_height', 1080)
         headless = options.get('headless', True)
+        batch_size = options.get('batch_size', 100)
 
-        self.stdout.write(f"Processing {len(playwright_urls)} URLs with max {max_concurrent} concurrent browsers")
-        self.stdout.write(f"Timeout: {timeout}ms, Viewport: {viewport_width}x{viewport_height}, Headless: {headless}")
+        self.stdout.write(f"Processing {len(playwright_urls)} URLs in batches of {batch_size}")
 
-        # Run the async function
-        results = asyncio.run(self.capture_screenshots(
-            playwright_urls,
-            max_concurrent=max_concurrent,
-            timeout=timeout,
-            viewport_width=viewport_width,
-            viewport_height=viewport_height,
-            headless=headless
-        ))
+        # Process URLs in batches to prevent resource exhaustion
+        total_batches = (len(playwright_urls) + batch_size - 1) // batch_size
+        total_processed = 0
+        total_success = 0
+        total_failed = 0
+        
+        for batch_num in range(total_batches):
+            start_idx = batch_num * batch_size
+            end_idx = min(start_idx + batch_size, len(playwright_urls))
+            batch_urls = playwright_urls[start_idx:end_idx]
+            
+            # Run the async function for this batch
+            batch_results = asyncio.run(self.capture_screenshots(
+                batch_urls,
+                max_concurrent=max_concurrent,
+                timeout=timeout,
+                viewport_width=viewport_width,
+                viewport_height=viewport_height,
+                headless=headless
+            ))
+            
+            # Save results to DB immediately to free memory
+            batch_success, batch_failed = self._save_results_to_db(batch_results)
+            total_success += batch_success
+            total_failed += batch_failed
+            total_processed += len(batch_results)
+            percentage = (total_processed / len(playwright_urls)) * 100
+            
+            self.stdout.write(f"Batch {batch_num + 1}/{total_batches}: {batch_success} success, {batch_failed} failed ({percentage:.1f}% complete)")
+            
+            # Small delay between batches to let resources recover
+            if batch_num < total_batches - 1:
+                import time
+                time.sleep(2)
+        
+        self.stdout.write(f"\nFinal summary: {total_success} successful, {total_failed} failed")
 
-        self.stdout.write(f"Total results collected: {len(results)}")
-
-        # Store all results in the DB
+    def _save_results_to_db(self, results):
+        """Save results to database and return success/fail counts"""
         success_count = 0
         failed_count = 0
         for result in results:
@@ -185,7 +213,7 @@ class Command(BaseCommand):
                     "title": result.get("title", ""),
                     "webserver": result.get("webserver", ""),
                     "host_ip": result.get("host_ip", ""),
-                    "status_code": result.get("status_code", None),
+                    "status_code": result.get("status_code", "0"),  # Default to "0" if somehow None
                     "response_body": result.get("response_body", ""),
                     "failed": result.get("failed", False),
                     "date": make_aware(datetime.now())
@@ -201,15 +229,13 @@ class Command(BaseCommand):
                 
                 if result.get("failed"):
                     failed_count += 1
-                    self.stdout.write(f"[FAILED] Screenshot for url: {result['url']}")
                 else:
                     success_count += 1
                     self.stdout.write(f"[SUCCESS] Screenshot saved for url: {result['url']}")
             except Exception as e:
                 failed_count += 1
-                self.stdout.write(f"[ERROR] Failed to save screenshot for {result.get('url', 'unknown')}: {e}")
-
-        self.stdout.write(f"\nSummary: {success_count} successful, {failed_count} failed")
+        
+        return success_count, failed_count
 
     async def capture_screenshots(self, urls, max_concurrent=20, timeout=30000, 
                                   viewport_width=1920, viewport_height=1080, headless=True):
@@ -218,7 +244,6 @@ class Command(BaseCommand):
         results = []
 
         async with async_playwright() as p:
-            # Launch browser once
             browser = await p.chromium.launch(
                 headless=headless,
                 args=[
@@ -239,12 +264,14 @@ class Command(BaseCommand):
                         "title": "",
                         "webserver": "",
                         "host_ip": "",
-                        "status_code": None,
+                        "status_code": "0",  # Default to "0" for unknown/error cases
                         "response_body": "",
                         "technologies": "",
                         "failed": False,
                     }
 
+                    context = None
+                    page = None
                     try:
                         # Create a new context for each URL
                         context = await browser.new_context(
@@ -262,7 +289,7 @@ class Command(BaseCommand):
                         try:
                             response = await page.goto(url, wait_until='domcontentloaded', timeout=timeout)
                             
-                            # Get status code
+                            # Get status code - always set a value
                             if response:
                                 result["status_code"] = str(response.status)
                                 
@@ -270,6 +297,9 @@ class Command(BaseCommand):
                                 server_header = response.headers.get('server', '')
                                 if server_header:
                                     result["webserver"] = server_header
+                            else:
+                                # Response is None, set default status code
+                                result["status_code"] = "0"
                             
                             # Wait a bit for page to render
                             await asyncio.sleep(1)
@@ -281,7 +311,7 @@ class Command(BaseCommand):
                             except:
                                 pass
 
-                            # Get page content (first 50000 chars to avoid huge responses)
+                            # Get page content (first 100000 chars to avoid huge responses)
                             try:
                                 content = await page.content()
                                 result["response_body"] = content[:100000] if content else ""
@@ -307,28 +337,79 @@ class Command(BaseCommand):
 
                         except PlaywrightTimeoutError:
                             result["failed"] = True
+                            result["status_code"] = "0"
                             result["response_body"] = "Timeout waiting for page to load"
-                            self.stdout.write(f"[TIMEOUT] {url}")
                         except PlaywrightError as e:
                             result["failed"] = True
+                            result["status_code"] = "0"
                             result["response_body"] = f"Playwright error: {str(e)}"
-                            self.stdout.write(f"[ERROR] {url}: {str(e)}")
                         except Exception as e:
                             result["failed"] = True
+                            result["status_code"] = "0"
                             result["response_body"] = f"Error: {str(e)}"
-                            self.stdout.write(f"[ERROR] {url}: {str(e)}")
                         finally:
-                            await context.close()
+                            # Always close page and context
+                            try:
+                                if page:
+                                    await asyncio.wait_for(page.close(), timeout=2)
+                            except:
+                                pass
+                            try:
+                                if context:
+                                    await asyncio.wait_for(context.close(), timeout=2)
+                            except:
+                                pass
 
                     except Exception as e:
                         result["failed"] = True
+                        result["status_code"] = "0"
                         result["response_body"] = f"Unexpected error: {str(e)}"
-                        self.stdout.write(f"[ERROR] {url}: {str(e)}")
+                    finally:
+                        # Final cleanup attempt
+                        try:
+                            if context:
+                                await asyncio.wait_for(context.close(), timeout=1)
+                        except:
+                            pass
 
                     return result
 
-            # Process all URLs concurrently
-            tasks = [capture_single_url(url) for url in urls]
+            # Wrap each task in a timeout to prevent indefinite hangs
+            task_timeout = (timeout / 1000.0) + 10
+            
+            async def capture_with_timeout(url):
+                """Wrap capture_single_url with a timeout to prevent hangs"""
+                try:
+                    return await asyncio.wait_for(
+                        capture_single_url(url),
+                        timeout=task_timeout
+                    )
+                except asyncio.TimeoutError:
+                    return {
+                        "url": url,
+                        "screenshot_base64": "",
+                        "title": "",
+                        "webserver": "",
+                        "host_ip": "",
+                        "status_code": "0",
+                        "response_body": f"Task timeout exceeded ({task_timeout}s)",
+                        "technologies": "",
+                        "failed": True,
+                    }
+                except Exception as e:
+                    return {
+                        "url": url,
+                        "screenshot_base64": "",
+                        "title": "",
+                        "webserver": "",
+                        "host_ip": "",
+                        "status_code": "0",
+                        "response_body": f"Task wrapper error: {str(e)}",
+                        "technologies": "",
+                        "failed": True,
+                    }
+            
+            tasks = [capture_with_timeout(url) for url in urls]
             results = await asyncio.gather(*tasks, return_exceptions=True)
             
             # Filter out exceptions and convert to list
@@ -341,7 +422,7 @@ class Command(BaseCommand):
                         "title": "",
                         "webserver": "",
                         "host_ip": "",
-                        "status_code": None,
+                        "status_code": "0",
                         "response_body": f"Exception: {str(result)}",
                         "technologies": "",
                         "failed": True,
