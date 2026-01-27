@@ -117,6 +117,57 @@ body {
     color: var(--text-primary);
 }
 
+/* Checkbox and radio button styling for dark mode */
+[data-theme="dark"] input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 13px;
+    height: 13px;
+    min-width: 13px;
+    min-height: 13px;
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-primary);
+    border-radius: 3px;
+    box-sizing: border-box;
+    vertical-align: middle;
+    position: relative;
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+[data-theme="dark"] input[type="checkbox"]:checked {
+    background-color: #337ab7;
+    border-color: #337ab7;
+    position: relative;
+}
+
+[data-theme="dark"] input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 4px;
+    height: 8px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+[data-theme="dark"] input[type="checkbox"]:hover {
+    border-color: #337ab7;
+}
+
+[data-theme="dark"] input[type="radio"] {
+    accent-color: #337ab7;
+}
+
+[data-theme="dark"] .checkbox label,
+[data-theme="dark"] .radio label,
+[data-theme="dark"] .checkbox-inline,
+[data-theme="dark"] .radio-inline {
+    color: var(--text-primary);
+}
+
 [data-theme="dark"] .alert {
     border-color: var(--border-primary);
 }
@@ -215,6 +266,31 @@ body {
 
 [data-theme="dark"] table.DTFC_Cloned tr.even {
     background-color: var(--bg-secondary);
+}
+
+/* DataTables borders and outlines for dark mode */
+[data-theme="dark"] table.dataTable {
+    border-color: var(--border-primary) !important;
+}
+
+[data-theme="dark"] table.dataTable td,
+[data-theme="dark"] table.dataTable th {
+    border-color: var(--border-primary) !important;
+}
+
+[data-theme="dark"] table.table-bordered.dataTable {
+    border-color: var(--border-primary) !important;
+}
+
+[data-theme="dark"] table.table-bordered.dataTable td,
+[data-theme="dark"] table.table-bordered.dataTable th {
+    border-color: var(--border-primary) !important;
+}
+
+[data-theme="dark"] div.dataTables_scrollHead table,
+[data-theme="dark"] div.dataTables_scrollBody table,
+[data-theme="dark"] div.dataTables_scrollFoot table {
+    border-color: var(--border-primary) !important;
 }
 
 /* DataTables and column search inputs */
