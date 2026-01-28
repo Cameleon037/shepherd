@@ -70,7 +70,7 @@ class Asset(models.Model):
     link = models.CharField(max_length=1024, default='', blank=True, null=True)
 
     type = models.CharField(max_length=100, default='domain')  # can be: domain, ip, url, certificate, starred_domain
-    subtype = models.CharField(max_length=100, default='domain')  # can be: domain, subdomain
+    subtype = models.CharField(max_length=100, default='')  # can be: domain, subdomain
     scope = models.CharField(max_length=100, default='external', blank=True, null=True)  # can be: external, internal
 
     creation_time = models.DateTimeField()  # when was it found to be created

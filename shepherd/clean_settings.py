@@ -204,6 +204,10 @@ SNOW_USERNAME = "your_username"
 SNOW_PASSWORD = "your_password"
 SNOW_INTERNAL_DOMAIN = "corp.org"
 
+# Wiz API
+WIZ_CLIENT_ID = ''
+WIZ_CLIENT_SECRET = ''
+
 # Recent Findings Days
 RECENT_DAYS = 5
 

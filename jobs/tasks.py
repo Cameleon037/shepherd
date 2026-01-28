@@ -9,6 +9,7 @@ import_domaintools --projectid 1
 import_crtsh --projectid 1
 import_shodan --projectid 1
 #import_fofa --projectid 1
+import_wiz --projectid 1
 scan_subfinder --projectid 1
 get_domain_redirect --projectid 1
 
@@ -71,6 +72,13 @@ def import_snow_cmdb_task():
     args = f'--projectid {project_id}'
     run_job(command, args, project_id, user=scheduler_user)
     return "import_snow_cmdb completed"
+
+@shared_task
+def import_wiz_task():
+    command = 'import_wiz'
+    args = f'--projectid {project_id}'
+    run_job(command, args, project_id, user=scheduler_user)
+    return "import_wiz completed"
 
 @shared_task
 def scan_porch_pirate_task():
