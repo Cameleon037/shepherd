@@ -30,6 +30,14 @@
 <div class="control-card">
     <h4>1. Choose Assets</h4>
     <p class="meta">Filter the assets you want to scan. Shepherd will use these filters when launching scans.</p>
+    <div style="margin-bottom:12px;">
+        <div class="checkbox">
+            <label>
+                <input type="checkbox" id="scan-all-assets" checked>
+                Scan all assets (ignores asset filters)
+            </label>
+        </div>
+    </div>
     <div class="row">
         <div class="col-sm-4">
             <label>Asset Type</label>
@@ -84,14 +92,6 @@
     <div style="margin-top:12px;">
         <button class="btn btn-default btn-sm" id="btn-preview-assets">Preview assets</button>
         <span class="meta" id="selected-assets-hint">No filter applied yet.</span>
-    </div>
-    <div style="margin-top:12px;">
-        <div class="checkbox">
-            <label>
-                <input type="checkbox" id="scan-all-assets" checked>
-                Scan all assets (ignores asset filters)
-            </label>
-        </div>
     </div>
     <div class="table-responsive" id="preview-container" style="display:none; margin-top:12px;">
         <table class="table table-condensed table-striped table-bordered" id="preview-table" style="font-size:0.85em;">

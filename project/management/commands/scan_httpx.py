@@ -247,8 +247,5 @@ class Command(BaseCommand):
                 url=screenshot_json["url"],
                 defaults=screenshot_defaults,
             )
-            if domain_obj:
-                domain_obj.last_scan_time = make_aware(datetime.now())
-                domain_obj.save()
             self.stdout.write(f"Screenshot saved for url: {screenshot_json['url']}")
                     

@@ -193,11 +193,6 @@ class Command(BaseCommand):
                             raw=port_entry
                         )
             
-            # Update last_scan_time for all domains that point to this IP
-            for ad_obj in domains_for_ip:
-                ad_obj.last_scan_time = make_aware(datetime.now())
-                ad_obj.save()
-            
             domain_names = [d.value for d in domains_for_ip]
             self.stdout.write(f"[+] {open_ports_cnt} ports found for IP {ip_address} (domains: {', '.join(domain_names)})")
             
@@ -257,8 +252,6 @@ class Command(BaseCommand):
                         raw=port_entry
                     )
             
-            ad_obj.last_scan_time = make_aware(datetime.now())
-            ad_obj.save()
             self.stdout.write(f"[+] {open_ports_cnt} ports found for {ad_obj.value}")
             
         except Exception as error:

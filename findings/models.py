@@ -40,11 +40,11 @@ class Finding(models.Model):
     comment = models.TextField(default='', blank=True, null=True)
 
     # Severity fields
-    severity = models.CharField(max_length=50, default='')
-    cve = models.CharField(max_length=1024, default='')
-    cvssscore = models.CharField(max_length=1024, default='')
-    cvssmetrics = models.CharField(max_length=1024, default='')
-    vulnerableAt = models.CharField(max_length=2048, default='')
+    severity = models.CharField(max_length=50, default='', null=True)
+    cve = models.CharField(max_length=1024, default='', null=True)
+    cvssscore = models.CharField(max_length=1024, default='', null=True)
+    cvssmetrics = models.CharField(max_length=1024, default='', null=True)
+    vulnerableAt = models.CharField(max_length=2048, default='', null=True)
     vulnerabilityDetails = models.CharField(max_length=4096, default='', blank=True, null=True)
 
     # Time related fields

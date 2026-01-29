@@ -85,6 +85,11 @@
                 <label for="scan-servicenow">ServiceNow CMDB</label>
                 <span class="scanner-note-inline">Import internal servers from ServiceNow CMDB</span>
             </div>
+            <div class="toggle-row">
+                <input type="checkbox" id="scan-wiz" class="scanner-child" data-group="domain-discovery">
+                <label for="scan-wiz">Wiz</label>
+                <span class="scanner-note-inline">Import application endpoints from Wiz cloud security platform</span>
+            </div>
         </div>
     </div>
 
@@ -205,6 +210,7 @@ $(document).ready(function () {
             scan_shodan: $('#scan-shodan').is(':checked'),
             scan_servicenow: $('#scan-servicenow').is(':checked'),
             scan_fofa: $('#scan-fofa').is(':checked'),
+            scan_wiz: $('#scan-wiz').is(':checked'),
             scan_porch_pirate: $('#scan-porch-pirate').is(':checked'),
             scan_swaggerhub: $('#scan-swaggerhub').is(':checked'),
             scan_ai_scribd: $('#scan-ai-scribd').is(':checked'),
@@ -291,7 +297,7 @@ $(document).ready(function () {
         
         // Check if at least one scan or post-action is selected
         var hasDiscoveryScans = scans.scan_crtsh || scans.scan_domaintools || scans.scan_shodan || 
-                                scans.scan_servicenow || scans.scan_fofa || scans.scan_porch_pirate || scans.scan_swaggerhub || scans.scan_ai_scribd || scans.scan_git_hound || scans.scan_ransomlook;
+                                scans.scan_servicenow || scans.scan_fofa || scans.scan_wiz || scans.scan_porch_pirate || scans.scan_swaggerhub || scans.scan_ai_scribd || scans.scan_git_hound || scans.scan_ransomlook;
         var hasSubfinder = scans.scan_subfinder;
         var hasPostActions = postActions.dns_records || postActions.domain_redirect || autoMonitor;
         

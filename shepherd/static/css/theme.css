@@ -278,10 +278,13 @@ body {
     border-color: var(--border-primary) !important;
 }
 
+[data-theme="dark"] table.table-bordered,
 [data-theme="dark"] table.table-bordered.dataTable {
     border-color: var(--border-primary) !important;
 }
 
+[data-theme="dark"] table.table-bordered td,
+[data-theme="dark"] table.table-bordered th,
 [data-theme="dark"] table.table-bordered.dataTable td,
 [data-theme="dark"] table.table-bordered.dataTable th {
     border-color: var(--border-primary) !important;
@@ -291,6 +294,13 @@ body {
 [data-theme="dark"] div.dataTables_scrollBody table,
 [data-theme="dark"] div.dataTables_scrollFoot table {
     border-color: var(--border-primary) !important;
+}
+
+/* Job output section for dark mode */
+[data-theme="dark"] #job-output {
+    background-color: var(--bg-secondary) !important;
+    border-color: var(--border-primary) !important;
+    color: var(--text-primary);
 }
 
 /* DataTables and column search inputs */
@@ -444,6 +454,84 @@ body {
     color: var(--text-secondary);
     font-size: 0.75em;
     margin-left: 6px;
+}
+
+/* Purple label badge for tags - works in both light and dark modes */
+.label-purple {
+    background-color: #9c27b0;
+    color: #fff;
+}
+
+[data-theme="dark"] .label-purple {
+    background-color: #ba68c8;
+    color: #fff;
+}
+
+/* Suggestion tabs - simple button group navigation */
+.suggestion-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--border-primary);
+}
+
+.suggestion-tab-btn {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-primary);
+    border-radius: 6px;
+    padding: 10px 16px;
+    font-size: 0.95em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+}
+
+.suggestion-tab-btn:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--border-secondary);
+    transform: translateY(-1px);
+}
+
+.suggestion-tab-btn.active {
+    background: var(--bg-selected);
+    color: var(--text-primary);
+    border-color: var(--bg-selected);
+    box-shadow: 0 2px 4px var(--shadow);
+}
+
+.suggestion-tab-btn.active:hover {
+    background: var(--bg-selected-alt);
+    transform: translateY(0);
+}
+
+.tab-count {
+    background: rgba(0, 0, 0, 0.1);
+    color: var(--text-primary);
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 0.85em;
+    font-weight: 600;
+    min-width: 24px;
+    text-align: center;
+}
+
+[data-theme="dark"] .tab-count {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.suggestion-tab-btn.active .tab-count {
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .suggestion-tab-btn.active .tab-count {
+    background: rgba(255, 255, 255, 0.25);
 }
 
 .keyword-disabled {

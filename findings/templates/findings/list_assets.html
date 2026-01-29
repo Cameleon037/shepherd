@@ -302,10 +302,11 @@ $(document).ready(function () {
         {'data': 'vulns', 'sName': 'Vulnerabilities'},
         {'data': 'tag', 'sName': 'Tag',
           'render': function(data, type, row) {
-            return renderTruncatedCell(data, type, { separator: ', ', maxItems: 2, className: 'tag-cell' });
-          },
-          'fnCreatedCell': function(nTd, sData, oData, iRow, iCol) {
-            initTruncatedCellTooltips(nTd);
+            if (!data || type !== 'display') return data || '';
+            var tags = data.split(',').map(function(tag) { return tag.trim(); }).filter(function(tag) { return tag.length > 0; });
+            return tags.map(function(tag) {
+              return '<span class="label label-purple" style="margin-right: 4px;">' + $('<div/>').text(tag).html() + '</span>';
+            }).join('');
           }
         },
         {'data': 'source', 'sName': 'Source'},
@@ -399,10 +400,11 @@ $(document).ready(function () {
         },
         {'data': 'tag', 'sName': 'Tag',
           'render': function(data, type, row) {
-            return renderTruncatedCell(data, type, { separator: ', ', maxItems: 2, className: 'tag-cell' });
-          },
-          'fnCreatedCell': function(nTd, sData, oData, iRow, iCol) {
-            initTruncatedCellTooltips(nTd);
+            if (!data || type !== 'display') return data || '';
+            var tags = data.split(',').map(function(tag) { return tag.trim(); }).filter(function(tag) { return tag.length > 0; });
+            return tags.map(function(tag) {
+              return '<span class="label label-purple" style="margin-right: 4px;">' + $('<div/>').text(tag).html() + '</span>';
+            }).join('');
           }
         }
     ];

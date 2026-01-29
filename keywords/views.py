@@ -444,6 +444,10 @@ def discovery_control_center_launch(request):
         threads.append(threading.Thread(target=lambda: launch('import_snow_cmdb')))
         triggered_messages.append('ServiceNow CMDB import triggered.')
 
+    if scans.get('scan_wiz'):
+        threads.append(threading.Thread(target=lambda: launch('import_wiz')))
+        triggered_messages.append('Wiz import triggered.')
+
     if scans.get('scan_fofa'):
         threads.append(threading.Thread(target=lambda: launch('import_fofa', keyword_args)))
         triggered_messages.append('FOFA scan triggered.')

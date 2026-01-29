@@ -115,12 +115,17 @@ def list_suggestions(request, projectid, selection, vtype, format=None):
     else:
         queryset = prj.asset_set.filter(ignore=False)  # Do not display ignored suggestions
 
-    if vtype in ['domain']:
+    if vtype in ['all']:
+        # Show all types - no filter
+        pass
+    elif vtype in ['domain']:
         queryset = queryset.filter(type='domain')
     elif vtype in ['starred_domain']:
         queryset = queryset.filter(type=vtype)
     elif vtype in ['second_level_domain']:
         queryset = queryset.filter(type='domain', subtype='domain')
+    elif vtype in ['ip']:
+        queryset = queryset.filter(type='ip')
     
     ### filter by search value
     queryset = apply_column_search(queryset, search_value, 'value__icontains', min_length=1)

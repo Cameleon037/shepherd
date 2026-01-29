@@ -223,9 +223,6 @@ class Command(BaseCommand):
                     url=result["url"],
                     defaults=screenshot_defaults,
                 )
-                if domain_obj:
-                    domain_obj.last_scan_time = make_aware(datetime.now())
-                    domain_obj.save()
                 
                 if result.get("failed"):
                     failed_count += 1

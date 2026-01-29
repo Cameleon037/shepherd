@@ -55,29 +55,21 @@
     </div>
     <div class="panel-body table-responsive">
       <div role="tabpanel">
-        <!-- Nav tabs -->
-        <ul class="nav nav-tabs" role="tablist">
-          <li role="presentation" {% if activetab == 'domain' %}class="active" {% endif %}>
-            <a href="#allDomains" aria-controls="allDomains" role="tab" data-toggle="tab">
-              <span>All Domains <span class="label label-default">{{ domain_count }}</span></span>
-            </a>
-          </li>
-          <li role="presentation" {% if activetab == 'subdomain' %}class="active" {% endif %}>
-            <a href="#secondLevelDomains" aria-controls="secondLevelDomains" role="tab" data-toggle="tab">
-              <span>2nd level domains <span class="label label-default">{{ secondleveldomain_count }}</span></span>
-            </a>
-          </li>
-          <li role="presentation" {% if activetab == 'starreddomain' %}class="active" {% endif %}>
-            <a href="#starredDomains" aria-controls="starredDomains" role="tab" data-toggle="tab">
-              <span>Starred Domains <span class="label label-default">{{ starreddomain_count }}</span></span>
-            </a>
-          </li>
-          <!-- <li role="presentation" {% if activetab == 'ipaddress' %}class="active"{% endif %}>
-            <a href="#sipaddress" aria-controls="sipaddress" role="tab" data-toggle="tab">
-                <span>IP Addresses <span class="label label-default">{{ ip_count }}</span></span>
-            </a>
-        </li> -->
-        </ul><br />
+        <!-- Simple button group navigation -->
+        <div class="suggestion-tabs">
+          <button type="button" class="suggestion-tab-btn {% if activetab == 'domain' %}active{% endif %}" data-target="#allDomains" data-toggle="tab" role="tab" aria-controls="allDomains" aria-selected="{% if activetab == 'domain' %}true{% else %}false{% endif %}">
+            All <span class="tab-count">{{ all_count }}</span>
+          </button>
+          <button type="button" class="suggestion-tab-btn {% if activetab == 'subdomain' %}active{% endif %}" data-target="#secondLevelDomains" data-toggle="tab" role="tab" aria-controls="secondLevelDomains" aria-selected="{% if activetab == 'subdomain' %}true{% else %}false{% endif %}">
+            2nd level domains <span class="tab-count">{{ secondleveldomain_count }}</span>
+          </button>
+          <button type="button" class="suggestion-tab-btn {% if activetab == 'starreddomain' %}active{% endif %}" data-target="#starredDomains" data-toggle="tab" role="tab" aria-controls="starredDomains" aria-selected="{% if activetab == 'starreddomain' %}true{% else %}false{% endif %}">
+            Starred Domains <span class="tab-count">{{ starreddomain_count }}</span>
+          </button>
+          <button type="button" class="suggestion-tab-btn {% if activetab == 'ipaddress' %}active{% endif %}" data-target="#sipaddress" data-toggle="tab" role="tab" aria-controls="sipaddress" aria-selected="{% if activetab == 'ipaddress' %}true{% else %}false{% endif %}">
+            IPs <span class="tab-count">{{ ip_count }}</span>
+          </button>
+        </div>
         <div class="tab-content">
           <div role="tabpanel" class="tab-pane fade {% if activetab == 'domain' %}in active{% endif %}" id="allDomains">
             <table id="table_list_domain_suggestions" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;" width="100%">
@@ -244,18 +236,56 @@
             </table>
           </div>
 
-          <!-- <div role="tabpanel" class="tab-pane fade {% if activetab == 'ipaddress' %}in active{% endif %}" id="sipaddress">
+          <div role="tabpanel" class="tab-pane fade {% if activetab == 'ipaddress' %}in active{% endif %}" id="sipaddress">
             <table id="table_list_ipaddress_suggestions" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;" width="100%">
-                <thead>
-                    <th><input type="checkbox" name="select_all" value="1" id="select-all-items-ip">&nbsp; Operations</th>
-                    <th>Value</th>
-                    <th>Source</th>
-                    <th>Description</th>
-                    <th>Created</th>
-                    <th>Active</th>
-                </thead>
+              <thead>
+                <tr>
+                  <th><input type="checkbox" name="select_all" value="1" id="select-all-items-ip">&nbsp; Operations</th>
+                  <th>Value</th>
+                  <th>Source</th>
+                  <th>Tag</th>
+                  <th>Description</th>
+                  <th>Created</th>
+                  <th>Monitor</th>
+                  <th>Active</th>
+                  <th>Owner</th>
+                  <th>Scope</th>
+                </tr>
+                <tr>
+                  <th></th>
+                  <th><input type="text" placeholder="Search Value" class="column-search-input form-control input-sm" data-column="1"></th>
+                  <th><input type="text" placeholder="Search Source" class="column-search-input form-control input-sm" data-column="2"></th>
+                  <th><input type="text" placeholder="Search Tag" class="column-search-input form-control input-sm" data-column="3"></th>
+                  <th><input type="text" placeholder="Search Description" class="column-search-input form-control input-sm" data-column="4"></th>
+                  <th><input type="text" placeholder="Search Created" class="column-search-input form-control input-sm" data-column="5"></th>
+                  <th>
+                    <select class="column-search-input form-control input-sm" data-column="6">
+                      <option value="">All</option>
+                      <option value="true">True</option>
+                      <option value="false">False</option>
+                      <option value="none">None</option>
+                    </select>
+                  </th>
+                  <th>
+                    <select class="column-search-input form-control input-sm" data-column="7">
+                      <option value="">All</option>
+                      <option value="true">True</option>
+                      <option value="false">False</option>
+                      <option value="none">None</option>
+                    </select>
+                  </th>
+                  <th><input type="text" placeholder="Search Owner" class="column-search-input form-control input-sm" data-column="8"></th>
+                  <th>
+                    <select class="column-search-input form-control input-sm" data-column="9">
+                      <option value="">All Scopes</option>
+                      <option value="external">External</option>
+                      <option value="internal">Internal</option>
+                    </select>
+                  </th>
+                </tr>
+              </thead>
             </table>
-        </div> -->
+          </div>
         </div>
       </div>
     </div>
@@ -477,9 +507,84 @@
       });
     }
 
-    var domTable = initializeDataTable('#table_list_domain_suggestions', "/api/v1/project/{{ projectid }}/suggestions/visible/domain/");
+    // IP table columns (no IP or redirect columns)
+    function initializeIPDataTable(tableId, ajaxUrl) {
+      return $(tableId).DataTable({
+        processing: true,
+        serverSide: true,
+        pageLength: 25,
+        orderCellsTop: true,
+        oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
+        order: [[1, "asc"]],
+        ajax: {
+          url: ajaxUrl,
+          dataSrc: "results",
+          type: "GET",
+          dataType: "json"
+        },
+        columns: [
+          {
+            'data': 'uuid', 'sName': 'Operations', 'aTargets': [0], 'bSortable': false,
+            "mRender": function (data, type, full) {
+              var monitor_url = "{% url 'suggestions:monitor_suggestion' uuid=0 %}".replace(0, full.uuid);
+              var ignore_url = "{% url 'suggestions:ignore_suggestion' uuid=0 %}".replace(0, full.uuid);
+              var delete_url = "{% url 'suggestions:delete_suggestion' uuid=0 %}".replace(0, full.uuid);
+              return '<div class="btn-group1">' +
+                '<input type="checkbox" name="id[]" value="' + $('<div/>').text(data).html() + '">&nbsp;&nbsp;' +
+                '<a class="btn btn-xs" rel="tooltip" data-placement="right" data-original-title="Monitor Entry" data-href="#" href="' + monitor_url + '">' +
+                '<span class="glyphicon glyphicon-eye-open" aria-hidden="true"></span>' +
+                '</a> ' +
+                '<a class="btn btn-xs" rel="tooltip" data-placement="right" data-original-title="Ignore Entry" data-display="' + full.value + '" href="' + ignore_url + '">' +
+                '<span class="glyphicon glyphicon-eye-close" aria-hidden="true"></span>' +
+                '</a> ' +
+                '<a class="btn btn-xs btn-column confirm" rel="tooltip" data-placement="right" data-original-title="Delete Entry" data-display="' + full.value + '" data-href="' + delete_url + '" href="#">' +
+                '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
+                '</a> ' +
+                '</div>';
+            },
+            "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
+              $("a", nTd).tooltip();
+            }
+          },
+          { 'data': 'value', 'sName': 'Value', 'aTargets': [1] },
+          { 'data': 'source', 'sName': 'Source', 'aTargets': [2] },
+          { 'data': 'tag', 'sName': 'Tag', 'aTargets': [3],
+            'render': function(data, type, row) {
+              return renderTruncatedCell(data, type, { separator: ', ', maxItems: 2, className: 'tag-cell' });
+            },
+            'fnCreatedCell': function(nTd, sData, oData, iRow, iCol) {
+              initTruncatedCellTooltips(nTd);
+            }
+          },
+          { 'data': 'description', 'sName': 'Description', 'aTargets': [4] },
+          { 'data': 'creation_time', 'sName': 'Created', 'aTargets': [5],
+            'render': function(data, type, row) {
+              if (!data) return '';
+              if (window.moment) {
+                return moment(data).format('DD-MM-YYYY HH:mm');
+              }
+              return data;
+            }
+          },
+          { 'data': 'monitor', 'sName': 'Monitor', 'aTargets': [6] },
+          { 'data': 'active', 'sName': 'Active', 'aTargets': [7] },
+          { 'data': 'owner', 'sName': 'Owner', 'aTargets': [8],
+            'render': function(data, type, row) {
+              return renderTruncatedCell(data, type, { separator: ', ', maxItems: 2, className: 'owner-cell' });
+            },
+            'fnCreatedCell': function(nTd, sData, oData, iRow, iCol) {
+              initTruncatedCellTooltips(nTd);
+            }
+          },
+          { 'data': 'scope', 'sName': 'Scope', 'aTargets': [9] }
+        ]
+      });
+    }
+
+    var domTable = initializeDataTable('#table_list_domain_suggestions', "/api/v1/project/{{ projectid }}/suggestions/visible/all/");
     var subTable = initializeDataTable('#table_list_second_level_domain_suggestions', "/api/v1/project/{{ projectid }}/suggestions/visible/second_level_domain/");
     var starredTable = initializeDataTable('#table_list_starreddomain_suggestions', "/api/v1/project/{{ projectid }}/suggestions/visible/starred_domain/");
+    var ipTable = initializeIPDataTable('#table_list_ipaddress_suggestions', "/api/v1/project/{{ projectid }}/suggestions/visible/ip/");
 
     function applySearch(table, tableId) {
       // Find the second header row (filter row) and bind to its inputs/selects
@@ -490,6 +595,7 @@
     applySearch(domTable, '#table_list_domain_suggestions');
     applySearch(subTable, '#table_list_second_level_domain_suggestions');
     applySearch(starredTable, '#table_list_starreddomain_suggestions');
+    applySearch(ipTable, '#table_list_ipaddress_suggestions');
 
     // Initialize common standalone features for multiple tables
     initializeStandaloneFeatures();
@@ -498,12 +604,13 @@
     setupStandaloneSelectAll('#select-all-items-dom', '#table_list_domain_suggestions');
     setupStandaloneSelectAll('#select-all-items-sub', '#table_list_second_level_domain_suggestions');
     setupStandaloneSelectAll('#select-all-items-starred', '#table_list_starreddomain_suggestions');
+    setupStandaloneSelectAll('#select-all-items-ip', '#table_list_ipaddress_suggestions');
 
     // Setup form submission for multiple DataTables
     $('#form-selected').on('submit', function (e) {
       var form = this;
       // Use the common form submission logic for each table
-      [domTable, subTable, starredTable].forEach(function(table) {
+      [domTable, subTable, starredTable, ipTable].forEach(function(table) {
         table.$('input[type="checkbox"]').each(function () {
           if (!$.contains(document, this)) {
             if (this.checked) {
@@ -577,6 +684,9 @@
       starredTable.$('input[type="checkbox"][name="id[]"]:checked').each(function () {
         selectedUuids.push($(this).val());
       });
+      ipTable.$('input[type="checkbox"][name="id[]"]:checked').each(function () {
+        selectedUuids.push($(this).val());
+      });
 
       if (selectedUuids.length === 0) {
         e.preventDefault();
@@ -610,6 +720,9 @@
         starredTable.$('input[type="checkbox"][name="id[]"]:checked').each(function () {
           selectedUuids.push($(this).val());
         });
+        ipTable.$('input[type="checkbox"][name="id[]"]:checked').each(function () {
+          selectedUuids.push($(this).val());
+        });
 
         // Add as hidden inputs
         for (var i = 0; i < selectedUuids.length; i++) {
@@ -624,13 +737,17 @@
     });
 
     // Clear column search inputs and reset DataTable filters when switching tabs
-    $('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
+    $('[data-toggle="tab"]').on('shown.bs.tab', function (e) {
+      // Update active button state
+      $('.suggestion-tab-btn').removeClass('active');
+      $(this).addClass('active');
       // Clear all search inputs
       $('.column-search-input').val('');
       // Reset search for all tables
       domTable.columns().search('').draw();
       subTable.columns().search('').draw();
       starredTable.columns().search('').draw();
+      ipTable.columns().search('').draw();
     });
 
     // ========== Upload Domains Modal ==========
