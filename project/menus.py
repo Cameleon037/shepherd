@@ -6,16 +6,8 @@ from menu import Menu, MenuItem
 def top_project(request):
     return '<span class="glyphicon" aria-hidden="true"></span> Projects'
 
-sharing_children = (
-    MenuItem("Projects",
-            reverse("projects:projects"),
-            weight=10
-        ),
-)
-
 Menu.add_item("main", MenuItem(top_project,
     reverse("projects:projects"),
-    weight=10,
-    children=sharing_children
+    weight=12
     )
 )

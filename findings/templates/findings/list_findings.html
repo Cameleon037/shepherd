@@ -138,7 +138,7 @@ $(document).ready( function () {
         processing: true, serverSide: true, pageLength: 25,
         orderCellsTop: true,
         oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
-        order: [[ 1, "asc" ]],
+        order: [[ 6, "desc" ]],  // Sort by severity (column 6) descending - most critical first
         ajax: {
             processing: true,
             url: "/api/v1/project/{{ projectid }}/findings/all/",

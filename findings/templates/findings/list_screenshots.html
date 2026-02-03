@@ -90,12 +90,14 @@ $(document).ready(function () {
         });
     }
 
+    var assetViewUrl = "{% url 'findings:view_asset' uuid='__UUID__' %}";
     const httpxColumns = [
         {
             data: 'url',
             sName: 'URL',
             render: function (data, type, row) {
-                return '<a href="' + data + '" target="_blank">' + $('<div/>').text(data).html() + '</a>';
+                var text = $('<div/>').text(data).html();
+                return row.domain ? '<a href="' + assetViewUrl.replace('__UUID__', row.domain) + '">' + text + '</a>' : text;
             }
         },
         {
@@ -103,11 +105,9 @@ $(document).ready(function () {
             sName: 'Screenshot',
             orderable: false,
             render: function (data, type, row) {
-                if (data) {
-                    return '<img src="data:image/png;base64,' + data + '" alt="Screenshot" style="max-width:200px; max-height:120px;" />';
-                } else {
-                    return '<span class="text-muted">No screenshot</span>';
-                }
+                if (!data) return '<span class="text-muted">No screenshot</span>';
+                var href = (row.url || '').replace(/"/g, '&quot;');
+                return '<a href="' + href + '" target="_blank" rel="noopener"><img src="data:image/png;base64,' + data + '" alt="Screenshot" style="max-width:200px; max-height:120px;" /></a>';
             }
         },
         { data: 'technologies', sName: 'Technologies' },

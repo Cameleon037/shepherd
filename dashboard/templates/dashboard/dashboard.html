@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block header %}
+<style>
+.dashboard-stat {
+    text-align: center;
+    padding: 15px;
+}
+.dashboard-stat .value {
+    font-size: 1.8em;
+    font-weight: bold;
+    display: block;
+}
+.dashboard-stat .label {
+    font-size: 0.85em;
+    color: #777;
+}
+.severity-badge { font-size: 0.85em; }
+.severity-critical { background-color: #a94442; color: #fff; }
+.severity-high { background-color: #d9534f; color: #fff; }
+.severity-medium { background-color: #f0ad4e; color: #333; }
+.severity-low { background-color: #5bc0de; color: #333; }
+.severity-info { background-color: #5cb85c; color: #fff; }
+.stacked-bar-container { margin-bottom: 20px; }
+.stacked-bar-row { margin-bottom: 12px; display: flex; align-items: center; }
+.stacked-bar-label { min-width: 120px; font-size: 0.9em; font-weight: bold; padding-right: 10px; }
+.stacked-bar-wrapper { flex: 1; height: 24px; background-color: #f5f5f5; border: 1px solid #ddd; position: relative; display: flex; }
+.stacked-bar-segment { height: 100%; display: inline-block; }
+.stacked-bar-segment-critical { background-color: #a94442; }
+.stacked-bar-segment-high { background-color: #d9534f; }
+.stacked-bar-segment-medium { background-color: #f0ad4e; }
+.stacked-bar-segment-low { background-color: #5bc0de; }
+.stacked-bar-segment-info { background-color: #5cb85c; }
+.stacked-bar-segment-unknown { background-color: #777; }
+.stacked-bar-value { min-width: 60px; text-align: right; padding-left: 10px; font-size: 0.9em; font-weight: bold; }
+.stacked-bar-legend { margin-top: 15px; font-size: 0.85em; }
+.stacked-bar-legend-item { display: inline-block; margin-right: 15px; }
+.stacked-bar-legend-color { display: inline-block; width: 16px; height: 16px; margin-right: 5px; vertical-align: middle; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% spaceless %}
+<div class="page-header">
+    <div class="media">
+        <div class="media-left"></div>
+        <div class="media-body">
+            <h2 class="media-heading">📊 Dashboard</h2>
+            <p class="text-muted" style="margin-top:4px;">Project overview: assets, findings, and discovery stats</p>
+        </div>
+    </div>
+</div>
+
+{% if messages %}
+    {% for message in messages %}
+        <div {% if message.tags %} class="alert alert-{{ message.tags }}" {% endif %}>{{ message }}</div>
+    {% endfor %}
+{% endif %}
+
+{% if not has_project %}
+<div class="panel panel-default">
+    <div class="panel-body text-center" style="padding: 40px;">
+        <p class="lead">No project selected</p>
+        <p>Select a project to see the dashboard with findings, assets, and discovery statistics.</p>
+        <a href="{% url 'projects:projects' %}" class="btn btn-primary">Go to Projects</a>
+    </div>
+</div>
+{% else %}
+
+<div class="row">
+    <div class="col-sm-12">
+        <p class="text-muted" style="margin-bottom: 16px;">Project: <strong>{{ project_name }}</strong></p>
+    </div>
+</div>
+
+<!-- Stats row: Assets, Findings, Keywords, Ports, Screenshots -->
+<div class="row">
+    <div class="col-md-2 col-sm-4 col-xs-6">
+        <div class="panel panel-default">
+            <div class="panel-body dashboard-stat">
+                <span class="value">{{ num_assets }}</span>
+                <span class="label">Assets</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2 col-sm-4 col-xs-6">
+        <div class="panel panel-default">
+            <div class="panel-body dashboard-stat">
+                <span class="value">{{ num_domains }}</span>
+                <span class="label">Domains</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2 col-sm-4 col-xs-6">
+        <div class="panel panel-default">
+            <div class="panel-body dashboard-stat">
+                <span class="value">{{ num_findings }}</span>
+                <span class="label">Findings</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2 col-sm-4 col-xs-6">
+        <div class="panel panel-default">
+            <div class="panel-body dashboard-stat">
+                <span class="value">{{ num_keywords }}</span>
+                <span class="label">Keywords</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2 col-sm-4 col-xs-6">
+        <div class="panel panel-default">
+            <div class="panel-body dashboard-stat">
+                <span class="value">{{ num_ports }}</span>
+                <span class="label">Open Ports</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2 col-sm-4 col-xs-6">
+        <div class="panel panel-default">
+            <div class="panel-body dashboard-stat">
+                <span class="value">{{ num_screenshots }}</span>
+                <span class="label">Screenshots</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Findings by severity -->
+    <div class="col-md-6">
+        <div class="panel panel-default">
+            <div class="panel-heading">Findings by severity</div>
+            <div class="panel-body">
+                {% if findings_by_severity %}
+                <table class="table table-condensed table-striped" style="font-size: 0.9em;">
+                    <thead>
+                        <tr>
+                            <th>Severity</th>
+                            <th>Count</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in findings_by_severity %}
+                        <tr>
+                            <td>
+                                <span class="label severity-badge severity-{{ row.severity|default:'info'|lower }}">{{ row.severity|default:"—" }}</span>
+                            </td>
+                            <td>{{ row.count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="text-muted">No findings yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <!-- Findings by source (simple table) -->
+    <div class="col-md-6">
+        <div class="panel panel-default">
+            <div class="panel-heading">Findings by source</div>
+            <div class="panel-body">
+                {% if findings_by_source %}
+                <table class="table table-condensed table-striped" style="font-size: 0.9em;">
+                    <thead>
+                        <tr>
+                            <th>Source</th>
+                            <th>Count</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in findings_by_source %}
+                        <tr>
+                            <td>{{ row.source|default:"—" }}</td>
+                            <td>{{ row.count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="text-muted">No findings yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Most critical findings and Most vulnerable assets -->
+<div class="row">
+    <div class="col-md-6">
+        <div class="panel panel-default">
+            <div class="panel-heading">Most critical findings</div>
+            <div class="panel-body" style="padding: 0;">
+                {% if most_critical_findings %}
+                <table class="table table-condensed table-striped table-bordered" style="font-size: 0.85em; margin: 0;">
+                    <thead>
+                        <tr>
+                            <th>Vulnerability</th>
+                            <th>Severity</th>
+                            <th>Asset</th>
+                            <th>First seen</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in most_critical_findings %}
+                        <tr>
+                            <td><a href="{% url 'findings:view_asset' f.domain.uuid %}">{{ f.name|truncatechars:35 }}</a></td>
+                            <td><span class="label severity-badge severity-{{ f.severity|default:'info'|lower }}">{{ f.severity|default:"—" }}</span></td>
+                            <td>{{ f.domain.value|truncatechars:25 }}</td>
+                            <td>{{ f.first_seen|date:"Y-m-d" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="text-muted" style="padding: 12px;">No critical findings.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="panel panel-default">
+            <div class="panel-heading">Most vulnerable assets</div>
+            <div class="panel-body" style="padding: 0;">
+                {% if most_vulnerable_assets %}
+                <table class="table table-condensed table-striped table-bordered" style="font-size: 0.85em; margin: 0;">
+                    <thead>
+                        <tr>
+                            <th>Asset</th>
+                            <th>Findings</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for asset in most_vulnerable_assets %}
+                        <tr>
+                            <td><a href="{% url 'findings:view_asset' asset.uuid %}">{{ asset.value|truncatechars:50 }}</a></td>
+                            <td><span class="badge">{{ asset.finding_count }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="text-muted" style="padding: 12px;">No vulnerable assets.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Findings by sources (stacked bar chart) -->
+<div class="row">
+    <div class="col-md-12">
+        <div class="panel panel-default">
+            <div class="panel-heading"><strong>Vulnerabilities By Source</strong></div>
+            <div class="panel-body stacked-bar-container">
+                {% if findings_by_source_stacked %}
+                {% for source_data in findings_by_source_stacked %}
+                <div class="stacked-bar-row">
+                    <div class="stacked-bar-label">{{ source_data.source }}</div>
+                    <div class="stacked-bar-wrapper">
+                        {% if source_data.critical > 0 %}
+                        <div class="stacked-bar-segment stacked-bar-segment-critical" style="width: {% widthratio source_data.critical source_data.total 100 %}%;" title="Critical: {{ source_data.critical }}"></div>
+                        {% endif %}
+                        {% if source_data.high > 0 %}
+                        <div class="stacked-bar-segment stacked-bar-segment-high" style="width: {% widthratio source_data.high source_data.total 100 %}%;" title="High: {{ source_data.high }}"></div>
+                        {% endif %}
+                        {% if source_data.medium > 0 %}
+                        <div class="stacked-bar-segment stacked-bar-segment-medium" style="width: {% widthratio source_data.medium source_data.total 100 %}%;" title="Medium: {{ source_data.medium }}"></div>
+                        {% endif %}
+                        {% if source_data.low > 0 %}
+                        <div class="stacked-bar-segment stacked-bar-segment-low" style="width: {% widthratio source_data.low source_data.total 100 %}%;" title="Low: {{ source_data.low }}"></div>
+                        {% endif %}
+                        {% if source_data.info > 0 %}
+                        <div class="stacked-bar-segment stacked-bar-segment-info" style="width: {% widthratio source_data.info source_data.total 100 %}%;" title="Info: {{ source_data.info }}"></div>
+                        {% endif %}
+                        {% if source_data.unknown > 0 %}
+                        <div class="stacked-bar-segment stacked-bar-segment-unknown" style="width: {% widthratio source_data.unknown source_data.total 100 %}%;" title="Unknown: {{ source_data.unknown }}"></div>
+                        {% endif %}
+                    </div>
+                    <div class="stacked-bar-value">{{ source_data.total }}</div>
+                </div>
+                {% endfor %}
+                <div class="stacked-bar-legend">
+                    <div class="stacked-bar-legend-item"><span class="stacked-bar-legend-color stacked-bar-segment-critical"></span> Critical</div>
+                    <div class="stacked-bar-legend-item"><span class="stacked-bar-legend-color stacked-bar-segment-high"></span> High</div>
+                    <div class="stacked-bar-legend-item"><span class="stacked-bar-legend-color stacked-bar-segment-medium"></span> Medium</div>
+                    <div class="stacked-bar-legend-item"><span class="stacked-bar-legend-color stacked-bar-segment-low"></span> Low</div>
+                    <div class="stacked-bar-legend-item"><span class="stacked-bar-legend-color stacked-bar-segment-info"></span> Info</div>
+                    <div class="stacked-bar-legend-item"><span class="stacked-bar-legend-color stacked-bar-segment-unknown"></span> Unknown</div>
+                </div>
+                {% else %}
+                <p class="text-muted">No findings by source available.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Extra asset stats & recent findings -->
+<div class="row">
+    <div class="col-md-4">
+        <div class="panel panel-default">
+            <div class="panel-heading">Asset summary</div>
+            <div class="panel-body">
+                <table class="table table-condensed" style="font-size: 0.9em;">
+                    <tr><td>Monitored</td><td>{{ num_monitored }}</td></tr>
+                    <tr><td>Ignored</td><td>{{ num_ignored_assets }}</td></tr>
+                    <tr><td>IPs</td><td>{{ num_ips }}</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="panel panel-default">
+            <div class="panel-heading">Recent findings <a href="{% url 'findings:all_findings' %}" class="btn btn-xs btn-default pull-right">View all</a></div>
+            <div class="panel-body" style="padding: 0;">
+                {% if recent_findings %}
+                <table class="table table-condensed table-striped table-bordered" style="font-size: 0.85em; margin: 0;">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Severity</th>
+                            <th>Asset</th>
+                            <th>First seen</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in recent_findings %}
+                        <tr>
+                            <td><a href="{% url 'findings:view_asset' f.domain.uuid %}">{{ f.name|truncatechars:40 }}</a></td>
+                            <td><span class="label severity-badge severity-{{ f.severity|default:'info'|lower }}">{{ f.severity|default:"—" }}</span></td>
+                            <td>{{ f.domain.value|truncatechars:30 }}</td>
+                            <td>{{ f.first_seen|date:"Y-m-d H:i" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="text-muted" style="padding: 12px;">No findings yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endif %}
+{% endspaceless %}
+{% endblock %}

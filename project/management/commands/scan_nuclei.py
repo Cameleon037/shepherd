@@ -154,7 +154,7 @@ class Command(BaseCommand):
 
     def _run_nuclei_scan(self, targets_file_path, results_file_path, nt_option):
         """Run Nuclei scan and return parsed findings."""
-        command = ['nuclei', '-l', targets_file_path, '-ss', 'host-spray', '-t', '/Users/leo/nuclei-templates/dns/caa-fingerprint.yaml', '-je', results_file_path]
+        command = ['nuclei', '-l', targets_file_path, '-ss', 'host-spray', '-je', results_file_path]
         if nt_option:
             command.append('-nt')
 

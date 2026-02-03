@@ -92,6 +92,47 @@
 </div>
 {% endif %}
 
+{% if endpoints %}
+<div class="panel panel-default">
+    <div class="panel-heading">// Web Endpoints{% if endpoints_total > 20 %} ({{ endpoints_total }} total){% endif %}</div>
+    <div class="panel-body table-responsive">
+        <table id="endpoints-table" class="table table-condensed table-striped" style="font-size: 0.9em;">
+            <thead>
+                <tr>
+                    <th>URL</th>
+                    <th>Technologies</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for endpoint in endpoints %}
+                <tr class="endpoint-row">
+                    <td style="word-break: break-all;"><a href="{{ endpoint.url }}" target="_blank" rel="noopener noreferrer">{{ endpoint.url }}</a></td>
+                    <td>{{ endpoint.technologies|default:"-" }}</td>
+                    <td>{{ endpoint.date|date:"Y-m-d H:i" }}</td>
+                </tr>
+                {% endfor %}
+                {% if endpoints_remaining %}
+                {% for endpoint in endpoints_remaining %}
+                <tr class="endpoint-row endpoint-row-hidden" style="display: none;">
+                    <td style="word-break: break-all;"><a href="{{ endpoint.url }}" target="_blank" rel="noopener noreferrer">{{ endpoint.url }}</a></td>
+                    <td>{{ endpoint.technologies|default:"-" }}</td>
+                    <td>{{ endpoint.date|date:"Y-m-d H:i" }}</td>
+                </tr>
+                {% endfor %}
+                {% endif %}
+            </tbody>
+        </table>
+        {% if endpoints_remaining %}
+        <div class="text-center" style="margin-top: 10px;">
+            <button id="show-more-endpoints" class="btn btn-default btn-sm">Show More ({{ endpoints_remaining|length }} remaining)</button>
+            <button id="show-less-endpoints" class="btn btn-default btn-sm" style="display: none;">Show Less</button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
 <div class="panel panel-default">
     <div class="panel-heading">// Screenshots</div>
     <div class="panel-body">
@@ -171,5 +212,63 @@
         {% endif %}
     </div>
 </div>
+
+<div class="panel panel-default">
+    <div class="panel-heading">// Ignored Findings</div>
+    <div class="panel-body table-responsive">
+        {% if ignored_findings %}
+            <table class="table table-condensed table-striped table-bordered findings-table">
+                <thead>
+                    <tr>
+                        <th>Vulnerability</th>
+                        <th>Severity</th>
+                        <th>Reported</th>
+                        <th>Scan Date</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in ignored_findings %}
+                    <tr>
+                        <td>{{ entry.name }}</td>
+                        <td>
+                            <span class="severity-badge severity-{{ entry.severity|lower }}">{{ entry.severity|title }}</span>
+                        </td>
+                        <td>
+                            {% if entry.reported %}
+                                <span class="label label-success">Yes</span>
+                            {% else %}
+                                <span class="label label-default">No</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ entry.scan_date|date:"Y-m-d H:i" }}</td>
+                        <td>{{ entry.description|default:"-"|truncatewords:40 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p class="text-muted">No ignored findings for this asset.</p>
+        {% endif %}
+    </div>
+</div>
 {% endspaceless %}
+{% endblock %}
+
+{% block javascript %}
+<script type="text/javascript">
+$(document).ready(function() {
+    $('#show-more-endpoints').on('click', function() {
+        $('.endpoint-row-hidden').show();
+        $(this).hide();
+        $('#show-less-endpoints').show();
+    });
+    
+    $('#show-less-endpoints').on('click', function() {
+        $('.endpoint-row-hidden').hide();
+        $(this).hide();
+        $('#show-more-endpoints').show();
+    });
+});
+</script>
 {% endblock %}

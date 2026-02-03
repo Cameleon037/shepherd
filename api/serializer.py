@@ -2,7 +2,7 @@
 from rest_framework import serializers
 
 from project.models import Job, Project, Keyword, Asset, DNSRecord
-from findings.models import Finding, Port, Screenshot
+from findings.models import Finding, Port, Screenshot, Endpoint
 
 class ProjectSerializer(serializers.ModelSerializer):
     class Meta:
@@ -104,4 +104,18 @@ class DNSRecordSerializer(serializers.ModelSerializer):
     
     def get_asset_uuid(self, obj):
         return obj.related_asset.uuid
+
+class EndpointSerializer(serializers.ModelSerializer):
+    asset_value = serializers.SerializerMethodField()
+    asset_uuid = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Endpoint
+        fields = '__all__'
+    
+    def get_asset_value(self, obj):
+        return obj.domain.value if obj.domain else None
+    
+    def get_asset_uuid(self, obj):
+        return obj.domain.uuid if obj.domain else None
         

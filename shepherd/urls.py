@@ -25,6 +25,7 @@ urlpatterns = [
     path('keywords/', include(('keywords.urls', 'keywords'), namespace='keywords')),
     path('suggestions/', include(('suggestions.urls', 'suggestions'), namespace='suggestions')),
     path('findings/', include(('findings.urls', 'findings'), namespace='findings')),
+    path('dashboard/', include(('dashboard.urls', 'dashboard'), namespace='dashboard')),
     path('accounts/', include(('accounts.urls', 'accounts'), namespace='accounts')),
     path('api/', include(('api.urls', 'api'), namespace='api')),
     path('jobs/', include(('jobs.urls', 'jobs'), namespace='jobs')),

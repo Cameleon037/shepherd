@@ -44,6 +44,10 @@ urlpatterns = [
     path('dns_records/', views.dns_records, name='dns_records'),
     path('dns_records/export/', views.export_dns_records_csv, name='export_dns_records_csv'),
     
+    # Web endpoints
+    path('web_endpoints/', views.web_endpoints, name='web_endpoints'),
+    path('web_endpoints/export/', views.export_web_endpoints_csv, name='export_web_endpoints_csv'),
+    
     # Asset export
     path('assets/export/', views.export_monitored_assets_csv, name='export_monitored_assets_csv'),
 ]

@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 
 from django.shortcuts import render
 from django.http import HttpResponseForbidden, JsonResponse, HttpResponse, HttpResponseRedirect
-from django.db.models import Q, Prefetch, Count, F
+from django.db.models import Q, Prefetch, Count, F, Case, When, IntegerField
 from django.conf import settings
 from django.utils.timezone import make_aware
 
@@ -13,11 +13,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
 
 from api.pagination import CustomPaginator
-from api.serializer import JobSerializer, ProjectSerializer, KeywordSerializer, SuggestionSerializer, AssetSerializer, FindingSerializer, PortSerializer, ScreenshotSerializer, DNSRecordSerializer
+from api.serializer import JobSerializer, ProjectSerializer, KeywordSerializer, SuggestionSerializer, AssetSerializer, FindingSerializer, PortSerializer, ScreenshotSerializer, DNSRecordSerializer, EndpointSerializer
 from api.utils import get_ordering_vars, apply_search_filter, apply_column_search
 
 from project.models import Project, Keyword, Asset, Job, DNSRecord
-from findings.models import Finding, Port, Screenshot
+from findings.models import Finding, Port, Screenshot, Endpoint
 from django_celery_beat.models import PeriodicTask, IntervalSchedule, CrontabSchedule, ClockedSchedule
 
 # Create your views here.
@@ -426,6 +426,73 @@ def list_dns_records(request, projectid, format=None):
 
 ##### END DNS RECORDS ###########
 
+##### WEB ENDPOINTS ###############
+
+@api_view(['GET'])
+@authentication_classes((SessionAuthentication,))
+@permission_classes((IsAuthenticated,))
+def list_endpoints(request, projectid, format=None):
+    if not request.user.has_perm('project.view_asset'):
+        return HttpResponseForbidden("You do not have permission to view this project.")
+    
+    paginator = CustomPaginator()
+    ### check if project exists
+    try:
+        prj = Project.objects.get(id=projectid)
+    except Project.DoesNotExist:
+        return JsonResponse({
+            "status": True,
+            "code": 200,
+            "next": None,
+            "previous": None,
+            "count": 0,
+            "iTotalRecords": 0,
+            "iTotalDisplayRecords": 0,
+            "results": []
+        })
+
+    ### get search parameters
+    search_asset = request.query_params.get('columns[1][search][value]', None)
+    search_url = request.query_params.get('columns[2][search][value]', None)
+    search_technologies = request.query_params.get('columns[3][search][value]', None)
+    search_date = request.query_params.get('columns[4][search][value]', None)
+
+    ### create queryset - only for monitored assets
+    queryset = Endpoint.objects.filter(
+        domain__related_project=prj,
+        domain__monitor=True,
+        domain__ignore=False,
+    ).select_related('domain')
+
+    ### filter by search parameters
+    queryset = apply_column_search(queryset, search_asset, 'domain__value__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_url, 'url__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_technologies, 'technologies__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_date, 'date__icontains', min_length=1)
+
+    ### get ordering variables
+    order_by_column, order_direction = get_ordering_vars(
+        request.query_params,
+        default_column='date',
+        default_direction='-'
+    )
+    
+    ### map frontend column names to database field names
+    if order_by_column == 'asset_value':
+        order_by_column = 'domain__value'
+    elif order_by_column == 'asset_uuid':
+        order_by_column = 'domain__uuid'
+    
+    ### order queryset
+    if order_by_column:
+        queryset = queryset.order_by(f'{order_direction}{order_by_column}')
+
+    endpoints = paginator.paginate_queryset(queryset, request)
+    serializer = EndpointSerializer(instance=endpoints, many=True)
+    return paginator.get_paginated_response(serializer.data)
+
+##### END WEB ENDPOINTS ###########
+
 ##### KEYWORDS ###############
 
 @api_view(['GET'])
@@ -710,12 +777,30 @@ def list_all_findings(request, projectid, format=None):
 
     ### get variables
     order_by_column, order_direction = get_ordering_vars(request.query_params,
-                                                         default_column='last_seen',
+                                                         default_column='severity',
                                                          default_direction='-')
     
     ### order queryset
     if order_by_column:
-        queryset = queryset.order_by('%s%s' % (order_direction, order_by_column))
+        if order_by_column == 'severity':
+            # Custom ordering for severity: critical > high > medium > low > info > (empty/null)
+            severity_order = Case(
+                When(severity__iexact='critical', then=1),
+                When(severity__iexact='high', then=2),
+                When(severity__iexact='medium', then=3),
+                When(severity__iexact='low', then=4),
+                When(severity__iexact='info', then=5),
+                default=6,
+                output_field=IntegerField(),
+            )
+            if order_direction == '-':
+                # Descending: critical first (ascending severity_order: 1, 2, 3...)
+                queryset = queryset.annotate(severity_order=severity_order).order_by('severity_order', '-first_seen')
+            else:
+                # Ascending: info/unknown first (descending severity_order: 6, 5, 4...)
+                queryset = queryset.annotate(severity_order=severity_order).order_by('-severity_order', '-first_seen')
+        else:
+            queryset = queryset.order_by('%s%s' % (order_direction, order_by_column))
     kwrds = paginator.paginate_queryset(queryset, request)
     serializer = FindingSerializer(instance=kwrds, many=True)
     return paginator.get_paginated_response(serializer.data)

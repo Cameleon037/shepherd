@@ -15,7 +15,7 @@ from django.http import HttpResponseForbidden, JsonResponse, StreamingHttpRespon
 from django.db.models import Q
 from django.views.decorators.http import require_POST
 from project.models import Project, Asset, DNSRecord
-from findings.models import Finding, Port, Screenshot
+from findings.models import Finding, Port, Screenshot, Endpoint
 from findings.utils import asset_get_or_create, asset_finding_get_or_create, ignore_asset, ignore_finding
 from suggestions.utils import export_assets_csv
 from findings.forms import AddAssetForm
@@ -400,12 +400,21 @@ def view_asset(request, uuid):
     if a_obj.type == 'domain':
         dns_records = DNSRecord.objects.filter(related_asset=a_obj).order_by('record_type', 'record_value')
 
+    endpoints_all = Endpoint.objects.filter(domain=a_obj).order_by('-date')
+    endpoints_total = endpoints_all.count()
+    endpoints = list(endpoints_all[:20])
+    endpoints_remaining = list(endpoints_all[20:])
+
     context = {
         'asset': a_obj,
         'ports': a_obj.port_set.all().order_by('port'),
         'screenshots': Screenshot.objects.filter(domain=a_obj).order_by('-date'),
-        'findings': a_obj.finding_set.all().order_by('-severity', '-scan_date', '-id'),
+        'findings': a_obj.finding_set.filter(ignore=False).order_by('-severity', '-scan_date', '-id'),
+        'ignored_findings': a_obj.finding_set.filter(ignore=True).order_by('-severity', '-scan_date', '-id'),
         'dns_records': dns_records,
+        'endpoints': endpoints,
+        'endpoints_total': endpoints_total,
+        'endpoints_remaining': endpoints_remaining,
     }
     return render(request, 'findings/view_asset.html', context)
 
@@ -803,6 +812,48 @@ def export_dns_records_csv(request):
     return response
 
 @login_required
+def export_web_endpoints_csv(request):
+    """Export all web endpoints as CSV."""
+    if not request.user.has_perm('findings.view_finding'):
+        return HttpResponseForbidden("You do not have permission.")
+
+    # Get current project id from session
+    projectid = request.session.get('current_project', {}).get('prj_id', None)
+    if not projectid:
+        return HttpResponseForbidden("No project selected.")
+    try:
+        prj = Project.objects.get(id=projectid)
+    except Project.DoesNotExist:
+        return HttpResponseForbidden("Project does not exist.")
+
+    # Get all endpoints for the project
+    endpoints = Endpoint.objects.filter(domain__related_project=prj).select_related('domain').order_by('-date')
+
+    # Prepare CSV response
+    def endpoint_row(endpoint):
+        return [
+            endpoint.domain.value if endpoint.domain else '',
+            endpoint.url,
+            endpoint.technologies if endpoint.technologies else '',
+            endpoint.date.strftime('%Y-%m-%d %H:%M:%S') if endpoint.date else '',
+        ]
+
+    class Echo:
+        def write(self, value):
+            return value
+
+    pseudo_buffer = Echo()
+    writer = csv.writer(pseudo_buffer)
+    header = ['Asset', 'URL', 'Technologies', 'Date']
+    rows = (endpoint_row(e) for e in endpoints)
+    response = StreamingHttpResponse(
+        (writer.writerow(row) for row in ([header] + list(rows))),
+        content_type="text/csv"
+    )
+    response['Content-Disposition'] = 'attachment; filename="web_endpoints.csv"'
+    return response
+
+@login_required
 def export_monitored_assets_csv(request):
     """Export all monitored assets for the current project as a CSV file for download."""
     if not request.user.has_perm('project.view_asset'):
@@ -1074,3 +1125,23 @@ def dns_records(request):
     context['total_records'] = dns_records.count()
     
     return render(request, 'findings/list_dns_records.html', context)
+
+@login_required
+def web_endpoints(request):
+    """View web endpoints for assets"""
+    if not request.user.has_perm('project.view_asset'):
+        return HttpResponseForbidden("You do not have permission.")
+    
+    context = {'projectid': request.session['current_project']['prj_id']}
+    prj = Project.objects.get(id=context['projectid'])
+    
+    # Get endpoints for the current project, only for monitored assets
+    endpoints = Endpoint.objects.filter(
+        domain__related_project=prj,
+        domain__monitor=True
+    ).select_related('domain').order_by('-date')
+    
+    context['endpoints'] = endpoints
+    context['total_endpoints'] = endpoints.count()
+    
+    return render(request, 'findings/list_web_endpoints.html', context)

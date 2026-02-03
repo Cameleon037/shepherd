@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     'keywords',
     'suggestions',
     'findings',
+    'dashboard',
     'accounts',
     'jobs',
     'api',
@@ -179,6 +180,9 @@ FOFA_KEY = ""
 
 # HTTPX PATH
 HTTPX_PATH = ""
+
+# Katana (crawler) path - https://github.com/projectdiscovery/katana
+KATANA_PATH = ""
 
 # GitHound working directory
 GITHOUND_WORKING_DIR = ""

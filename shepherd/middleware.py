@@ -15,6 +15,7 @@ class EnsureProjectMiddleware:
         self.project_list_url = reverse('projects:projects')
         default_prefixes = [
             '/projects/',
+            '/dashboard/',
             '/accounts/',
             '/oidc/',
             '/admin/',

@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block header %}
+{% endblock %}
+
+{% block content %}
+{% spaceless %}
+<div class="page-header">
+  <div class="media">
+    <div class="media-left">
+    </div>
+    <div class="media-body">
+      <h2 class="media-heading">🌐 Web Endpoints</h2>
+    </div>
+  </div>
+</div>
+{% if messages %}{% for message in messages %}<div {% if message.tags %} class="alert alert-{{ message.tags }}"{% endif %}>{{ message }}</div>{% endfor %}{% endif %}
+
+<div class="panel panel-default">
+    <div class="panel-heading">// General Actions</div>
+    <div class="panel-body">
+      <a class="btn btn-primary btn-xs" href="{% url 'findings:export_web_endpoints_csv' %}">Export to csv</a>&nbsp;
+    </div>
+</div>
+
+<!-- Web Endpoints List -->
+<div class="panel panel-default">
+  <div class="panel-heading">
+    // Web Endpoints for Monitored Assets ({{ total_endpoints }} total)
+  </div>
+  <div class="panel-body table-responsive">
+    <table id="table_list_web_endpoints" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;">
+      <thead>
+        <tr>
+          <th><input type="checkbox" name="select_all" value="1" id="select-all-endpoints">&nbsp; Operations</th>
+          <th>Asset</th>
+          <th>URL</th>
+          <th>Technologies</th>
+          <th>Date</th>
+        </tr>
+        <tr>
+          <th></th>
+          <th><input type="text" placeholder="Search Asset" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search URL" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Technologies" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Date" class="column-search-input form-control input-sm"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Data will be loaded via AJAX -->
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endspaceless %}
+{% endblock %}
+
+{% block javascript %}
+<script type="text/javascript" language="javascript" class="init">
+$(document).ready(function() {
+    // Function to initialize a DataTable with server-side processing
+    function initializeDataTable(tableId, ajaxUrl) {
+        return $(tableId).DataTable({
+            processing: true,
+            serverSide: true,
+            pageLength: 25,
+            orderCellsTop: true,
+            oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
+            order: [[4, "desc"]], // Sort by date
+            ajax: {
+                url: ajaxUrl,
+                dataSrc: "results",
+                type: "GET",
+                dataType: "json"
+            },
+            columns: [
+                {
+                    'data': 'url', 'sName': 'Operations', 'aTargets': [0], 'bSortable': false,
+                    "mRender": function (data, type, full) {
+                        return '<input type="checkbox" name="url[]" value="' + data + '">';
+                    }
+                },
+                {
+                    'data': 'asset_value', 'sName': 'Asset', 'aTargets': [1],
+                    "mRender": function (data, type, full) {
+                        if (!data) return '-';
+                        var asset_url = "{% url 'findings:view_asset' uuid='PLACEHOLDER' %}".replace('PLACEHOLDER', full.asset_uuid);
+                        return '<a href="' + asset_url + '">' + data + '</a>';
+                    }
+                },
+                {
+                    'data': 'url', 'sName': 'URL', 'aTargets': [2],
+                    "mRender": function (data, type, full) {
+                        return '<a href="' + data + '" target="_blank" rel="noopener noreferrer">' + data + '</a>';
+                    }
+                },
+                {
+                    'data': 'technologies', 'sName': 'Technologies', 'aTargets': [3],
+                    "mRender": function (data, type, full) {
+                        return data ? data : '-';
+                    }
+                },
+                {
+                    'data': 'date', 'sName': 'Date', 'aTargets': [4],
+                    "mRender": function (data, type, full) {
+                        if (!data) return '';
+                        if (window.moment) {
+                            if (typeof data === 'string' && data.endsWith('Z')) {
+                                return moment.utc(data).local().format('DD-MM-YYYY HH:mm');
+                            }
+                            return moment(data).format('DD-MM-YYYY HH:mm');
+                        }
+                        return data;
+                    }
+                }
+            ]
+        });
+    }
+
+    // Initialize the web endpoints table
+    var endpointsTable = initializeDataTable('#table_list_web_endpoints', "/api/v1/project/{{ projectid }}/endpoints/");
+
+    // Find the second header row (filter row) and bind to its inputs/selects
+    var $filterRow = $('#table_list_web_endpoints thead tr:eq(1)');
+    applyDebouncedColumnSearch(endpointsTable, 'input.column-search-input', 'select.column-search-input', 400, $filterRow);
+
+    // Select all functionality
+    $('#select-all-endpoints').on('change', function() {
+        var isChecked = $(this).prop('checked');
+        endpointsTable.$('input[name="url[]"]').prop('checked', isChecked);
+    });
+
+    // Individual checkbox change (using event delegation for dynamically loaded content)
+    $(document).on('change', 'input[name="url[]"]', function() {
+        var totalCheckboxes = endpointsTable.$('input[name="url[]"]').length;
+        var checkedCheckboxes = endpointsTable.$('input[name="url[]"]:checked').length;
+        $('#select-all-endpoints').prop('checked', totalCheckboxes === checkedCheckboxes);
+    });
+});
+</script>
+{% endblock %}

@@ -78,3 +78,12 @@ class Screenshot(models.Model):
 
     def __str__(self):
         return f"Screenshot for {self.url} at {self.date}"
+
+class Endpoint(models.Model):
+    """
+    Model to store endpoints and related metadata.
+    """
+    url = models.CharField(max_length=2048, primary_key=True)
+    domain = models.ForeignKey(Asset, on_delete=models.CASCADE, null=True, default=None)
+    technologies = models.CharField(max_length=2048, blank=True, default='')
+    date = models.DateTimeField(auto_now_add=True)

@@ -12,6 +12,7 @@ urlpatterns = [
     path('v1/project/<str:projectid>/suggestions/<str:selection>/<str:vtype>/', views.list_suggestions, name='list_suggestions'),
     path('v1/project/<str:projectid>/assets/<str:selection>/', views.list_assets, name='list_assets'),
     path('v1/project/<str:projectid>/dns_records/', views.list_dns_records, name='list_dns_records'),
+    path('v1/project/<str:projectid>/endpoints/', views.list_endpoints, name='list_endpoints'),
     path('v1/project/<str:projectid>/screenshots/', views.list_screenshots, name='list_screenshots'),
     #path('v1/project/<str:projectid>/modify/', views.modify_project, name='modify_project'),
     #path('v1/project/<str:projectid>/delete/', views.delete_project, name='delete_project'),
