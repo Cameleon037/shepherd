@@ -13,7 +13,7 @@ from findings.models import Finding
 class Command(BaseCommand):
     help = 'Trigger a Nuclei scan against all Assets domains in a specific project and store the results as Findings objects (Optimized version)'
 
-    CHUNK_SIZE = 1000
+    CHUNK_SIZE = 200
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -154,7 +154,18 @@ class Command(BaseCommand):
 
     def _run_nuclei_scan(self, targets_file_path, results_file_path, nt_option):
         """Run Nuclei scan and return parsed findings."""
-        command = ['nuclei', '-l', targets_file_path, '-ss', 'host-spray', '-je', results_file_path]
+        command = [
+            'nuclei',
+            '-l', targets_file_path,
+            # '-ss', 'host-spray',
+            '-je', results_file_path,
+            '-c', '50',  # Concurrency: 50 parallel templates
+            '-rl', '150',  # Global rate limit: 150 requests/second
+            '-timeout', '10',  # Request timeout: 10 seconds
+            '-bs', '50',  # Bulk size: 25 parallel targets per template
+            '-retries', '1',  # Retries: 1
+            '-silent',  # Reduce output noise
+        ]
         if nt_option:
             command.append('-nt')
 

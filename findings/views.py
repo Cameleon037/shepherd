@@ -83,6 +83,9 @@ def _run_scan_jobs(project_id, user, selected_uuids, scan_new_assets, scans):
     def scan_playwright():
         launch('scan_playwright')
 
+    def scan_katana():
+        launch('scan_katana')
+
     def scan_shepherdai():
         launch('scan_shepherdai')
 
@@ -103,13 +106,16 @@ def _run_scan_jobs(project_id, user, selected_uuids, scan_new_assets, scans):
     scan_nmap_flag = scans.get('scan_nmap')
     scan_httpx_flag = scans.get('scan_httpx')
     scan_playwright_flag = scans.get('scan_playwright')
+    scan_katana_flag = scans.get('scan_katana')
     scan_shepherdai_flag = scans.get('scan_shepherdai')
     scan_nuclei_flag = scans.get('scan_nuclei')
     scan_nuclei_new_flag = scans.get('scan_nuclei_new_templates')
 
-    # Check if we need to chain Nmap -> Screenshot (HTTPX or Playwright)
+    # Check if we need to chain Nmap -> Screenshot (HTTPX or Playwright) and/or Katana
     screenshot_selected = scan_httpx_flag or scan_playwright_flag
     nmap_then_screenshot = scan_nmap_flag and screenshot_selected
+    nmap_then_katana = scan_nmap_flag and scan_katana_flag
+    nmap_chained = nmap_then_screenshot or nmap_then_katana
 
     # Primary threads: all scans except Shepherd AI (which runs last)
     primary_threads = []
@@ -122,21 +128,25 @@ def _run_scan_jobs(project_id, user, selected_uuids, scan_new_assets, scans):
         primary_threads.append(threading.Thread(target=scan_domain_redirect))
         add_message('Domain Redirect scan has been triggered in the background. (check jobs)')
 
-    if nmap_then_screenshot:
-        # Create a chained thread: Nmap runs first, then screenshot engine(s) after completion
-        def nmap_then_screenshots():
+    if nmap_chained:
+        # Create a chained thread: Nmap runs first, then screenshot engine(s) and/or Katana after completion
+        def nmap_then_dependent_scans():
             scan_nmap()  # This blocks until Nmap job completes
             if scan_httpx_flag:
                 scan_httpx()
             if scan_playwright_flag:
                 scan_playwright()
+            if scan_katana_flag:
+                scan_katana()
         
-        primary_threads.append(threading.Thread(target=nmap_then_screenshots))
+        primary_threads.append(threading.Thread(target=nmap_then_dependent_scans))
         add_message('Nmap scan has been triggered in the background. (check jobs)')
         if scan_httpx_flag:
             add_message('Httpx scan will start after Nmap completes. (check jobs)')
         if scan_playwright_flag:
             add_message('Playwright scan will start after Nmap completes. (check jobs)')
+        if scan_katana_flag:
+            add_message('Katana scan will start after Nmap completes. (check jobs)')
     else:
         # No dependency - run independently
         if scan_nmap_flag:
@@ -150,6 +160,10 @@ def _run_scan_jobs(project_id, user, selected_uuids, scan_new_assets, scans):
         if scan_playwright_flag:
             primary_threads.append(threading.Thread(target=scan_playwright))
             add_message('Playwright scan has been triggered in the background. (check jobs)')
+
+        if scan_katana_flag:
+            primary_threads.append(threading.Thread(target=scan_katana))
+            add_message('Katana scan has been triggered in the background. (check jobs)')
 
     if scan_nuclei_flag:
         primary_threads.append(threading.Thread(target=scan_nuclei))
@@ -707,6 +721,7 @@ def control_center_launch(request):
         'scan_nmap': bool(scans.get('scan_nmap')),
         'scan_httpx': bool(scans.get('scan_httpx')),
         'scan_playwright': bool(scans.get('scan_playwright')),
+        'scan_katana': bool(scans.get('scan_katana')),
         'scan_shepherdai': bool(scans.get('scan_shepherdai')),
         'scan_nuclei': bool(scans.get('scan_nuclei')),
         'scan_nuclei_new_templates': bool(scans.get('scan_nuclei_new_templates')),

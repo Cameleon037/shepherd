@@ -1,28 +1,21 @@
-import asyncio
 import json
 import os
-import shutil
 import socket
 import ssl
 import subprocess
 import tempfile
-import textwrap
 from datetime import datetime
 
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
-from django.utils.timezone import make_aware
 
-from findings.models import Endpoint, Finding
+from findings.models import Endpoint
 from project.models import Asset, Project
-from . import utils
-
-
 
 
 class Command(BaseCommand):
-    help = 'Run pentest web scan: ensure ports exist (nmap if needed), optionally crawl with Katana, store Endpoints.'
+    help = 'Run Katana crawler on web assets: ensure ports exist (nmap if needed), crawl with Katana, store Endpoints.'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -47,23 +40,6 @@ class Command(BaseCommand):
             action='store_true',
             help='Only scan assets with empty last_scan_time',
         )
-        parser.add_argument(
-            '--katana',
-            action='store_true',
-            default=True,
-            help='Run Katana crawler on root URLs (default: True)',
-        )
-        parser.add_argument(
-            '--no-katana',
-            action='store_false',
-            dest='katana',
-            help='Skip Katana; only collect root endpoints',
-        )
-        parser.add_argument(
-            '--ai',
-            action='store_true',
-            help='Enable AI analysis of Katana responses to find leaks (passwords, API keys, tokens, etc.)',
-        )
 
     def handle(self, *args, **options):
         assets = self._get_assets_to_scan(**options)
@@ -71,17 +47,11 @@ class Command(BaseCommand):
             self.stdout.write('No assets to scan.')
             return
 
-        run_katana = options.get('katana', True)
-        use_ai = options.get('ai', False)
-        
-        if run_katana and not getattr(settings, 'KATANA_PATH', None):
-            raise CommandError('KATANA_PATH is not set in settings. Set it or use --no-katana.')
-        
-        if use_ai:
-            utils.init_ai_client()
+        if not getattr(settings, 'KATANA_PATH', None):
+            raise CommandError('KATANA_PATH is not set in settings.')
 
         for asset in assets:
-            self._process_asset(asset, run_katana=run_katana, use_ai=use_ai, options=options)
+            self._process_asset(asset, options)
 
     def _get_assets_to_scan(self, **kwargs):
         projectid = kwargs.get('projectid')
@@ -152,10 +122,10 @@ class Command(BaseCommand):
 
         return urls
 
-    def _process_asset(self, asset, run_katana, use_ai, options):
+    def _process_asset(self, asset, options):
         self.stdout.write(f'Asset: {asset.value} ({asset.uuid})')
 
-        # 1) Ensure we have ports; run nmap if none
+        # Ensure we have ports; run nmap if none
         if not asset.port_set.exists():
             self.stdout.write('  No ports found; running nmap.')
             call_command(
@@ -172,18 +142,15 @@ class Command(BaseCommand):
 
         self.stdout.write(f'  Root URLs: {len(root_urls)}')
 
-        # 2) Optionally run Katana on root URLs
-        discovered_urls = []
-        response_dir = None
-        if run_katana:
-            discovered_urls, response_dir = self._run_katana(root_urls, use_ai)
-            self.stdout.write(f'  Katana discovered: {len(discovered_urls)} URLs')
+        # Run Katana on root URLs
+        discovered_urls = self._run_katana(root_urls)
+        self.stdout.write(f'  Katana discovered: {len(discovered_urls)} URLs')
 
-        # 3) Delete existing endpoints for this asset, then create new ones
+        # Delete existing endpoints for this asset, then create new ones
         deleted_count = Endpoint.objects.filter(domain=asset).delete()[0]
         self.stdout.write(f'  Deleted {deleted_count} existing endpoint(s)')
 
-        # 4) Merge root + discovered and create Endpoint records
+        # Merge root + discovered and create Endpoint records
         all_urls = list(dict.fromkeys(root_urls + discovered_urls))
         created = 0
         for url in all_urls:
@@ -199,36 +166,25 @@ class Command(BaseCommand):
 
         self.stdout.write(f'  Endpoints created: {created}')
 
-        # 5) AI analysis of stored responses if enabled
-        if use_ai and response_dir:
-            self._analyze_responses_with_ai(asset, response_dir)
-
-    def _run_katana(self, urls, use_ai=False):
-        """Run Katana with -list input and -jsonl output; return list of discovered URLs and response directory."""
+    def _run_katana(self, urls):
+        """Run Katana with -list input and -jsonl output; return list of discovered URLs."""
         katana_path = settings.KATANA_PATH
         if not katana_path:
             self.stdout.write('  KATANA_PATH not set; skipping Katana.')
-            return [], None
+            return []
 
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as f:
             for u in urls:
                 f.write(u + '\n')
             list_path = f.name
 
-        response_dir = None
-        if use_ai:
-            response_dir = tempfile.mkdtemp(prefix='katana_responses_')
-
         try:
             cmd = [katana_path, '-list', list_path, '-jsonl']
-            if use_ai and response_dir:
-                cmd.extend(['-srd', response_dir])
 
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
-                # timeout=3600,
             )
 
             discovered = []
@@ -245,98 +201,18 @@ class Command(BaseCommand):
                 except (json.JSONDecodeError, TypeError):
                     pass
 
-            return discovered, response_dir
+            return discovered
         except subprocess.TimeoutExpired:
             self.stdout.write(self.style.WARNING('  Katana timed out.'))
-            return [], response_dir
+            return []
         except FileNotFoundError:
             self.stdout.write(self.style.WARNING(f'  Katana not found at {katana_path}.'))
-            return [], response_dir
+            return []
         except Exception as e:
             self.stdout.write(self.style.WARNING(f'  Katana error: {e}'))
-            return [], response_dir
+            return []
         finally:
             try:
                 os.unlink(list_path)
             except OSError:
                 pass
-
-    def _analyze_responses_with_ai(self, asset, response_dir):
-        """Analyze stored HTTP responses with AI to find leaks."""
-        if not os.path.exists(response_dir):
-            return
-
-        # Delete existing findings from previous scans
-        Finding.objects.filter(domain=asset, source='pentest_web_ai').delete()
-
-        self.stdout.write('  Analyzing responses with AI (using interactive file access tools)...')
-        self.stdout.write(f'  Response directory: {response_dir}')
-
-        # Create verbose logger function
-        def verbose_log(msg):
-            self.stdout.write(f'  {msg}')
-
-        # Run AI analysis with file access
-        try:
-            findings_data = asyncio.run(utils.analyze_with_file_access(response_dir, asset.value, verbose_logger=verbose_log))
-            self._store_findings(asset, findings_data)
-        except Exception as e:
-            self.stdout.write(self.style.ERROR(f'  AI analysis error: {e}'))
-            import traceback
-            self.stdout.write(self.style.ERROR(f'  Traceback: {traceback.format_exc()}'))
-        finally:
-            # Cleanup response directory
-            try:
-                self.stdout.write(f'  Cleaning up response directory: {response_dir}')
-                shutil.rmtree(response_dir)
-                self.stdout.write('  Response directory cleaned up')
-            except Exception as cleanup_error:
-                self.stdout.write(self.style.WARNING(f'  Warning: Could not clean up response directory: {cleanup_error}'))
-
-    def _store_findings(self, asset, findings_data):
-        """Store findings from AI analysis."""
-        payload = findings_data or {}
-        results = payload.get('findings', [])
-        if not isinstance(results, list):
-            return
-
-        self.stdout.write(f'  AI findings identified: {len(results)}')
-        for finding in results:
-            name = finding.get('name')
-            if not name:
-                continue
-
-            severity_raw = finding.get('severity', 'Info') or 'Info'
-            severity_normalized = severity_raw.lower()
-            finding_type = finding.get('type', 'other') or 'other'
-            evidence = finding.get('evidence', '') or ''
-            reasoning = finding.get('reasoning', '') or ''
-            recommendation = finding.get('recommendation', '') or ''
-            reference = finding.get('reference', '') or ''
-
-            # Description must start with the URL
-            url_prefix = f"URL: {reference}\n\n" if reference else ""
-            
-            description_parts = [
-                reasoning or '',
-                f"Evidence: {evidence}" if evidence else '',
-                f"Recommendation: {recommendation}" if recommendation else '',
-            ]
-            description_text = url_prefix + '\n\n'.join([part for part in description_parts if part])
-
-            Finding.objects.create(
-                domain=asset,
-                domain_name=asset.value,
-                keyword=asset.related_keyword,
-                source='pentest_web_ai',
-                name=name,
-                type=finding_type.lower(),
-                severity=severity_normalized,
-                description=description_text,
-                reference=reference,
-                scan_date=make_aware(datetime.now()),
-                last_seen=make_aware(datetime.now()),
-                reported=False,
-            )
-
-            self.stdout.write(f'    - Stored finding: {name} ({severity_raw})')

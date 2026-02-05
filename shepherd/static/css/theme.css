@@ -168,6 +168,58 @@ body {
     color: var(--text-primary);
 }
 
+/* Dark mode styles for disabled filter elements in control center */
+[data-theme="dark"] .filters-disabled,
+[data-theme="dark"] #filter-type.filters-disabled,
+[data-theme="dark"] #filter-scope.filters-disabled,
+[data-theme="dark"] #filter-name.filters-disabled,
+[data-theme="dark"] #btn-preview-assets.filters-disabled,
+[data-theme="dark"] #source-all.filters-disabled,
+[data-theme="dark"] .source-option.filters-disabled {
+    opacity: 0.4 !important;
+    cursor: not-allowed !important;
+}
+
+[data-theme="dark"] #filter-type.filters-disabled,
+[data-theme="dark"] #filter-scope.filters-disabled,
+[data-theme="dark"] #filter-name.filters-disabled {
+    background-color: var(--bg-tertiary) !important;
+    color: var(--text-disabled) !important;
+    border-color: var(--border-primary) !important;
+}
+
+[data-theme="dark"] .filters-disabled label,
+[data-theme="dark"] label.filters-disabled {
+    opacity: 0.4 !important;
+    color: var(--text-disabled) !important;
+}
+
+/* Also target disabled state directly for extra coverage */
+[data-theme="dark"] #filter-type:disabled,
+[data-theme="dark"] #filter-scope:disabled,
+[data-theme="dark"] #filter-name:disabled,
+[data-theme="dark"] #btn-preview-assets:disabled,
+[data-theme="dark"] #source-all:disabled,
+[data-theme="dark"] .source-option:disabled {
+    opacity: 0.4 !important;
+    cursor: not-allowed !important;
+}
+
+[data-theme="dark"] #filter-type:disabled,
+[data-theme="dark"] #filter-scope:disabled,
+[data-theme="dark"] #filter-name:disabled {
+    background-color: var(--bg-tertiary) !important;
+    color: var(--text-disabled) !important;
+    border-color: var(--border-primary) !important;
+}
+
+[data-theme="dark"] .checkbox input:disabled + label,
+[data-theme="dark"] .source-option:disabled + label,
+[data-theme="dark"] #source-all:disabled + label {
+    opacity: 0.4 !important;
+    color: var(--text-disabled) !important;
+}
+
 [data-theme="dark"] .alert {
     border-color: var(--border-primary);
 }

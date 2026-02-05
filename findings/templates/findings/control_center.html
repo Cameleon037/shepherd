@@ -2,11 +2,6 @@
 {% load static %}
 
 {% block header %}
-<style>
-.status-list li {
-    line-height: 1.4;
-}
-</style>
 {% endblock %}
 
 {% block content %}
@@ -115,7 +110,7 @@
     <div class="scanner-section">
         <h5>Baseline discovery</h5>
         <div class="toggle-row">
-            <input type="checkbox" id="scan-nmap" checked>
+            <input type="checkbox" id="scan-nmap">
             <label for="scan-nmap">Nmap (ports)</label>
         </div>
     </div>
@@ -124,7 +119,7 @@
         <h5>Screenshot engine <span class="hint-pill">Pick one</span></h5>
         <div class="scanner-legend" id="screenshot-nmap-warning" style="display:none; color:#c9302c;">⚠️ Warning: Screenshot engine requires pre-existing Nmap scan results to work.</div>
         <div class="toggle-row">
-            <input type="checkbox" id="scan-playwright" class="scanner-exclusive" data-exclusive-group="screenshots" checked>
+            <input type="checkbox" id="scan-playwright" class="scanner-exclusive" data-exclusive-group="screenshots">
             <label for="scan-playwright">Playwright (deep screenshots)</label>
         </div>
         <div class="toggle-row">
@@ -135,10 +130,18 @@
     </div>
 
     <div class="scanner-section">
+        <h5>Web endpoints discovery</h5>
+        <div class="toggle-row">
+            <input type="checkbox" id="scan-katana">
+            <label for="scan-katana">Katana</label>
+        </div>
+    </div>
+
+    <div class="scanner-section">
         <h5>Vulnerability templates <span class="hint-pill">Pick one</span></h5>
         <div class="scanner-legend">Choose full run or only new templates.</div>
         <div class="toggle-row">
-            <input type="checkbox" id="scan-nuclei" class="scanner-exclusive" data-exclusive-group="nuclei" checked>
+            <input type="checkbox" id="scan-nuclei" class="scanner-exclusive" data-exclusive-group="nuclei">
             <label for="scan-nuclei">Nuclei (all templates)</label>
         </div>
         <div class="toggle-row">
@@ -151,7 +154,7 @@
         <h5>Shepherd AI <span class="hint-pill">Uses gathered data</span></h5>
         <div class="scanner-legend">Reviews ports, screenshots, and findings for extra insights.</div>
         <div class="toggle-row">
-            <input type="checkbox" id="scan-shepherdai" checked>
+            <input type="checkbox" id="scan-shepherdai">
             <label for="scan-shepherdai">Shepherd AI (finding review)</label>
         </div>
     </div>
@@ -233,6 +236,7 @@ $(document).ready(function () {
             scan_nmap: $('#scan-nmap').is(':checked'),
             scan_httpx: $('#scan-httpx').is(':checked'),
             scan_playwright: $('#scan-playwright').is(':checked'),
+            scan_katana: $('#scan-katana').is(':checked'),
             scan_shepherdai: $('#scan-shepherdai').is(':checked'),
             scan_nuclei: $('#scan-nuclei').is(':checked'),
             scan_nuclei_new_templates: $('#scan-nuclei-new').is(':checked')
@@ -277,8 +281,17 @@ $(document).ready(function () {
 
     function toggleFiltersDisabled() {
         var scanAllChecked = $('#scan-all-assets').is(':checked');
-        $('#filter-type, #filter-scope, #filter-name, #btn-preview-assets').prop('disabled', scanAllChecked);
-        $('.source-option, #source-all').prop('disabled', scanAllChecked);
+        var filterElements = $('#filter-type, #filter-scope, #filter-name, #btn-preview-assets, .source-option, #source-all');
+        filterElements.prop('disabled', scanAllChecked);
+        if (scanAllChecked) {
+            filterElements.addClass('filters-disabled');
+            $('#filter-type, #filter-scope, #filter-name').closest('.col-sm-4').find('label').addClass('filters-disabled');
+            $('#filter-source-group label').addClass('filters-disabled');
+        } else {
+            filterElements.removeClass('filters-disabled');
+            $('#filter-type, #filter-scope, #filter-name').closest('.col-sm-4').find('label').removeClass('filters-disabled');
+            $('#filter-source-group label').removeClass('filters-disabled');
+        }
         if (scanAllChecked) {
             $('#selected-assets-hint').text('Scanning all assets - filters are ignored.');
             $('#preview-container').hide();
