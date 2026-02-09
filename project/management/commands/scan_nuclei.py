@@ -125,7 +125,7 @@ class Command(BaseCommand):
 
             # Process findings and update domains
             scan_time = make_aware(datetime.now())
-            self._process_findings(findings, domain_chunk, scan_time)
+            self._process_findings(findings, domain_chunk, scan_time, nt_option)
 
             # Update domain scan times only for full scans (not new template scans)
             if not nt_option:
@@ -165,6 +165,8 @@ class Command(BaseCommand):
             '-bs', '50',  # Bulk size: 25 parallel targets per template
             '-retries', '1',  # Retries: 1
             '-silent',  # Reduce output noise
+            # tests
+            # '-t', '/Users/leo/nuclei-templates/ssl/ssl-dns-names.yaml',
         ]
         if nt_option:
             command.append('-nt')
@@ -183,10 +185,27 @@ class Command(BaseCommand):
 
         return findings
 
-    def _process_findings(self, findings, domain_chunk, scan_time):
+    def _delete_existing_nuclei_findings(self, domain_chunk):
+        """Delete all existing findings with source 'nuclei' for the given domains."""
+        # Asset uses uuid as primary key, so we filter by domain__uuid__in
+        domain_uuids = [domain.uuid for domain in domain_chunk]
+        deleted_count, _ = Finding.objects.filter(
+            domain__uuid__in=domain_uuids,
+            source='nuclei'
+        ).delete()
+        return deleted_count
+
+    def _process_findings(self, findings, domain_chunk, scan_time, nt_option):
         """Process findings in bulk, mapping them to the correct domains."""
         if not findings:
             return
+
+        # For full scans (not --nt), delete existing nuclei findings just before saving new ones
+        # This ensures the scan completed successfully before deletion
+        if not nt_option:
+            deleted_count = self._delete_existing_nuclei_findings(domain_chunk)
+            if deleted_count > 0:
+                self.stdout.write(f'Deleted {deleted_count} existing nuclei findings before saving new ones')
 
         # Create domain mapping for quick lookup
         domain_map = {domain.value: domain for domain in domain_chunk}

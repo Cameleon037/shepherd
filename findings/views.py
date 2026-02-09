@@ -1033,6 +1033,7 @@ def upload_assets(request):
                     # Check if Starred domain
                     if domain.startswith("*"):
                         asset_defaults["type"] = "starred_domain"
+                        asset_defaults["monitor"] = False
 
                     # Check if domain or subdomain
                     parsed_obj = tldextract.extract(domain)

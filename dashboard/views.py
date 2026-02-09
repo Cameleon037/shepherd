@@ -1,5 +1,5 @@
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count, Q
+from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.http import HttpResponseForbidden
 from django.shortcuts import render
 
@@ -81,27 +81,28 @@ def dashboard(request):
         .order_by('-count')[:8]
     )
 
-    # Most critical findings (prioritize critical/high severity, then by most recent)
-    severity_order_map = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3, 'info': 4, '': 99}
-    critical_findings = list(
+    # Most critical findings: order by severity (critical first) then by most recent
+    severity_order_expr = Case(
+        When(severity__iexact='critical', then=Value(0)),
+        When(severity__iexact='high', then=Value(1)),
+        When(severity__iexact='medium', then=Value(2)),
+        When(severity__iexact='low', then=Value(3)),
+        When(severity__iexact='info', then=Value(4)),
+        default=Value(99),
+        output_field=IntegerField(),
+    )
+    context['most_critical_findings'] = list(
         findings.select_related('domain')
         .exclude(severity__isnull=True)
         .exclude(severity='')
-        .exclude(domain__isnull=True)  # Only include findings with assets
-        .order_by('-first_seen')[:50]  # Get more to sort properly
+        .exclude(domain__isnull=True)
+        .order_by(severity_order_expr, '-first_seen')[:10]
     )
-    # Sort by severity priority, then by first_seen
-    critical_findings.sort(
-        key=lambda x: (
-            severity_order_map.get((x.severity or '').lower(), 99),
-            -x.first_seen.timestamp() if x.first_seen else 0
-        )
-    )
-    context['most_critical_findings'] = critical_findings[:10]  # Top 10
 
-    # Most vulnerable assets (assets with most findings)
+    # Most vulnerable assets (assets with most findings; exclude ignored assets)
     context['most_vulnerable_assets'] = list(
-        assets.annotate(finding_count=Count('finding', filter=Q(finding__ignore=False)))
+        assets.filter(ignore=False)
+        .annotate(finding_count=Count('finding', filter=Q(finding__ignore=False)))
         .filter(finding_count__gt=0)
         .order_by('-finding_count')[:10]
         .values('uuid', 'value', 'finding_count')

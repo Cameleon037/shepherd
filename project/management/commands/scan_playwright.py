@@ -218,6 +218,12 @@ class Command(BaseCommand):
                     "failed": result.get("failed", False),
                     "date": make_aware(datetime.now())
                 }
+
+                # If status code is 0, do not store the screenshot
+                if screenshot_defaults["status_code"] == "0":
+                    failed_count += 1
+                    continue
+
                 # Create or update Screenshot by url
                 screenshot_obj, created = Screenshot.objects.update_or_create(
                     url=result["url"],
