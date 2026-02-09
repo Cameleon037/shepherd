@@ -126,6 +126,53 @@
     </div>
 </div>
 
+<!-- Findings Overview (single bar) -->
+<div class="row">
+    <div class="col-md-12">
+        <div class="panel panel-default">
+            <div class="panel-heading"><strong>Findings Overview</strong></div>
+            <div class="panel-body stacked-bar-container">
+                {% if findings_overview.total > 0 %}
+                <div class="stacked-bar-row">
+                    <div class="stacked-bar-label">Total Findings</div>
+                    <div class="stacked-bar-wrapper">
+                        {% if findings_overview.critical > 0 %}
+                        <div class="stacked-bar-segment stacked-bar-segment-critical" style="width: {% widthratio findings_overview.critical findings_overview.total 100 %}%;" title="Critical: {{ findings_overview.critical }}"></div>
+                        {% endif %}
+                        {% if findings_overview.high > 0 %}
+                        <div class="stacked-bar-segment stacked-bar-segment-high" style="width: {% widthratio findings_overview.high findings_overview.total 100 %}%;" title="High: {{ findings_overview.high }}"></div>
+                        {% endif %}
+                        {% if findings_overview.medium > 0 %}
+                        <div class="stacked-bar-segment stacked-bar-segment-medium" style="width: {% widthratio findings_overview.medium findings_overview.total 100 %}%;" title="Medium: {{ findings_overview.medium }}"></div>
+                        {% endif %}
+                        {% if findings_overview.low > 0 %}
+                        <div class="stacked-bar-segment stacked-bar-segment-low" style="width: {% widthratio findings_overview.low findings_overview.total 100 %}%;" title="Low: {{ findings_overview.low }}"></div>
+                        {% endif %}
+                        {% if findings_overview.info > 0 %}
+                        <div class="stacked-bar-segment stacked-bar-segment-info" style="width: {% widthratio findings_overview.info findings_overview.total 100 %}%;" title="Info: {{ findings_overview.info }}"></div>
+                        {% endif %}
+                        {% if findings_overview.unknown > 0 %}
+                        <div class="stacked-bar-segment stacked-bar-segment-unknown" style="width: {% widthratio findings_overview.unknown findings_overview.total 100 %}%;" title="Unknown: {{ findings_overview.unknown }}"></div>
+                        {% endif %}
+                    </div>
+                    <div class="stacked-bar-value">{{ findings_overview.total }}</div>
+                </div>
+                <div class="stacked-bar-legend">
+                    <div class="stacked-bar-legend-item"><span class="stacked-bar-legend-color stacked-bar-segment-critical"></span> Critical</div>
+                    <div class="stacked-bar-legend-item"><span class="stacked-bar-legend-color stacked-bar-segment-high"></span> High</div>
+                    <div class="stacked-bar-legend-item"><span class="stacked-bar-legend-color stacked-bar-segment-medium"></span> Medium</div>
+                    <div class="stacked-bar-legend-item"><span class="stacked-bar-legend-color stacked-bar-segment-low"></span> Low</div>
+                    <div class="stacked-bar-legend-item"><span class="stacked-bar-legend-color stacked-bar-segment-info"></span> Info</div>
+                    <div class="stacked-bar-legend-item"><span class="stacked-bar-legend-color stacked-bar-segment-unknown"></span> Unknown</div>
+                </div>
+                {% else %}
+                <p class="text-muted">No findings available.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="row">
     <!-- Findings by severity -->
     <div class="col-md-6">
@@ -249,54 +296,6 @@
     </div>
 </div>
 
-<!-- Findings by sources (stacked bar chart) -->
-<div class="row">
-    <div class="col-md-12">
-        <div class="panel panel-default">
-            <div class="panel-heading"><strong>Vulnerabilities By Source</strong></div>
-            <div class="panel-body stacked-bar-container">
-                {% if findings_by_source_stacked %}
-                {% for source_data in findings_by_source_stacked %}
-                <div class="stacked-bar-row">
-                    <div class="stacked-bar-label">{{ source_data.source }}</div>
-                    <div class="stacked-bar-wrapper">
-                        {% if source_data.critical > 0 %}
-                        <div class="stacked-bar-segment stacked-bar-segment-critical" style="width: {% widthratio source_data.critical source_data.total 100 %}%;" title="Critical: {{ source_data.critical }}"></div>
-                        {% endif %}
-                        {% if source_data.high > 0 %}
-                        <div class="stacked-bar-segment stacked-bar-segment-high" style="width: {% widthratio source_data.high source_data.total 100 %}%;" title="High: {{ source_data.high }}"></div>
-                        {% endif %}
-                        {% if source_data.medium > 0 %}
-                        <div class="stacked-bar-segment stacked-bar-segment-medium" style="width: {% widthratio source_data.medium source_data.total 100 %}%;" title="Medium: {{ source_data.medium }}"></div>
-                        {% endif %}
-                        {% if source_data.low > 0 %}
-                        <div class="stacked-bar-segment stacked-bar-segment-low" style="width: {% widthratio source_data.low source_data.total 100 %}%;" title="Low: {{ source_data.low }}"></div>
-                        {% endif %}
-                        {% if source_data.info > 0 %}
-                        <div class="stacked-bar-segment stacked-bar-segment-info" style="width: {% widthratio source_data.info source_data.total 100 %}%;" title="Info: {{ source_data.info }}"></div>
-                        {% endif %}
-                        {% if source_data.unknown > 0 %}
-                        <div class="stacked-bar-segment stacked-bar-segment-unknown" style="width: {% widthratio source_data.unknown source_data.total 100 %}%;" title="Unknown: {{ source_data.unknown }}"></div>
-                        {% endif %}
-                    </div>
-                    <div class="stacked-bar-value">{{ source_data.total }}</div>
-                </div>
-                {% endfor %}
-                <div class="stacked-bar-legend">
-                    <div class="stacked-bar-legend-item"><span class="stacked-bar-legend-color stacked-bar-segment-critical"></span> Critical</div>
-                    <div class="stacked-bar-legend-item"><span class="stacked-bar-legend-color stacked-bar-segment-high"></span> High</div>
-                    <div class="stacked-bar-legend-item"><span class="stacked-bar-legend-color stacked-bar-segment-medium"></span> Medium</div>
-                    <div class="stacked-bar-legend-item"><span class="stacked-bar-legend-color stacked-bar-segment-low"></span> Low</div>
-                    <div class="stacked-bar-legend-item"><span class="stacked-bar-legend-color stacked-bar-segment-info"></span> Info</div>
-                    <div class="stacked-bar-legend-item"><span class="stacked-bar-legend-color stacked-bar-segment-unknown"></span> Unknown</div>
-                </div>
-                {% else %}
-                <p class="text-muted">No findings by source available.</p>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
 
 <!-- Extra asset stats & recent findings -->
 <div class="row">

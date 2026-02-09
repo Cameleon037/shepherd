@@ -42,7 +42,8 @@ def dashboard(request):
     context['num_keywords'] = Keyword.objects.filter(related_project_id=project_id, enabled=True).count()
 
     # Findings (via asset's related_project)
-    findings = Finding.objects.filter(domain__related_project_id=project_id).exclude(ignore=True)
+    # Exclude findings that are ignored OR findings related to ignored domains
+    findings = Finding.objects.filter(domain__related_project_id=project_id).exclude(ignore=True).exclude(domain__ignore=True)
     context['num_findings'] = findings.count()
     context['findings_by_severity'] = list(
         findings.values('severity')
@@ -82,7 +83,6 @@ def dashboard(request):
     )
 
     # Most critical findings: order by severity (critical first) then by most recent
-    # Exclude findings from ignored domains
     severity_order_expr = Case(
         When(severity__iexact='critical', then=Value(0)),
         When(severity__iexact='high', then=Value(1)),
@@ -97,43 +97,29 @@ def dashboard(request):
         .exclude(severity__isnull=True)
         .exclude(severity='')
         .exclude(domain__isnull=True)
-        .exclude(domain__ignore=True)
         .order_by(severity_order_expr, '-first_seen')[:10]
     )
 
     # Most vulnerable assets (assets with most findings; exclude ignored assets)
+    # Count only non-ignored findings from non-ignored domains
     context['most_vulnerable_assets'] = list(
         assets.filter(ignore=False)
-        .annotate(finding_count=Count('finding', filter=Q(finding__ignore=False)))
+        .annotate(finding_count=Count('finding', filter=Q(finding__ignore=False) & Q(finding__domain__ignore=False)))
         .filter(finding_count__gt=0)
         .order_by('-finding_count')[:10]
         .values('uuid', 'value', 'finding_count')
     )
 
-    # Findings by source with severity breakdown (for stacked bar chart)
-    sources_data = {}
-    findings_with_source = findings.exclude(source__isnull=True).exclude(source='')
-    for finding in findings_with_source:
-        source = finding.source
+    # Findings overview: single bar showing findings by severity
+    findings_overview = {
+        'critical': 0, 'high': 0, 'medium': 0, 'low': 0, 'info': 0, 'unknown': 0, 'total': 0
+    }
+    for finding in findings:
         severity = (finding.severity or '').lower()
         if severity not in ['critical', 'high', 'medium', 'low', 'info']:
             severity = 'unknown'
-        
-        if source not in sources_data:
-            sources_data[source] = {
-                'critical': 0, 'high': 0, 'medium': 0, 'low': 0, 'info': 0, 'unknown': 0, 'total': 0
-            }
-        sources_data[source][severity] += 1
-        sources_data[source]['total'] += 1
-    
-    # Convert to list and sort by total descending
-    context['findings_by_source_stacked'] = sorted(
-        [
-            {'source': k, **v}
-            for k, v in sources_data.items()
-        ],
-        key=lambda x: x['total'],
-        reverse=True
-    )[:10]  # Top 10 sources
+        findings_overview[severity] += 1
+        findings_overview['total'] += 1
+    context['findings_overview'] = findings_overview
 
     return render(request, 'dashboard/dashboard.html', context)
