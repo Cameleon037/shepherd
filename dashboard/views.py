@@ -82,6 +82,7 @@ def dashboard(request):
     )
 
     # Most critical findings: order by severity (critical first) then by most recent
+    # Exclude findings from ignored domains
     severity_order_expr = Case(
         When(severity__iexact='critical', then=Value(0)),
         When(severity__iexact='high', then=Value(1)),
@@ -96,6 +97,7 @@ def dashboard(request):
         .exclude(severity__isnull=True)
         .exclude(severity='')
         .exclude(domain__isnull=True)
+        .exclude(domain__ignore=True)
         .order_by(severity_order_expr, '-first_seen')[:10]
     )
 
