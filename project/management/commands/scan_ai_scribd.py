@@ -1,6 +1,8 @@
 import html
 import json
 import re
+import shutil
+import tempfile
 from project.models import Project
 from findings.models import Finding
 import asyncio
@@ -137,195 +139,238 @@ class Command(BaseCommand):
         set_default_openai_api("chat_completions")
         set_tracing_disabled(disabled=True)
 
-        # MCP setup
-        params = {
-            "command": "npx",
-            "args": ["@playwright/mcp@latest", "--headless"],
-        }
-        async with MCPServerStdio(params=params, client_session_timeout_seconds=30, ) as mcp_server:
+        # MCP setup — sandboxed to prevent the AI agent from writing files
+        # to the local filesystem or accessing local file:// URLs.
+        sandbox_dir = tempfile.mkdtemp(prefix="playwright_sandbox_")
+        try:
+            params = {
+                "command": "npx",
+                "args": [
+                    "@playwright/mcp@latest",
+                    "--headless",
+                    "--isolated",                        # browser profile stays in-memory only
+                    "--output-dir", sandbox_dir,          # any output files go to the sandbox
+                ],
+                "cwd": sandbox_dir,                       # working directory = sandbox
+            }
 
-            # Note: In practice, you typically add the server to an Agent
-            # and let the framework handle tool listing automatically.
-            # Direct calls to list_tools() require run_context and agent parameters.
-            # In this case it is used to ensure the availability of the MCP server
-            run_context = RunContextWrapper(context=None)
-            agent = Agent(name="test", instructions="test")
-            tools = await mcp_server.list_tools(run_context, agent)
+            # Only allow browser interaction tools; block file-writing tools
+            # (screenshot, pdf, file_upload, install, generate_playwright_test, etc.)
+            ALLOWED_TOOLS = [
+                "browser_navigate",
+                "browser_snapshot",
+                "browser_click",
+                "browser_type",
+                "browser_fill",
+                "browser_select_option",
+                "browser_hover",
+                "browser_drag",
+                "browser_press_key",
+                "browser_scroll",
+                "browser_go_back",
+                "browser_go_forward",
+                "browser_wait",
+                "browser_tab_new",
+                "browser_tab_select",
+                "browser_tab_close",
+                "browser_tab_list",
+                "browser_close",
+                "browser_resize",
+                "browser_handle_dialog",
+                "browser_network_requests",
+                "browser_console_messages",
+            ]
 
-            instructions = textwrap.dedent(f"""
-                You are an expert corporate security analyst specializing in data leak detection and incident response. Your expertise includes:
-                - Identifying sensitive corporate information in public documents
-                - Classifying security risks and data exposure severity
-                - Conducting thorough web investigations using automated tools
-                - Providing actionable security recommendations
+            async with MCPServerStdio(
+                params=params,
+                client_session_timeout_seconds=30,
+                tool_filter={"allowed_tool_names": ALLOWED_TOOLS},
+            ) as mcp_server:
 
-                You are authorized to search, analyze, and classify potentially leaked corporate documents. Your purpose is security auditing and incident response, not censorship.
+                # Note: In practice, you typically add the server to an Agent
+                # and let the framework handle tool listing automatically.
+                # Direct calls to list_tools() require run_context and agent parameters.
+                # In this case it is used to ensure the availability of the MCP server
+                run_context = RunContextWrapper(context=None)
+                agent = Agent(name="test", instructions="test")
+                tools = await mcp_server.list_tools(run_context, agent)
 
-                Use Playwright MCP to perform comprehensive web investigations. Be thorough and systematic in your approach.
-            """)
+                instructions = textwrap.dedent(f"""
+                    You are an expert corporate security analyst specializing in data leak detection and incident response. Your expertise includes:
+                    - Identifying sensitive corporate information in public documents
+                    - Classifying security risks and data exposure severity
+                    - Conducting thorough web investigations using automated tools
+                    - Providing actionable security recommendations
 
-            task_prompt = textwrap.dedent(f"""
-                TASK: Investigate potential data leaks for "{keyword}" on Scribd.com
+                    You are authorized to search, analyze, and classify potentially leaked corporate documents. Your purpose is security auditing and incident response, not censorship.
 
-                COMPREHENSIVE SEARCH STRATEGY:
-                You must perform a systematic, exhaustive search using multiple approaches:
+                    Use Playwright MCP to perform comprehensive web investigations. Be thorough and systematic in your approach.
+                """)
 
-                PHASE 1 - DIRECT SEARCHES (Minimum 15 different search terms):
-                1. Basic company searches:
-                   - "{keyword}"
-                   - "{keyword} company"
-                   - "{keyword} corporation"
-                   - "{keyword} ltd"
-                   - "{keyword} inc"
-                   - "{keyword} gmbh"
-                   - "{keyword} ag"
+                task_prompt = textwrap.dedent(f"""
+                    TASK: Investigate potential data leaks for "{keyword}" on Scribd.com
 
-                2. Email domain searches:
-                   - "@{keyword}"
-                   - "@{keyword}.com"
-                   - "@{keyword}.org"
-                   - "@{keyword}.net"
-                   - "@{keyword}.de"
-                   - "@{keyword}.co.uk"
+                    COMPREHENSIVE SEARCH STRATEGY:
+                    You must perform a systematic, exhaustive search using multiple approaches:
 
-                3. Common business variations:
-                   - "{keyword} internal"
-                   - "{keyword} confidential"
-                   - "{keyword} presentation"
-                   - "{keyword} report"
-                   - "{keyword} meeting"
-                   - "{keyword} strategy"
+                    PHASE 1 - DIRECT SEARCHES (Minimum 15 different search terms):
+                    1. Basic company searches:
+                       - "{keyword}"
+                       - "{keyword} company"
+                       - "{keyword} corporation"
+                       - "{keyword} ltd"
+                       - "{keyword} inc"
+                       - "{keyword} gmbh"
+                       - "{keyword} ag"
 
-                PHASE 2 - ADVANCED SEARCH TECHNIQUES:
-                1. Use Scribd's advanced search filters:
-                   - Search by document type (PDF, Word, PowerPoint, Excel)
-                   - Filter by date ranges (last year, last 2 years, all time)
-                   - Search in specific categories (Business, Technology, etc.)
+                    2. Email domain searches:
+                       - "@{keyword}"
+                       - "@{keyword}.com"
+                       - "@{keyword}.org"
+                       - "@{keyword}.net"
+                       - "@{keyword}.de"
+                       - "@{keyword}.co.uk"
 
-                2. Search for related terms and variations:
-                   - Common misspellings of "{keyword}"
-                   - Abbreviations and acronyms
-                   - Industry-specific terms related to "{keyword}"
-                   - Competitor names that might mention "{keyword}"
+                    3. Common business variations:
+                       - "{keyword} internal"
+                       - "{keyword} confidential"
+                       - "{keyword} presentation"
+                       - "{keyword} report"
+                       - "{keyword} meeting"
+                       - "{keyword} strategy"
 
-                3. Browse by categories and tags:
-                   - Look in Business documents
-                   - Check Technology/IT sections
-                   - Browse Financial documents
-                   - Search Legal/Compliance sections
+                    PHASE 2 - ADVANCED SEARCH TECHNIQUES:
+                    1. Use Scribd's advanced search filters:
+                       - Search by document type (PDF, Word, PowerPoint, Excel)
+                       - Filter by date ranges (last year, last 2 years, all time)
+                       - Search in specific categories (Business, Technology, etc.)
 
-                PHASE 3 - DEEP EXPLORATION:
-                1. For each document found, check:
-                   - Related documents suggested by Scribd
-                   - Documents by the same author
-                   - Documents in the same collection
-                   - Similar documents in the "More like this" section
+                    2. Search for related terms and variations:
+                       - Common misspellings of "{keyword}"
+                       - Abbreviations and acronyms
+                       - Industry-specific terms related to "{keyword}"
+                       - Competitor names that might mention "{keyword}"
 
-                2. Search for partial matches:
-                   - First few letters of "{keyword}"
-                   - Last few letters of "{keyword}"
-                   - Middle parts of "{keyword}"
+                    3. Browse by categories and tags:
+                       - Look in Business documents
+                       - Check Technology/IT sections
+                       - Browse Financial documents
+                       - Search Legal/Compliance sections
 
-                3. Search for leaked document types:
-                   - "{keyword} password"
-                   - "{keyword} login"
-                   - "{keyword} credentials"
-                   - "{keyword} internal memo"
-                   - "{keyword} financial"
-                   - "{keyword} budget"
-                   - "{keyword} employee"
-                   - "{keyword} contract"
+                    PHASE 3 - DEEP EXPLORATION:
+                    1. For each document found, check:
+                       - Related documents suggested by Scribd
+                       - Documents by the same author
+                       - Documents in the same collection
+                       - Similar documents in the "More like this" section
 
-                EXPECTED RESULTS: You should find 15-30+ documents. If you find fewer than 10, you are not searching thoroughly enough. Continue searching with different terms and approaches until you have exhausted all possibilities.
+                    2. Search for partial matches:
+                       - First few letters of "{keyword}"
+                       - Last few letters of "{keyword}"
+                       - Middle parts of "{keyword}"
 
-                IMPORTANT: Even if you think you've found all relevant documents, continue searching with different approaches. Scribd has millions of documents and uses various categorization methods. Documents might be:
-                - Categorized under different tags
-                - Uploaded with different naming conventions
-                - Hidden in collections or user profiles
-                - Tagged with industry-specific terms
-                - Uploaded by third parties who found the documents elsewhere
+                    3. Search for leaked document types:
+                       - "{keyword} password"
+                       - "{keyword} login"
+                       - "{keyword} credentials"
+                       - "{keyword} internal memo"
+                       - "{keyword} financial"
+                       - "{keyword} budget"
+                       - "{keyword} employee"
+                       - "{keyword} contract"
 
-                Keep searching until you have performed at least 30 different searches and explored multiple search strategies.
+                    EXPECTED RESULTS: You should find 15-30+ documents. If you find fewer than 10, you are not searching thoroughly enough. Continue searching with different terms and approaches until you have exhausted all possibilities.
 
-                SENSITIVE DATA TYPES TO IDENTIFY:
-                - Financial information (budgets, revenue, costs, financial reports)
-                - Employee data (names, emails, org charts, salaries, personal info)
-                - Intellectual property (patents, trade secrets, proprietary processes)
-                - Internal communications (emails, memos, meeting notes)
-                - Credentials (passwords, API keys, access tokens)
-                - Business strategies (M&A plans, competitive intelligence)
-                - Technical documentation (architecture, configurations, code)
-                - Legal documents (contracts, agreements, compliance reports)
+                    IMPORTANT: Even if you think you've found all relevant documents, continue searching with different approaches. Scribd has millions of documents and uses various categorization methods. Documents might be:
+                    - Categorized under different tags
+                    - Uploaded with different naming conventions
+                    - Hidden in collections or user profiles
+                    - Tagged with industry-specific terms
+                    - Uploaded by third parties who found the documents elsewhere
 
-                SEARCH PERSISTENCE REQUIREMENTS:
-                - You MUST perform at least 30+ different searches
-                - If initial searches return few results, try different search terms
-                - Use Scribd's search suggestions and autocomplete features
-                - Browse through multiple pages of results (not just the first page)
-                - Check both recent and older documents
-                - Look in different document categories and collections
-                - Follow every lead and suggestion Scribd provides
+                    Keep searching until you have performed at least 30 different searches and explored multiple search strategies.
 
-                ANALYSIS REQUIREMENTS:
-                For each document found:
-                1. Read the full content carefully
-                2. Extract specific evidence of sensitive data exposure
-                3. Assess the business impact and risk level
-                4. Determine if it's a genuine leak or public information
-                5. Provide clear reasoning for your assessment
-                6. Note the document's upload date and author for context
+                    SENSITIVE DATA TYPES TO IDENTIFY:
+                    - Financial information (budgets, revenue, costs, financial reports)
+                    - Employee data (names, emails, org charts, salaries, personal info)
+                    - Intellectual property (patents, trade secrets, proprietary processes)
+                    - Internal communications (emails, memos, meeting notes)
+                    - Credentials (passwords, API keys, access tokens)
+                    - Business strategies (M&A plans, competitive intelligence)
+                    - Technical documentation (architecture, configurations, code)
+                    - Legal documents (contracts, agreements, compliance reports)
 
-                SEVERITY CLASSIFICATION:
-                - Critical: Financial data, credentials, major IP theft, legal violations
-                - High: Employee PII, internal strategies, confidential communications
-                - Medium: Business processes, minor technical details, outdated sensitive info
-                - Low: Public information, minimal business impact
-                - N/A: No sensitive information found
+                    SEARCH PERSISTENCE REQUIREMENTS:
+                    - You MUST perform at least 30+ different searches
+                    - If initial searches return few results, try different search terms
+                    - Use Scribd's search suggestions and autocomplete features
+                    - Browse through multiple pages of results (not just the first page)
+                    - Check both recent and older documents
+                    - Look in different document categories and collections
+                    - Follow every lead and suggestion Scribd provides
 
-                OUTPUT FORMAT:
-                Return ONLY valid JSON in this exact format:
-                {{
-                    "findings": [
-                        {{
-                            "name": "Brief description of the leak type and document",
-                            "severity": "Critical | High | Medium | Low | N/A",
-                            "evidence": "Exact text/quote showing the sensitive information",
-                            "reasoning": "Why this constitutes a leak and its business impact",
-                            "url": "Full Scribd URL to the document",
-                            "recommendation": "Specific action to take (takedown, monitor, investigate, no action)"
-                        }}
-                    ]
-                }}
+                    ANALYSIS REQUIREMENTS:
+                    For each document found:
+                    1. Read the full content carefully
+                    2. Extract specific evidence of sensitive data exposure
+                    3. Assess the business impact and risk level
+                    4. Determine if it's a genuine leak or public information
+                    5. Provide clear reasoning for your assessment
+                    6. Note the document's upload date and author for context
 
-                CRITICAL: Return ONLY the JSON object. No explanations, markdown, or additional text.
-            """)
-            
-            # Agent
-            agent = Agent(
-                name="Assistant",
-                instructions=instructions,
-                model="gpt-4o",
-                mcp_servers=[mcp_server],
-                model_settings=ModelSettings(
-                    temperature=0.0,   # <- lower = more deterministic
+                    SEVERITY CLASSIFICATION:
+                    - Critical: Financial data, credentials, major IP theft, legal violations
+                    - High: Employee PII, internal strategies, confidential communications
+                    - Medium: Business processes, minor technical details, outdated sensitive info
+                    - Low: Public information, minimal business impact
+                    - N/A: No sensitive information found
+
+                    OUTPUT FORMAT:
+                    Return ONLY valid JSON in this exact format:
+                    {{
+                        "findings": [
+                            {{
+                                "name": "Brief description of the leak type and document",
+                                "severity": "Critical | High | Medium | Low | N/A",
+                                "evidence": "Exact text/quote showing the sensitive information",
+                                "reasoning": "Why this constitutes a leak and its business impact",
+                                "url": "Full Scribd URL to the document",
+                                "recommendation": "Specific action to take (takedown, monitor, investigate, no action)"
+                            }}
+                        ]
+                    }}
+
+                    CRITICAL: Return ONLY the JSON object. No explanations, markdown, or additional text.
+                """)
+
+                # Agent
+                agent = Agent(
+                    name="Assistant",
+                    instructions=instructions,
+                    model="gpt-4o",
+                    mcp_servers=[mcp_server],
+                    model_settings=ModelSettings(
+                        temperature=0.0,   # <- lower = more deterministic
+                    )
                 )
-            )
 
-            # Run the agent
-            result = await Runner.run(agent, task_prompt, max_turns=20)
-            self.stdout.write(f"Raw AI Response: {result.final_output}")
+                # Run the agent
+                result = await Runner.run(agent, task_prompt, max_turns=20)
+                self.stdout.write(f"Raw AI Response: {result.final_output}")
 
-            # Extract JSON from the response using our robust method
-            findings = self.extract_json_from_response(result.final_output)
-            
-            # Validate the findings structure
-            if not isinstance(findings, dict) or "findings" not in findings:
-                self.stdout.write("[ERROR] Invalid findings structure returned by AI")
-                findings = {"findings": []}
-            
-            if not isinstance(findings["findings"], list):
-                self.stdout.write("[ERROR] Findings should be a list")
-                findings["findings"] = []
+                # Extract JSON from the response using our robust method
+                findings = self.extract_json_from_response(result.final_output)
 
-            return findings
-        
+                # Validate the findings structure
+                if not isinstance(findings, dict) or "findings" not in findings:
+                    self.stdout.write("[ERROR] Invalid findings structure returned by AI")
+                    findings = {"findings": []}
+
+                if not isinstance(findings["findings"], list):
+                    self.stdout.write("[ERROR] Findings should be a list")
+                    findings["findings"] = []
+
+                return findings
+        finally:
+            # Clean up the sandbox directory
+            shutil.rmtree(sandbox_dir, ignore_errors=True)

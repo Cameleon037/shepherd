@@ -267,13 +267,13 @@ def list_assets(request, projectid, selection, format=None):
     else:
         queryset = prj.asset_set.filter(monitor=False, ignore=False)
 
-    # Annotate vulnerabilities
+    # Annotate vulnerabilities (exclude ignored findings)
     queryset = queryset.annotate(
-        vuln_info=Count('finding', filter=Q(finding__severity='info')),
-        vuln_critical=Count('finding', filter=Q(finding__severity='critical')),
-        vuln_high=Count('finding', filter=Q(finding__severity='high')),
-        vuln_medium=Count('finding', filter=Q(finding__severity='medium')),
-        vuln_low=Count('finding', filter=Q(finding__severity='low'))
+        vuln_info=Count('finding', filter=Q(finding__severity='info') & Q(finding__ignore=False)),
+        vuln_critical=Count('finding', filter=Q(finding__severity='critical') & Q(finding__ignore=False)),
+        vuln_high=Count('finding', filter=Q(finding__severity='high') & Q(finding__ignore=False)),
+        vuln_medium=Count('finding', filter=Q(finding__severity='medium') & Q(finding__ignore=False)),
+        vuln_low=Count('finding', filter=Q(finding__severity='low') & Q(finding__ignore=False))
     )
 
     # Filter by scope if provided
@@ -722,7 +722,7 @@ def list_all_findings(request, projectid, format=None):
         return JsonResponse({"status": True, "code": 200, "next": None, "previous": None, "count": 0, "iTotalRecords": 0, "iTotalDisplayRecords": 0, "results": []})
 
     ### create queryset
-    active_domains = prj.asset_set.all().filter(monitor=True)
+    active_domains = prj.asset_set.all().filter(monitor=True, ignore=False)
     queryset = Finding.objects.filter(domain__in=active_domains)
 
     # Filter by monitored/ignored/all status if provided

@@ -4,6 +4,9 @@ custom-navbar.css
 custom-logo-standalone.svg
 *.bak
 
+# Test files
+project/management/commands/test_custom.py
+
 # SSL keys
 cert.pem
 key.pem

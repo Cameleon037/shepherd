@@ -3,6 +3,7 @@ import json
 import tempfile
 import os
 import time
+from collections import deque
 from django.core.management.base import BaseCommand, CommandError
 from django.utils.timezone import make_aware
 from datetime import datetime
@@ -11,310 +12,329 @@ from findings.models import Finding
 
 
 class Command(BaseCommand):
-    help = 'Trigger a Nuclei scan against all Assets domains in a specific project and store the results as Findings objects (Optimized version)'
+    help = 'Optimized Nuclei scanner for 8 CPUs / 32GB RAM machines (~30k assets)'
 
-    CHUNK_SIZE = 200
+    # Larger chunks = fewer nuclei process starts, better internal scheduling
+    CHUNK_SIZE = 500
+
+    # Nuclei tuning: 8x Intel Xeon Platinum 8370C @ 2.80GHz, 32GB RAM
+    NUCLEI_CONCURRENCY = 150     # -c   parallel template executions
+    NUCLEI_BULK_SIZE = 150       # -bs  hosts in parallel per template
+    NUCLEI_RATE_LIMIT = 1500     # -rl  max requests/second
+    NUCLEI_TIMEOUT = 7           # -timeout  per-request timeout (s)
+    NUCLEI_RETRIES = 1           # -retries
+    NUCLEI_MAX_HOST_ERR = 15     # -mhe skip host after N consecutive errors
+    NUCLEI_STATS_INTERVAL = 15   # -si  heartbeat interval (s)
+    DB_BATCH_SIZE = 500          # bulk_create batch size
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            '--projectid',
-            type=int,
-            help='ID of the project to scan',
-        )
-        parser.add_argument(
-            '--update',
-            action='store_true',
-            help='Update the Nuclei engine and templates',
-        )
-        parser.add_argument(
-            '--nt',
-            action='store_true',
-            help='Trigger the Nuclei scan with the "--nt" option',
-        )
-        parser.add_argument(
-            '--uuids',
-            type=str,
-            help='Comma separated list of Asset UUIDs to process',
-            required=False,
-        )
-        parser.add_argument(
-            '--scope',
-            type=str,
-            help='Filter by scope (e.g., external, internal)',
-            required=False,
-        )
-        parser.add_argument(
-            '--new-assets',
-            action='store_true',
-            help='Only scan assets with empty last_scan_time',
-        )
+        parser.add_argument('--projectid', type=int, help='ID of the project to scan')
+        parser.add_argument('--update', action='store_true', help='Update Nuclei engine and templates')
+        parser.add_argument('--nt', action='store_true', help='Scan new templates only (--nt)')
+        parser.add_argument('--uuids', type=str, help='Comma-separated Asset UUIDs', required=False)
+        parser.add_argument('--scope', type=str, help='Filter by scope (external, internal)', required=False)
+        parser.add_argument('--new-assets', action='store_true', help='Only scan assets with empty last_scan_time')
+
+    # -------------------------------------------------------------------------
+    # Main entry point
+    # -------------------------------------------------------------------------
 
     def handle(self, *args, **kwargs):
         if kwargs.get('update'):
             self.update_nuclei()
-            self.stdout.write("Nuclei engine and templates updated successfully.")
             return
 
         domains = self._get_domains_to_scan(**kwargs)
         if not domains.exists():
-            self.stdout.write("No active domains found to scan.")
+            self.stdout.write("No active domains found.")
             return
 
-        domain_list = list(domains.iterator(chunk_size=self.CHUNK_SIZE))
-        total_domains = len(domain_list)
-        self.stdout.write(f'Processing {total_domains} domains in chunks of {self.CHUNK_SIZE}')
+        domain_list = list(domains.iterator(chunk_size=2000))
+        total = len(domain_list)
+        num_chunks = (total + self.CHUNK_SIZE - 1) // self.CHUNK_SIZE
+        nt_option = kwargs.get('nt')
 
-        # Process domains sequentially in chunks
-        for i in range(0, total_domains, self.CHUNK_SIZE):
+        self._log_banner(total, num_chunks)
+        scan_start = time.time()
+        total_findings = 0
+
+        for i in range(0, total, self.CHUNK_SIZE):
             chunk = domain_list[i:i + self.CHUNK_SIZE]
-            chunk_number = (i // self.CHUNK_SIZE) + 1
-            total_chunks = (total_domains + self.CHUNK_SIZE - 1) // self.CHUNK_SIZE
-            self.stdout.write(f'Processing chunk {chunk_number}/{total_chunks} ({len(chunk)} domains)')
-            self._scan_chunk(chunk, kwargs.get('nt'))
+            chunk_idx = (i // self.CHUNK_SIZE) + 1
+
+            self.stdout.write(f'\n--- Chunk {chunk_idx}/{num_chunks} ({len(chunk):,} assets) ---')
+            chunk_start = time.time()
+
+            n_findings = self._scan_chunk(chunk, nt_option)
+            total_findings += n_findings
+
+            # Per-chunk metrics
+            chunk_secs = time.time() - chunk_start
+            self.stdout.write(
+                f'  Chunk done: {n_findings} findings in {chunk_secs:.0f}s '
+                f'({chunk_secs / len(chunk):.2f}s/asset)'
+            )
+
+            # Overall progress + ETA
+            scanned = min(i + self.CHUNK_SIZE, total)
+            elapsed = time.time() - scan_start
+            avg = elapsed / scanned
+            eta = (total - scanned) * avg
+            self.stdout.write(
+                f'  Progress: {scanned:,}/{total:,} | '
+                f'{total_findings:,} findings | '
+                f'{avg:.2f}s/asset | '
+                f'ETA {eta / 60:.1f}min'
+            )
+
+        self._log_summary(total, total_findings, time.time() - scan_start)
+
+    # -------------------------------------------------------------------------
+    # Domain selection (same filters as scan_nuclei.py)
+    # -------------------------------------------------------------------------
 
     def _get_domains_to_scan(self, **kwargs):
-        """Build and return the queryset of domains to scan based on filters."""
         projectid = kwargs.get('projectid')
         uuids_arg = kwargs.get('uuids')
         scope_filter = kwargs.get('scope')
         new_assets_only = kwargs.get('new_assets')
 
-        # Base queryset
         if projectid:
             try:
                 project = Project.objects.get(id=projectid)
-                domains = Asset.objects.filter(monitor=True, related_project=project)
+                domains = Asset.objects.filter(monitor=True, ignore=False, related_project=project)
             except Project.DoesNotExist:
                 raise CommandError(f"Project with ID {projectid} does not exist.")
         else:
-            domains = Asset.objects.filter(monitor=True)
+            domains = Asset.objects.filter(monitor=True, ignore=False)
 
-        # Apply filters
         if uuids_arg:
             uuid_list = [u.strip() for u in uuids_arg.split(",") if u.strip()]
             domains = domains.filter(uuid__in=uuid_list)
-
         if scope_filter:
             domains = domains.filter(scope=scope_filter)
-
         if new_assets_only:
             domains = domains.filter(last_scan_time__isnull=True)
 
         return domains
 
-    def _scan_chunk(self, domain_chunk, nt_option):
-        """Scan a chunk of domains using Nuclei with -l targets.txt and -ss host-spray."""
-        start_time = time.time()
-        domain_values = [domain.value for domain in domain_chunk]
-        targets_file_path = None
-        results_file_path = None
+    # -------------------------------------------------------------------------
+    # Scan a chunk of domains
+    # -------------------------------------------------------------------------
 
+    def _scan_chunk(self, chunk, nt_option):
+        """Scan a chunk of domains. Returns the number of findings."""
+        targets_path = results_path = None
         try:
-            # Create targets file
-            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as targets_file:
-                targets_file_path = targets_file.name
-                for domain_value in domain_values:
-                    targets_file.write(f'{domain_value}\n')
+            # Write targets file
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as f:
+                targets_path = f.name
+                for asset in chunk:
+                    f.write(f'{asset.value}\n')
 
-            # Create results file
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.json') as results_file:
-                results_file_path = results_file.name
+            # Results file (nuclei -je writes a JSON array here)
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.json') as f:
+                results_path = f.name
 
-            # Run Nuclei scan
-            findings = self._run_nuclei_scan(targets_file_path, results_file_path, nt_option)
+            # Run nuclei with live output
+            findings = self._run_nuclei(targets_path, results_path, nt_option)
 
-            # Process findings and update domains
+            # Persist findings
             scan_time = make_aware(datetime.now())
-            self._process_findings(findings, domain_chunk, scan_time, nt_option)
+            self._save_findings(findings, chunk, scan_time, nt_option)
 
-            # Update domain scan times only for full scans (not new template scans)
+            # Mark assets as scanned (full scans only)
             if not nt_option:
-                domain_uuids = [domain.uuid for domain in domain_chunk]
-                Asset.objects.filter(uuid__in=domain_uuids).update(last_scan_time=scan_time)
+                uuids = [a.uuid for a in chunk]
+                Asset.objects.filter(uuid__in=uuids).update(last_scan_time=scan_time)
 
-            elapsed_time = time.time() - start_time
-            self.stdout.write(f'Completed chunk: {len(domain_chunk)} domains, {len(findings)} findings (took {elapsed_time:.2f}s)')
+            return len(findings)
 
         except Exception as e:
-            elapsed_time = time.time() - start_time
-            self.stderr.write(f'Error scanning chunk: {str(e)} (took {elapsed_time:.2f}s)')
+            self.stderr.write(f'  ERROR scanning chunk: {e}')
+            return 0
 
         finally:
-            # Clean up temp files
-            if targets_file_path and os.path.exists(targets_file_path):
-                try:
-                    os.unlink(targets_file_path)
-                except Exception:
-                    pass
-            if results_file_path and os.path.exists(results_file_path):
-                try:
-                    os.unlink(results_file_path)
-                except Exception:
-                    pass
+            for p in (targets_path, results_path):
+                if p and os.path.exists(p):
+                    try:
+                        os.unlink(p)
+                    except OSError:
+                        pass
 
-    def _run_nuclei_scan(self, targets_file_path, results_file_path, nt_option):
-        """Run Nuclei scan and return parsed findings."""
-        command = [
+    # -------------------------------------------------------------------------
+    # Run nuclei subprocess with streamed heartbeat
+    # -------------------------------------------------------------------------
+
+    def _run_nuclei(self, targets_path, results_path, nt_option):
+        """Run nuclei with optimized flags and stream its output as heartbeat."""
+        cmd = [
             'nuclei',
-            '-l', targets_file_path,
-            # '-ss', 'host-spray',
-            '-je', results_file_path,
-            '-c', '50',  # Concurrency: 50 parallel templates
-            '-rl', '150',  # Global rate limit: 150 requests/second
-            '-timeout', '10',  # Request timeout: 10 seconds
-            '-bs', '50',  # Bulk size: 25 parallel targets per template
-            '-retries', '1',  # Retries: 1
-            '-silent',  # Reduce output noise
-            # tests
-            # '-t', '/Users/leo/nuclei-templates/ssl/ssl-dns-names.yaml',
+            '-l', targets_path,
+            '-je', results_path,
+            '-ss', 'host-spray',                        # spray all hosts per template — best for large scopes
+            '-c', str(self.NUCLEI_CONCURRENCY),
+            '-bs', str(self.NUCLEI_BULK_SIZE),
+            '-rl', str(self.NUCLEI_RATE_LIMIT),
+            '-timeout', str(self.NUCLEI_TIMEOUT),
+            '-retries', str(self.NUCLEI_RETRIES),
+            '-mhe', str(self.NUCLEI_MAX_HOST_ERR),
+            '-stats',                                    # periodic progress stats
+            '-si', str(self.NUCLEI_STATS_INTERVAL),
+            '-duc',                                      # skip update check at startup
+            '-nc',                                       # no ANSI color codes
         ]
         if nt_option:
-            command.append('-nt')
+            cmd.append('-nt')
 
-        result = subprocess.run(command, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise RuntimeError(f'Nuclei scan failed: {result.stderr}')
+        self.stdout.write(f'  CMD: {" ".join(cmd)}')
 
-        # Parse findings from JSON file (Nuclei outputs a JSON array)
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,   # merge stderr → stdout for a single stream
+            text=True,
+            bufsize=1,                  # line-buffered
+        )
+
+        # Stream output as heartbeat — always print stats/errors, throttle the rest.
+        # Keep a tail buffer so we can dump the last lines on failure.
+        tail = deque(maxlen=30)
+        last_log = time.time()
+        for line in proc.stdout:
+            line = line.rstrip()
+            if not line:
+                continue
+            tail.append(line)
+            now = time.time()
+            is_important = any(kw in line for kw in (
+                'Stats', 'templates loaded', 'ERR', 'WRN', 'FTL',
+                'error', 'panic', 'Could not',
+            ))
+            if is_important or (now - last_log) >= 10:
+                self.stdout.write(f'  [nuclei] {line}')
+                last_log = now
+
+        proc.wait()
+
+        if proc.returncode != 0:
+            self.stderr.write(f'\n  Nuclei exited with code {proc.returncode}. Last {len(tail)} output lines:')
+            for t in tail:
+                self.stderr.write(f'    | {t}')
+
+        # Parse JSON export file — try even on non-zero exit (nuclei may have partial results)
         findings = []
-        if os.path.exists(results_file_path) and os.path.getsize(results_file_path) > 0:
-            with open(results_file_path, 'r') as f:
+        if os.path.exists(results_path) and os.path.getsize(results_path) > 0:
+            with open(results_path, 'r') as f:
                 content = f.read().strip()
                 if content:
                     findings = json.loads(content)
 
+        if proc.returncode != 0:
+            self.stderr.write(
+                f'  Nuclei failed (exit {proc.returncode}) but recovered {len(findings)} findings from partial results.'
+            )
+
         return findings
 
-    def _delete_existing_nuclei_findings(self, domain_chunk):
-        """Delete all existing findings with source 'nuclei' for the given domains."""
-        # Asset uses uuid as primary key, so we filter by domain__uuid__in
-        domain_uuids = [domain.uuid for domain in domain_chunk]
-        deleted_count, _ = Finding.objects.filter(
-            domain__uuid__in=domain_uuids,
-            source='nuclei'
-        ).delete()
-        return deleted_count
+    # -------------------------------------------------------------------------
+    # Save findings to DB
+    #   Full scan  → delete old + bulk_create (fast for large result sets)
+    #   --nt scan  → get_or_create (preserves existing findings)
+    # -------------------------------------------------------------------------
 
-    def _process_findings(self, findings, domain_chunk, scan_time, nt_option):
-        """Process findings in bulk, mapping them to the correct domains."""
+    def _save_findings(self, findings, chunk, scan_time, nt_option):
         if not findings:
             return
 
-        # For full scans (not --nt), delete existing nuclei findings just before saving new ones
-        # This ensures the scan completed successfully before deletion
+        domain_map = {a.value: a for a in chunk}
+        grouped = self._group_findings_by_domain(findings, domain_map)
+
         if not nt_option:
-            deleted_count = self._delete_existing_nuclei_findings(domain_chunk)
-            if deleted_count > 0:
-                self.stdout.write(f'Deleted {deleted_count} existing nuclei findings before saving new ones')
+            # Full scan: delete existing nuclei findings, then bulk-insert
+            uuids = [a.uuid for a in chunk]
+            deleted, _ = Finding.objects.filter(domain__uuid__in=uuids, source='nuclei').delete()
+            if deleted:
+                self.stdout.write(f'  Deleted {deleted:,} old findings')
 
-        # Create domain mapping for quick lookup
-        domain_map = {domain.value: domain for domain in domain_chunk}
+            # Deduplicate by lookup key, then bulk create
+            seen = set()
+            objs = []
+            for domain, items in grouped.items():
+                for item in items:
+                    data = self._build_finding_data(domain, item, scan_time)
+                    key = (data['domain_name'], data['source'], data['name'], data['type'], data['url'])
+                    if key not in seen:
+                        seen.add(key)
+                        objs.append(Finding(**data))
 
-        # Group findings by domain
-        findings_by_domain = self._group_findings_by_domain(findings, domain_map)
+            if objs:
+                Finding.objects.bulk_create(objs, batch_size=self.DB_BATCH_SIZE)
+                self.stdout.write(f'  Saved {len(objs):,} findings (bulk)')
+        else:
+            # --nt scan: upsert individually to preserve existing findings
+            count = 0
+            for domain, items in grouped.items():
+                for item in items:
+                    data = self._build_finding_data(domain, item, scan_time)
+                    lookup = {
+                        'domain': domain,
+                        'domain_name': data['domain_name'],
+                        'source': data['source'],
+                        'name': data['name'],
+                        'type': data['type'],
+                        'url': data['url'],
+                    }
+                    defaults = {k: v for k, v in data.items() if k not in lookup}
+                    obj, _ = Finding.objects.get_or_create(**lookup, defaults=defaults)
+                    obj.scan_date = scan_time
+                    obj.last_seen = scan_time
+                    obj.save()
+                    count += 1
+            self.stdout.write(f'  Saved {count:,} findings (get_or_create)')
 
-        # Process findings for each domain using bulk operations
-        for domain, domain_findings in findings_by_domain.items():
-            self._save_findings_bulk(domain, domain_findings, scan_time)
+    # -------------------------------------------------------------------------
+    # Helpers
+    # -------------------------------------------------------------------------
 
     def _group_findings_by_domain(self, findings, domain_map):
-        """Group findings by their matching domain using the 'host' field."""
-        findings_by_domain = {}
-
-        for finding in findings:
-            # Use the 'host' field directly from Nuclei results
-            host = finding.get('host', '')
+        """Group nuclei findings by their matching domain."""
+        grouped = {}
+        for f in findings:
+            host = f.get('host', '')
             if not host:
                 continue
-
-            # Remove port if present (e.g., "perdu.com:443" -> "perdu.com")
-            host = host.split(':')[0]
-
-            # Find matching domain
-            matched_domain = self._find_matching_domain(host, domain_map)
-            if matched_domain:
-                if matched_domain not in findings_by_domain:
-                    findings_by_domain[matched_domain] = []
-                findings_by_domain[matched_domain].append(finding)
-
-        return findings_by_domain
-
-    def _find_matching_domain(self, host, domain_map):
-        """Find the domain object that matches the host."""
-        # Try exact match first
-        if host in domain_map:
-            return domain_map[host]
-
-        # # Try subdomain match (host ends with .domain)
-        # for domain_value, domain_obj in domain_map.items():
-        #     if host.endswith('.' + domain_value):
-        #         return domain_obj
-
-        else:
-            self.stdout.write(f"[-] No matching domain found for host: {host}")
-
-        return None
-
-    def _save_findings_bulk(self, domain, findings, scan_time):
-        """Save findings to database using get_or_create."""
-        for finding in findings:
-            finding_data = self._build_finding_data(domain, finding, scan_time)
-            
-            # Separate lookup fields from other fields
-            lookup_fields = {
-                'domain': domain,
-                'domain_name': finding_data['domain_name'],
-                'source': finding_data['source'],
-                'name': finding_data['name'],
-                'type': finding_data['type'],
-                'url': finding_data['url'],
-            }
-            
-            # All other fields go in defaults
-            defaults = {k: v for k, v in finding_data.items() if k not in lookup_fields}
-            
-            finding_obj, _ = Finding.objects.get_or_create(**lookup_fields, defaults=defaults)
-            
-            # Update scan_date and last_seen for both new and existing findings
-            finding_obj.scan_date = scan_time
-            finding_obj.last_seen = scan_time
-            finding_obj.save()
+            host = host.split(':')[0]   # strip port (e.g. "example.com:443")
+            domain = domain_map.get(host)
+            if domain:
+                grouped.setdefault(domain, []).append(f)
+            else:
+                self.stdout.write(f'  [-] No match for host: {host}')
+        return grouped
 
     def _build_finding_data(self, domain, finding, scan_time):
-        """Build finding data dictionary from Nuclei finding JSON."""
+        """Build a dict of Finding fields from a nuclei JSON result."""
         info = finding.get('info', {})
-        
-        # URL: use 'url' if present, otherwise fallback to 'matched-at'
         url = finding.get('url', '') or finding.get('matched-at', '')
-        
-        # Reference: can be a list or string
+
         reference = info.get('reference', '')
         if isinstance(reference, list):
             reference = ', '.join(reference)
-        
-        # Solution: check both 'solution' and 'remediation' fields
+
         solution = info.get('solution', '') or info.get('remediation', '')
-        
-        # CVE: check both 'cve-id' and classification
+
         cve = info.get('cve-id', '')
         if not cve:
-            classification = info.get('classification', {})
-            cve = classification.get('cve-id', '')
-        
-        # CVSS metrics: check classification
+            cve = info.get('classification', {}).get('cve-id', '')
+
         cvss_metrics = info.get('cvss-metrics', '')
         if not cvss_metrics:
-            classification = info.get('classification', {})
-            cvss_metrics = classification.get('cvss-metrics', '')
-        
-        # Build description with URL info
+            cvss_metrics = info.get('classification', {}).get('cvss-metrics', '')
+
         description = info.get('description', '')
         if url:
-            if description:
-                description = f"{description}\n\nURL: {url}"
-            else:
-                description = f"URL: {url}"
-        
+            description = f'{description}\n\nURL: {url}' if description else f'URL: {url}'
+
         return {
             'domain': domain,
             'domain_name': domain.value,
@@ -335,18 +355,34 @@ class Command(BaseCommand):
             'last_seen': scan_time,
         }
 
+    def _log_banner(self, total, num_chunks):
+        self.stdout.write(
+            f'\n{"=" * 60}\n'
+            f'  NUCLEI SCAN (Optimized: 8 CPUs / 32GB RAM)\n'
+            f'  Assets: {total:,} | Chunks: {num_chunks} x {self.CHUNK_SIZE:,}\n'
+            f'  Concurrency: {self.NUCLEI_CONCURRENCY} | '
+            f'Rate limit: {self.NUCLEI_RATE_LIMIT} req/s | '
+            f'Bulk size: {self.NUCLEI_BULK_SIZE}\n'
+            f'  Timeout: {self.NUCLEI_TIMEOUT}s | '
+            f'Max host errors: {self.NUCLEI_MAX_HOST_ERR} | '
+            f'Strategy: host-spray\n'
+            f'{"=" * 60}'
+        )
+
+    def _log_summary(self, total, total_findings, total_secs):
+        self.stdout.write(
+            f'\n{"=" * 60}\n'
+            f'  SCAN COMPLETE\n'
+            f'  Duration: {total_secs / 60:.1f} min | Assets scanned: {total:,}\n'
+            f'  Findings: {total_findings:,} | Avg: {total_secs / total:.2f}s/asset\n'
+            f'{"=" * 60}'
+        )
+
     def update_nuclei(self):
         """Update Nuclei engine and templates."""
-        # Update engine
-        command = ['nuclei', '-up']
-        result = subprocess.run(command, capture_output=True, text=True)
-        if result.returncode != 0:
-            self.stderr.write(f'Error updating nuclei engine: {result.stderr}')
-            return
-
-        # Update templates
-        command = ['nuclei', '-ut']
-        result = subprocess.run(command, capture_output=True, text=True)
-        if result.returncode != 0:
-            self.stderr.write(f'Error updating nuclei templates: {result.stderr}')
-            return
+        for flag, label in [('-up', 'engine'), ('-ut', 'templates')]:
+            result = subprocess.run(['nuclei', flag], capture_output=True, text=True)
+            if result.returncode != 0:
+                self.stderr.write(f'Error updating {label}: {result.stderr}')
+                return
+        self.stdout.write("Nuclei engine and templates updated.")
