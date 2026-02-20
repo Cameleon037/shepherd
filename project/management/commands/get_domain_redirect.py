@@ -6,6 +6,7 @@ import tldextract
 from urllib.parse import urlparse
 from django.core.management.base import BaseCommand
 from project.models import Asset
+from project.scan_utils import resolve_uuids, add_common_scan_arguments
 from datetime import datetime, timezone
 from django.utils.timezone import make_aware
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -15,17 +16,8 @@ class Command(BaseCommand):
     help = "Check for domain redirections and update the redirects_to field in Asset objects."
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            '--projectid',
-            type=int,
-            help='Filter by specific project ID',
-        )
-        parser.add_argument(
-            '--uuids',
-            type=str,
-            help='Comma separated list of suggestion UUIDs to process',
-            required=False,
-        )
+        parser.add_argument('--projectid', type=int, help='Filter by specific project ID')
+        add_common_scan_arguments(parser)
 
     def handle(self, *args, **kwargs):
         # Filter suggestions by project ID if provided
@@ -33,14 +25,10 @@ class Command(BaseCommand):
         if kwargs['projectid']:
             project_filter['related_project__id'] = kwargs['projectid']
 
-        uuids_arg = kwargs.get('uuids')
+        uuid_list = resolve_uuids(kwargs)
 
-        # Filter assets where active is not 'False'
         assets = Asset.objects.exclude(active=False).filter(**project_filter).filter(scope='external', type='domain')
-
-        # Filter by uuids if provided
-        if uuids_arg:
-            uuid_list = [u.strip() for u in uuids_arg.split(",") if u.strip()]
+        if uuid_list:
             assets = assets.filter(uuid__in=uuid_list)
 
         def process_asset(asset, projectid):

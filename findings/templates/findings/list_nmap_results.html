@@ -104,7 +104,7 @@ $(document).ready(function () {
                     // return '<div class="btn-group1">' +
                     //     '<input type="checkbox" name="id[]" value="' + $('<div/>').text(data).html() + '">&nbsp;&nbsp;' +
                     //     '<a href="#" class="btn btn-xs confirm" rel="tooltip" data-placement="right" ' +
-                    //         'data-original-title="Delete Port" data-display="' + $('<div/>').text(full.domain_name || data).html() + '" ' +
+                    //         'data-original-title="Delete Port" data-display="' + $('<div/>').text(full.asset_name || data).html() + '" ' +
                     //         'data-href="' + delete_url + '" data-method="DELETE">' +
                     //         '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
                     //     '</a>' +
@@ -115,15 +115,15 @@ $(document).ready(function () {
                 }
             },
             {
-                'data': 'domain_name',
-                'sName': 'Domain',
+                'data': 'asset_name',
+                'sName': 'Asset',
                 'aTargets': [1],
                 'render': function(data, type, row) {
                     if (!data) {
                         return '';
                     }
-                    if (row.domain_uuid) {
-                        var url = "{% url 'findings:view_asset' uuid='__UUID__' %}".replace('__UUID__', row.domain_uuid);
+                    if (row.asset_uuid) {
+                        var url = "{% url 'findings:view_asset' uuid='__UUID__' %}".replace('__UUID__', row.asset_uuid);
                         return '<a href="' + url + '">' + $('<div/>').text(data).html() + '</a>';
                     }
                     return $('<div/>').text(data).html();

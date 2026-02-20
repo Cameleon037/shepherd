@@ -21,6 +21,8 @@
     <div class="panel-heading">// General Actions</div>
     <div class="panel-body">
       <a class="btn btn-primary btn-xs" href="{% url 'findings:export_web_endpoints_csv' %}">Export to csv</a>&nbsp;
+      <button type="button" class="btn btn-primary btn-xs" id="btn-burp-scan">Burp scan selected</button>
+      <span id="burp-scan-status" style="margin-left: 8px;"></span>
     </div>
 </div>
 
@@ -34,15 +36,15 @@
       <thead>
         <tr>
           <th><input type="checkbox" name="select_all" value="1" id="select-all-endpoints">&nbsp; Operations</th>
-          <th>Asset</th>
           <th>URL</th>
+          <th>Asset</th>
           <th>Technologies</th>
           <th>Date</th>
         </tr>
         <tr>
           <th></th>
-          <th><input type="text" placeholder="Search Asset" class="column-search-input form-control input-sm"></th>
           <th><input type="text" placeholder="Search URL" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Asset" class="column-search-input form-control input-sm"></th>
           <th><input type="text" placeholder="Search Technologies" class="column-search-input form-control input-sm"></th>
           <th><input type="text" placeholder="Search Date" class="column-search-input form-control input-sm"></th>
         </tr>
@@ -83,17 +85,17 @@ $(document).ready(function() {
                     }
                 },
                 {
-                    'data': 'asset_value', 'sName': 'Asset', 'aTargets': [1],
+                    'data': 'url', 'sName': 'URL', 'aTargets': [1],
+                    "mRender": function (data, type, full) {
+                        return '<a href="' + data + '" target="_blank" rel="noopener noreferrer">' + data + '</a>';
+                    }
+                },
+                {
+                    'data': 'asset_value', 'sName': 'Asset', 'aTargets': [2],
                     "mRender": function (data, type, full) {
                         if (!data) return '-';
                         var asset_url = "{% url 'findings:view_asset' uuid='PLACEHOLDER' %}".replace('PLACEHOLDER', full.asset_uuid);
                         return '<a href="' + asset_url + '">' + data + '</a>';
-                    }
-                },
-                {
-                    'data': 'url', 'sName': 'URL', 'aTargets': [2],
-                    "mRender": function (data, type, full) {
-                        return '<a href="' + data + '" target="_blank" rel="noopener noreferrer">' + data + '</a>';
                     }
                 },
                 {
@@ -137,6 +139,46 @@ $(document).ready(function() {
         var totalCheckboxes = endpointsTable.$('input[name="url[]"]').length;
         var checkedCheckboxes = endpointsTable.$('input[name="url[]"]:checked').length;
         $('#select-all-endpoints').prop('checked', totalCheckboxes === checkedCheckboxes);
+    });
+
+    // Burp Scan button handler
+    $('#btn-burp-scan').on('click', function() {
+        var selectedUrls = [];
+        endpointsTable.$('input[name="url[]"]:checked').each(function() {
+            selectedUrls.push($(this).val());
+        });
+
+        if (selectedUrls.length === 0) {
+            alert('Please select at least one endpoint to scan.');
+            return;
+        }
+
+        if (!confirm('Launch Burp Suite scan for ' + selectedUrls.length + ' URL(s)?')) {
+            return;
+        }
+
+        var $btn = $(this);
+        var $status = $('#burp-scan-status');
+        $btn.prop('disabled', true).text('Launching...');
+        $status.text('');
+
+        $.ajax({
+            url: "{% url 'findings:scan_burp_endpoints' %}",
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ urls: selectedUrls }),
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+            success: function(data) {
+                $btn.prop('disabled', false).text('Burp scan selected');
+                $status.html('<span class="text-success">' + data.message + '</span>');
+            },
+            error: function(xhr) {
+                $btn.prop('disabled', false).text('Burp scan selected');
+                var msg = 'An error occurred.';
+                try { msg = JSON.parse(xhr.responseText).message || msg; } catch(e) {}
+                $status.html('<span class="text-danger">' + msg + '</span>');
+            }
+        });
     });
 });
 </script>

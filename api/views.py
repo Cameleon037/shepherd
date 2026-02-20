@@ -452,20 +452,20 @@ def list_endpoints(request, projectid, format=None):
         })
 
     ### get search parameters
-    search_asset = request.query_params.get('columns[1][search][value]', None)
-    search_url = request.query_params.get('columns[2][search][value]', None)
+    search_asset = request.query_params.get('columns[2][search][value]', None)
+    search_url = request.query_params.get('columns[1][search][value]', None)
     search_technologies = request.query_params.get('columns[3][search][value]', None)
     search_date = request.query_params.get('columns[4][search][value]', None)
 
     ### create queryset - only for monitored assets
     queryset = Endpoint.objects.filter(
-        domain__related_project=prj,
-        domain__monitor=True,
-        domain__ignore=False,
-    ).select_related('domain')
+        asset__related_project=prj,
+        asset__monitor=True,
+        asset__ignore=False,
+    ).select_related('asset')
 
     ### filter by search parameters
-    queryset = apply_column_search(queryset, search_asset, 'domain__value__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_asset, 'asset__value__icontains', min_length=1)
     queryset = apply_column_search(queryset, search_url, 'url__icontains', min_length=1)
     queryset = apply_column_search(queryset, search_technologies, 'technologies__icontains', min_length=1)
     queryset = apply_column_search(queryset, search_date, 'date__icontains', min_length=1)
@@ -479,9 +479,9 @@ def list_endpoints(request, projectid, format=None):
     
     ### map frontend column names to database field names
     if order_by_column == 'asset_value':
-        order_by_column = 'domain__value'
+        order_by_column = 'asset__value'
     elif order_by_column == 'asset_uuid':
-        order_by_column = 'domain__uuid'
+        order_by_column = 'asset__uuid'
     
     ### order queryset
     if order_by_column:
@@ -594,11 +594,11 @@ def list_ports(request, projectid, format=None):
     except Project.DoesNotExist:
         return JsonResponse({"status": True, "code": 200, "next": None, "previous": None, "count": 0, "iTotalRecords": 0, "iTotalDisplayRecords": 0, "results": []})
 
-    # Fetch all active domains associated with the project
-    active_domains = Asset.objects.filter(related_project=prj, monitor=True)
+    # Fetch all active domains associated with the project (exclude ignored assets)
+    active_domains = Asset.objects.filter(related_project=prj, monitor=True, ignore=False)
 
     # Define queryset to filter ports by active domains
-    queryset = Port.objects.filter(domain__in=active_domains)
+    queryset = Port.objects.filter(asset__in=active_domains)
 
     # Get search parameters
     search_value = request.query_params.get('search[value]', None)
@@ -616,7 +616,7 @@ def list_ports(request, projectid, format=None):
     search_last_scan = request.query_params.get('columns[5][search][value]', None)
 
     ### filter by column-specific search values
-    queryset = apply_column_search(queryset, search_domain_name, 'domain_name__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_domain_name, 'asset_name__icontains', min_length=1)
     queryset = apply_column_search(queryset, search_port, 'port__icontains', min_length=1)
     queryset = apply_column_search(queryset, search_banner, 'banner__icontains', min_length=1)
     queryset = apply_column_search(queryset, search_cpe, 'cpe__icontains', min_length=1)
@@ -648,7 +648,7 @@ def delete_port(request, projectid, portid):
         return JsonResponse({'error': 'Project not found'}, status=404)
 
     try:
-        port_obj = Port.objects.get(id=portid, domain__related_project__id=projectid)
+        port_obj = Port.objects.get(id=portid, asset__related_project__id=projectid)
     except Port.DoesNotExist:
         return JsonResponse({'error': 'Port not found'}, status=404)
 
@@ -687,7 +687,7 @@ def delete_port(request, projectid, portid):
 #     ### create queryset
 #     five_days = datetime.now() - timedelta(days=settings.RECENT_DAYS) # X days ago
 #     recent_active_domains = prj.asset_set.all().filter(monitor=True, last_scan_time__gte=make_aware(five_days))
-#     queryset = Finding.objects.filter(last_seen__gte=make_aware(five_days), domain__in=recent_active_domains, severity=severity)
+#     queryset = Finding.objects.filter(last_seen__gte=make_aware(five_days), asset__in=recent_active_domains, severity=severity)
 #     ### filter by search value
 #     if search_value and len(search_value)>1:
 #         queryset = queryset.filter(
@@ -723,7 +723,7 @@ def list_all_findings(request, projectid, format=None):
 
     ### create queryset
     active_domains = prj.asset_set.all().filter(monitor=True, ignore=False)
-    queryset = Finding.objects.filter(domain__in=active_domains)
+    queryset = Finding.objects.filter(asset__in=active_domains)
 
     # Filter by monitored/ignored/all status if provided
     selection_param = request.query_params.get('selection', 'monitored')
@@ -765,7 +765,7 @@ def list_all_findings(request, projectid, format=None):
     search_comment = request.query_params.get('columns[9][search][value]', None)
 
     ### filter by column-specific search values
-    queryset = apply_column_search(queryset, search_domain_name, 'domain_name__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_domain_name, 'asset_name__icontains', min_length=1)
     queryset = apply_column_search(queryset, search_name, 'name__icontains', min_length=1)
     queryset = apply_column_search(queryset, search_type, 'type__icontains', min_length=1)
     queryset = apply_column_search(queryset, search_description, 'description__icontains', min_length=1)
@@ -839,7 +839,7 @@ def list_data_leaks(request, projectid, format=None):
     search_value = request.query_params.get('search[value]', None)
     queryset = apply_search_filter(
         queryset, search_value,
-        ['domain_name__icontains', 'keyword__keyword__icontains', 'source__icontains',
+        ['asset_name__icontains', 'keyword__keyword__icontains', 'source__icontains',
          'name__icontains', 'description__icontains', 'url__icontains', 'scan_date__icontains'],
         min_length=1
     )
@@ -1002,7 +1002,7 @@ def list_screenshots(request, projectid, format=None):
 
     # Filtering and search
     domains = prj.asset_set.all().filter(monitor=True)
-    queryset = Screenshot.objects.filter(domain__in=domains).order_by('-date')
+    queryset = Screenshot.objects.filter(asset__in=domains).order_by('-date')
 
     # DataTables search on columns
     search_url = request.GET.get('columns[0][search][value]', '')
@@ -1011,6 +1011,7 @@ def list_screenshots(request, projectid, format=None):
     search_status_code = request.GET.get('columns[4][search][value]', '')
     search_webserver = request.GET.get('columns[5][search][value]', '')
     search_date = request.GET.get('columns[6][search][value]', '')
+    search_asset_source = request.GET.get('columns[7][search][value]', '')
     
     queryset = apply_column_search(queryset, search_url, 'url__icontains')
     queryset = apply_column_search(queryset, search_technologies, 'technologies__icontains')
@@ -1018,19 +1019,20 @@ def list_screenshots(request, projectid, format=None):
     queryset = apply_column_search(queryset, search_status_code, 'status_code__icontains')
     queryset = apply_column_search(queryset, search_webserver, 'webserver__icontains')
     queryset = apply_column_search(queryset, search_date, 'date__icontains')
+    queryset = apply_column_search(queryset, search_asset_source, 'asset__source__icontains')
 
     # Global search
     search_value = request.GET.get('search[value]', '')
     queryset = apply_search_filter(
         queryset, search_value,
         ['url__icontains', 'technologies__icontains', 'title__icontains',
-         'status_code__icontains', 'webserver__icontains']
+         'status_code__icontains', 'webserver__icontains', 'asset__source__icontains']
     )
 
     # Ordering
     order_column_index = request.GET.get('order[0][column]', None)
     order_dir = request.GET.get('order[0][dir]', 'desc')
-    order_columns = ['url', '', 'technologies', 'title', 'status_code', 'webserver', 'date']
+    order_columns = ['url', '', 'technologies', 'title', 'status_code', 'webserver', 'date', 'asset__source']
     if order_column_index is not None:
         idx = int(order_column_index)
         if order_columns[idx]:

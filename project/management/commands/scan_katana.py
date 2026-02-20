@@ -12,34 +12,17 @@ from django.core.management.base import BaseCommand, CommandError
 
 from findings.models import Endpoint
 from project.models import Asset, Project
+from project.scan_utils import resolve_uuids, add_common_scan_arguments
 
 
 class Command(BaseCommand):
     help = 'Run Katana crawler on web assets: ensure ports exist (nmap if needed), crawl with Katana, store Endpoints.'
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            '--projectid',
-            type=int,
-            help='ID of the project to scan',
-        )
-        parser.add_argument(
-            '--uuids',
-            type=str,
-            help='Comma-separated list of Asset UUIDs to process',
-            required=True,
-        )
-        parser.add_argument(
-            '--scope',
-            type=str,
-            help='Filter by scope (e.g., external, internal)',
-            required=False,
-        )
-        parser.add_argument(
-            '--new-assets',
-            action='store_true',
-            help='Only scan assets with empty last_scan_time',
-        )
+        parser.add_argument('--projectid', type=int, help='ID of the project to scan')
+        add_common_scan_arguments(parser)
+        parser.add_argument('--scope', type=str, help='Filter by scope (e.g., external, internal)', required=False)
+        parser.add_argument('--new-assets', action='store_true', help='Only scan assets with empty last_scan_time')
 
     def handle(self, *args, **options):
         assets = self._get_assets_to_scan(**options)
@@ -55,7 +38,6 @@ class Command(BaseCommand):
 
     def _get_assets_to_scan(self, **kwargs):
         projectid = kwargs.get('projectid')
-        uuids_arg = kwargs.get('uuids')
         scope_filter = kwargs.get('scope')
         new_assets_only = kwargs.get('new_assets')
 
@@ -68,8 +50,8 @@ class Command(BaseCommand):
         else:
             qs = Asset.objects.filter(monitor=True)
 
-        if uuids_arg:
-            uuid_list = [u.strip() for u in uuids_arg.split(',') if u.strip()]
+        uuid_list = resolve_uuids(kwargs)
+        if uuid_list:
             qs = qs.filter(uuid__in=uuid_list)
         if scope_filter:
             qs = qs.filter(scope=scope_filter)
@@ -147,7 +129,7 @@ class Command(BaseCommand):
         self.stdout.write(f'  Katana discovered: {len(discovered_urls)} URLs')
 
         # Delete existing endpoints for this asset, then create new ones
-        deleted_count = Endpoint.objects.filter(domain=asset).delete()[0]
+        deleted_count = Endpoint.objects.filter(asset=asset).delete()[0]
         self.stdout.write(f'  Deleted {deleted_count} existing endpoint(s)')
 
         # Merge root + discovered and create Endpoint records
@@ -159,7 +141,7 @@ class Command(BaseCommand):
                 continue
             Endpoint.objects.create(
                 url=url,
-                domain=asset,
+                asset=asset,
                 technologies='',
             )
             created += 1

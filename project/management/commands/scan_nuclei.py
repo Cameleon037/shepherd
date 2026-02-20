@@ -8,6 +8,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils.timezone import make_aware
 from datetime import datetime
 from project.models import Asset, Project
+from project.scan_utils import resolve_uuids, add_common_scan_arguments
 from findings.models import Finding
 
 
@@ -31,7 +32,7 @@ class Command(BaseCommand):
         parser.add_argument('--projectid', type=int, help='ID of the project to scan')
         parser.add_argument('--update', action='store_true', help='Update Nuclei engine and templates')
         parser.add_argument('--nt', action='store_true', help='Scan new templates only (--nt)')
-        parser.add_argument('--uuids', type=str, help='Comma-separated Asset UUIDs', required=False)
+        add_common_scan_arguments(parser)
         parser.add_argument('--scope', type=str, help='Filter by scope (external, internal)', required=False)
         parser.add_argument('--new-assets', action='store_true', help='Only scan assets with empty last_scan_time')
 
@@ -95,7 +96,6 @@ class Command(BaseCommand):
 
     def _get_domains_to_scan(self, **kwargs):
         projectid = kwargs.get('projectid')
-        uuids_arg = kwargs.get('uuids')
         scope_filter = kwargs.get('scope')
         new_assets_only = kwargs.get('new_assets')
 
@@ -108,8 +108,8 @@ class Command(BaseCommand):
         else:
             domains = Asset.objects.filter(monitor=True, ignore=False)
 
-        if uuids_arg:
-            uuid_list = [u.strip() for u in uuids_arg.split(",") if u.strip()]
+        uuid_list = resolve_uuids(kwargs)
+        if uuid_list:
             domains = domains.filter(uuid__in=uuid_list)
         if scope_filter:
             domains = domains.filter(scope=scope_filter)
@@ -253,7 +253,7 @@ class Command(BaseCommand):
         if not nt_option:
             # Full scan: delete existing nuclei findings, then bulk-insert
             uuids = [a.uuid for a in chunk]
-            deleted, _ = Finding.objects.filter(domain__uuid__in=uuids, source='nuclei').delete()
+            deleted, _ = Finding.objects.filter(asset__uuid__in=uuids, source='nuclei').delete()
             if deleted:
                 self.stdout.write(f'  Deleted {deleted:,} old findings')
 
@@ -263,7 +263,7 @@ class Command(BaseCommand):
             for domain, items in grouped.items():
                 for item in items:
                     data = self._build_finding_data(domain, item, scan_time)
-                    key = (data['domain_name'], data['source'], data['name'], data['type'], data['url'])
+                    key = (data['asset_name'], data['source'], data['name'], data['type'], data['url'])
                     if key not in seen:
                         seen.add(key)
                         objs.append(Finding(**data))
@@ -278,8 +278,8 @@ class Command(BaseCommand):
                 for item in items:
                     data = self._build_finding_data(domain, item, scan_time)
                     lookup = {
-                        'domain': domain,
-                        'domain_name': data['domain_name'],
+                        'asset': domain,
+                        'asset_name': data['asset_name'],
                         'source': data['source'],
                         'name': data['name'],
                         'type': data['type'],
@@ -336,8 +336,8 @@ class Command(BaseCommand):
             description = f'{description}\n\nURL: {url}' if description else f'URL: {url}'
 
         return {
-            'domain': domain,
-            'domain_name': domain.value,
+            'asset': domain,
+            'asset_name': domain.value,
             'source': 'nuclei',
             'name': info.get('name', 'Unknown'),
             'type': finding.get('type', ''),

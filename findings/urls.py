@@ -47,6 +47,7 @@ urlpatterns = [
     # Web endpoints
     path('web_endpoints/', views.web_endpoints, name='web_endpoints'),
     path('web_endpoints/export/', views.export_web_endpoints_csv, name='export_web_endpoints_csv'),
+    path('web_endpoints/scan_burp/', views.scan_burp_endpoints, name='scan_burp_endpoints'),
     
     # Asset export
     path('assets/export/', views.export_monitored_assets_csv, name='export_monitored_assets_csv'),

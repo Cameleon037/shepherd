@@ -22,7 +22,7 @@
     <div class="panel-heading">// General Actions</div>
     <div class="panel-body">
       <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#SuggestionModal">Add Domain</button>&nbsp;
-      <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#UploadDomainsModal">Upload Domains</button>&nbsp;
+      <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#UploadDomainsModal">Upload Assets</button>&nbsp;
       <a class="btn btn-primary btn-xs" href="{% url 'suggestions:export' %}">Export to csv</a>&nbsp;
       <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#ScanSuggestionsModal">Scan all suggestions</button>&nbsp;
     </div>
@@ -293,14 +293,14 @@
 
 </form> <!-- close selection form -->
 
-<!-- Upload Domains Modal -->
+<!-- Upload Assets Modal -->
 <div class="modal fade" id="UploadDomainsModal" tabindex="-1" role="dialog" aria-labelledby="uploadDomainsModalLabel">
   <div class="modal-dialog" role="document">
     <div class="modal-content">
       <form id="upload-domains-form" action="{% url 'suggestions:upload_suggestions' %}" method="post" enctype="multipart/form-data">
         <div class="modal-header">
           <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-          <h4>Upload Domains</h4>
+          <h4>Upload Assets</h4>
         </div>
         <div class="modal-body">
           {% csrf_token %}
@@ -750,7 +750,7 @@
       ipTable.columns().search('').draw();
     });
 
-    // ========== Upload Domains Modal ==========
+    // ========== Upload Assets Modal ==========
     initializeUploadModal({
         modalId: '#UploadDomainsModal',
         dropZoneId: '#upload-drop-zone',

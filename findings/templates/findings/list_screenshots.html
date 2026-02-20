@@ -48,6 +48,7 @@
                     <th>Status Code</th>
                     <th>Webserver</th>
                     <th>Date</th>
+                    <th>Asset Source</th>
                 </tr>
                 <tr>
                     <th><input type="text" placeholder="Search URL" class="column-search-input form-control input-sm"></th>
@@ -57,6 +58,7 @@
                     <th><input type="text" placeholder="Search Status" class="column-search-input form-control input-sm"></th>
                     <th><input type="text" placeholder="Search Webserver" class="column-search-input form-control input-sm"></th>
                     <th><input type="text" placeholder="Search Date" class="column-search-input form-control input-sm"></th>
+                    <th><input type="text" placeholder="Search Source" class="column-search-input form-control input-sm"></th>
                 </tr>
             </thead>
         </table>
@@ -97,7 +99,7 @@ $(document).ready(function () {
             sName: 'URL',
             render: function (data, type, row) {
                 var text = $('<div/>').text(data).html();
-                return row.domain ? '<a href="' + assetViewUrl.replace('__UUID__', row.domain) + '">' + text + '</a>' : text;
+                return row.asset ? '<a href="' + assetViewUrl.replace('__UUID__', row.asset) + '">' + text + '</a>' : text;
             }
         },
         {
@@ -125,7 +127,8 @@ $(document).ready(function () {
             }
             return data;
           }
-        }
+        },
+        { data: 'asset_source', sName: 'Asset Source' }
     ];
 
     var httpxTable = initializeDataTable(

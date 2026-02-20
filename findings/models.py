@@ -6,8 +6,8 @@ from project.models import Asset, Keyword
 class Port(models.Model):
     """class to describe open ports
     """
-    domain = models.ForeignKey(Asset, on_delete=models.CASCADE)
-    domain_name = models.CharField(max_length=2048, default='')
+    asset = models.ForeignKey(Asset, on_delete=models.CASCADE)
+    asset_name = models.CharField(max_length=2048, default='')
     scan_date = models.DateTimeField(null=True)
     first_seen = models.DateTimeField(auto_now_add=True)
     severity = models.CharField(max_length=50, default='info')
@@ -19,14 +19,14 @@ class Port(models.Model):
     raw = models.JSONField(null=True)
 
     def __str__(self):
-        return "%i - %s - %s - %s" % (self.id, self.port, self.banner, self.domain.value)
+        return "%i - %s - %s - %s" % (self.id, self.port, self.banner, self.asset.value)
 
 class Finding(models.Model):
     """class to describe a security finding
     """
-    domain = models.ForeignKey(Asset, on_delete=models.CASCADE, null=True)
+    asset = models.ForeignKey(Asset, on_delete=models.CASCADE, null=True)
     keyword = models.ForeignKey(Keyword, on_delete=models.CASCADE, null=True)
-    domain_name = models.CharField(max_length=2048, default='')
+    asset_name = models.CharField(max_length=2048, default='')
 
     # Finding details
     source = models.CharField(max_length=200, default='nuclei')
@@ -57,14 +57,14 @@ class Finding(models.Model):
     raw = models.JSONField(null=True)
 
     def __str__(self):
-        return "%i - %s - %s - %s" % (self.id, self.name, self.severity, self.domain.value)
+        return "%i - %s - %s - %s" % (self.id, self.name, self.severity, self.asset.value)
 
 class Screenshot(models.Model):
     """
     Model to store screenshots and related metadata for a URL.
     """
     url = models.CharField(max_length=2048, primary_key=True)
-    domain = models.ForeignKey(Asset, on_delete=models.CASCADE, null=True, default=None)
+    asset = models.ForeignKey(Asset, on_delete=models.CASCADE, null=True, default=None)
     technologies = models.CharField(max_length=2048, blank=True, default='')
     screenshot_base64 = models.TextField(blank=True, default='')  # base64-encoded image
     title = models.CharField(max_length=2048, blank=True, default='')
@@ -84,6 +84,6 @@ class Endpoint(models.Model):
     Model to store endpoints and related metadata.
     """
     url = models.CharField(max_length=2048, primary_key=True)
-    domain = models.ForeignKey(Asset, on_delete=models.CASCADE, null=True, default=None)
+    asset = models.ForeignKey(Asset, on_delete=models.CASCADE, null=True, default=None)
     technologies = models.CharField(max_length=2048, blank=True, default='')
     date = models.DateTimeField(auto_now_add=True)

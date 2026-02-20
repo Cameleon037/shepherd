@@ -19,6 +19,7 @@ from agents import (
     set_tracing_disabled,
 )
 from project.models import Asset, Project, DNSRecord
+from project.scan_utils import resolve_uuids, add_common_scan_arguments
 from findings.models import Finding, Port, Screenshot
 
 
@@ -26,23 +27,9 @@ class Command(BaseCommand):
     help = "Run AI-assisted review of monitored domains to surface new findings"
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            "--projectid",
-            type=int,
-            help="Filter by specific project ID",
-        )
-        parser.add_argument(
-            "--uuids",
-            type=str,
-            help="Comma separated list of Asset UUIDs to process",
-            required=False,
-        )
-        parser.add_argument(
-            "--scope",
-            type=str,
-            help="Filter by scope (e.g., external, internal)",
-            required=False,
-        )
+        parser.add_argument("--projectid", type=int, help="Filter by specific project ID")
+        add_common_scan_arguments(parser)
+        parser.add_argument("--scope", type=str, help="Filter by scope (e.g., external, internal)", required=False)
 
     def handle(self, *args, **options):
         assets = self._select_assets(options)
@@ -59,18 +46,17 @@ class Command(BaseCommand):
                 continue
 
             self.stdout.write(f"[+] Analyzing domain: {asset.value}")
-            Finding.objects.filter(domain=asset, source="shepherdai").delete()
+            Finding.objects.filter(asset=asset, source="shepherdai").delete()
             findings = asyncio.run(self._analyze_asset(asset.value, context["json_blob"]))
             self._store_findings(asset, findings)
 
     def _select_assets(self, options):
-        uuids_arg = options.get("uuids")
+        uuid_list = resolve_uuids(options)
         scope_filter = options.get("scope")
         queryset = Asset.objects.filter(monitor=True, type__in=["domain", "starred_domain"])
         if options.get("projectid"):
             queryset = queryset.filter(related_project_id=options["projectid"])
-        if uuids_arg:
-            uuid_list = [u.strip() for u in uuids_arg.split(",") if u.strip()]
+        if uuid_list:
             queryset = queryset.filter(uuid__in=uuid_list)
         if scope_filter:
             queryset = queryset.filter(scope=scope_filter)
@@ -157,11 +143,11 @@ class Command(BaseCommand):
             ["record_type", "record_value", "ttl", "last_checked"],
         )
         open_ports = serialize_queryset(
-            Port.objects.filter(domain=asset).order_by("port"),
+            Port.objects.filter(asset=asset).order_by("port"),
             ["port", "banner", "product", "cpe", "scan_date"],
         )
         screenshots = []
-        for shot in Screenshot.objects.filter(domain=asset).order_by("-date")[:3]:
+        for shot in Screenshot.objects.filter(asset=asset).order_by("-date")[:3]:
             screenshots.append(
                 {
                     "url": shot.url,
@@ -174,7 +160,7 @@ class Command(BaseCommand):
             )
 
         existing_findings = serialize_queryset(
-            Finding.objects.filter(domain=asset).order_by("-scan_date")[:10],
+            Finding.objects.filter(asset=asset).order_by("-scan_date")[:10],
             ["name", "severity", "description", "reported", "scan_date"],
         )
 
@@ -245,8 +231,8 @@ class Command(BaseCommand):
             description_text = "\n\n".join([part for part in description_parts if part])
 
             finding_obj = Finding.objects.create(
-                domain=asset,
-                domain_name=asset.value,
+                asset=asset,
+                asset_name=asset.value,
                 keyword=asset.related_keyword,
                 source="shepherdai",
                 name=name,

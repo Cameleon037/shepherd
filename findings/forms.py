@@ -8,7 +8,7 @@ from project.models import Project, Asset
 class AddAssetForm(ModelForm):
     description = forms.CharField(required=False, widget=forms.Textarea)
     type = forms.ChoiceField(
-        choices=[('domain', 'domain'), ('starred_domain', 'starred_domain')],
+        choices=[('domain', 'domain'), ('starred_domain', 'starred_domain'), ('ip', 'ip')],
         widget=forms.Select(attrs={'class': 'form-control'})
     )
     subtype = forms.ChoiceField(

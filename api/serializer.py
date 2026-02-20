@@ -30,14 +30,14 @@ class SuggestionSerializer(serializers.ModelSerializer):
         return ', '.join(ips) if ips else ''
 
 class PortSerializer(serializers.ModelSerializer):
-    domain_uuid = serializers.SerializerMethodField()
+    asset_uuid = serializers.SerializerMethodField()
 
     class Meta:
         model = Port
         fields = '__all__'
 
-    def get_domain_uuid(self, obj):
-        return obj.domain.uuid if obj.domain else None
+    def get_asset_uuid(self, obj):
+        return obj.asset.uuid if obj.asset else None
 
 class AssetSerializer(serializers.ModelSerializer):
     vuln_critical = serializers.IntegerField()
@@ -64,17 +64,11 @@ class AssetSerializer(serializers.ModelSerializer):
         return ', '.join(ips) if ips else ''
 
 class FindingSerializer(serializers.ModelSerializer):
-    asset = serializers.SerializerMethodField()
     keyword = serializers.SerializerMethodField()
 
     class Meta:
         model = Finding
         fields = '__all__'
-
-    def get_asset(self, obj):
-        if obj.domain:
-            return obj.domain.value
-        return None
 
     def get_keyword(self, obj):
         if obj.keyword:
@@ -87,9 +81,14 @@ class JobSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class ScreenshotSerializer(serializers.ModelSerializer):
+    asset_source = serializers.SerializerMethodField()
+
     class Meta:
         model = Screenshot
         fields = '__all__'
+
+    def get_asset_source(self, obj):
+        return obj.asset.source if obj.asset else ''
 
 class DNSRecordSerializer(serializers.ModelSerializer):
     asset_value = serializers.SerializerMethodField()
@@ -114,8 +113,8 @@ class EndpointSerializer(serializers.ModelSerializer):
         fields = '__all__'
     
     def get_asset_value(self, obj):
-        return obj.domain.value if obj.domain else None
+        return obj.asset.value if obj.asset else None
     
     def get_asset_uuid(self, obj):
-        return obj.domain.uuid if obj.domain else None
+        return obj.asset.uuid if obj.asset else None
         

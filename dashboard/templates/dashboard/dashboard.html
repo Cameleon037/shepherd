@@ -253,9 +253,9 @@
                     <tbody>
                         {% for f in most_critical_findings %}
                         <tr>
-                            <td><a href="{% url 'findings:view_asset' f.domain.uuid %}">{{ f.name|truncatechars:35 }}</a></td>
+                            <td><a href="{% url 'findings:view_asset' f.asset.uuid %}">{{ f.name|truncatechars:35 }}</a></td>
                             <td><span class="label severity-badge severity-{{ f.severity|default:'info'|lower }}">{{ f.severity|default:"—" }}</span></td>
-                            <td>{{ f.domain.value|truncatechars:25 }}</td>
+                            <td>{{ f.asset.value|truncatechars:25 }}</td>
                             <td>{{ f.first_seen|date:"Y-m-d" }}</td>
                         </tr>
                         {% endfor %}
@@ -328,9 +328,9 @@
                     <tbody>
                         {% for f in recent_findings %}
                         <tr>
-                            <td><a href="{% url 'findings:view_asset' f.domain.uuid %}">{{ f.name|truncatechars:40 }}</a></td>
+                            <td><a href="{% url 'findings:view_asset' f.asset.uuid %}">{{ f.name|truncatechars:40 }}</a></td>
                             <td><span class="label severity-badge severity-{{ f.severity|default:'info'|lower }}">{{ f.severity|default:"—" }}</span></td>
-                            <td>{{ f.domain.value|truncatechars:30 }}</td>
+                            <td>{{ f.asset.value|truncatechars:30 }}</td>
                             <td>{{ f.first_seen|date:"Y-m-d H:i" }}</td>
                         </tr>
                         {% endfor %}

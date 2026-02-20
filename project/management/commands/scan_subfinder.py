@@ -8,6 +8,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils.timezone import make_aware
 from datetime import datetime
 from project.models import Asset, Project
+from project.scan_utils import resolve_uuids, add_common_scan_arguments
 from findings.models import Finding
 import tldextract
 
@@ -15,25 +16,13 @@ class Command(BaseCommand):
     help = 'Trigger a Subfinder scan against all starred domains suggestions in a specific project and stores the new domains as suggestions'
 
     def add_arguments(self, parser):
-        # Add an optional projectid argument
-        parser.add_argument(
-            '--projectid',
-            type=int,
-            help='ID of the project to scan',
-            required=True,
-        )
-        parser.add_argument(
-            '--uuids',
-            type=str,
-            help='Comma separated list of suggestion UUIDs to scan',
-            required=False,
-        )
+        parser.add_argument('--projectid', type=int, help='ID of the project to scan', required=True)
+        add_common_scan_arguments(parser)
 
     def handle(self, *args, **kwargs):
         projectid = kwargs.get('projectid')
-        uuids_arg = kwargs.get('uuids')
+        uuid_list = resolve_uuids(kwargs)
 
-        # Fetch active domains based on the project ID
         if projectid:
             try:
                 project = Project.objects.get(id=projectid)
@@ -43,9 +32,7 @@ class Command(BaseCommand):
         else:
             domains = Asset.objects.filter(scope='external', ignore=False)
 
-        # Filter by uuids if provided
-        if uuids_arg:
-            uuid_list = [u.strip() for u in uuids_arg.split(",") if u.strip()]
+        if uuid_list:
             domains = domains.filter(uuid__in=uuid_list)
         else:
             domains = domains.filter(type='starred_domain')

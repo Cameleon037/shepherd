@@ -6,6 +6,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils.timezone import make_aware
 from datetime import datetime
 from project.models import Asset, Project
+from project.scan_utils import resolve_uuids, add_common_scan_arguments
 from findings.models import Screenshot
 from django.conf import settings
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError, Error as PlaywrightError
@@ -15,33 +16,12 @@ class Command(BaseCommand):
     help = 'Run Playwright screenshot capture against http endpoints'
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            '--projectid',
-            type=int,
-            help='ID of the project to scan',
-        )
-        parser.add_argument(
-            '--uuids',
-            type=str,
-            help='Comma separated list of Asset UUIDs to process',
-            required=False,
-        )
-        parser.add_argument(
-            '--scope',
-            type=str,
-            help='Filter by scope (e.g., external, internal)',
-            required=False,
-        )
-        parser.add_argument(
-            '--new-assets',
-            action='store_true',
-            help='Only scan assets with empty last_scan_time',
-        )
-        parser.add_argument(
-            '--missing-screenshots',
-            action='store_true',
-            help='Only scan assets (domains) where Screenshot.screenshot_base64 is empty',
-        )
+        parser.add_argument('--projectid', type=int, help='ID of the project to scan')
+        add_common_scan_arguments(parser)
+        parser.add_argument('--scope', type=str, help='Filter by scope (e.g., external, internal)', required=False)
+        parser.add_argument('--new-assets', action='store_true', help='Only scan assets with empty last_scan_time')
+        parser.add_argument('--missing-screenshots', action='store_true',
+                            help='Only scan assets (domains) where Screenshot.screenshot_base64 is empty')
         parser.add_argument(
             '--max-concurrent',
             type=int,
@@ -81,21 +61,18 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         projectid = options.get('projectid')
-        uuids_arg = options.get('uuids')
+        uuid_list = resolve_uuids(options)
         scope_filter = options.get('scope')
         new_assets_only = options.get('new_assets')
         missing_screenshots = options.get('missing_screenshots')
 
         if missing_screenshots:
-            # Get all Screenshot objects with empty screenshot_base64 and non-null domain
-            screenshot_qs = Screenshot.objects.filter(screenshot_base64='').exclude(domain=None)
-            # Get unique domain IDs from these screenshots
-            domain_ids = screenshot_qs.values_list('domain_id', flat=True).distinct()
+            screenshot_qs = Screenshot.objects.filter(screenshot_base64='').exclude(asset=None)
+            domain_ids = screenshot_qs.values_list('asset_id', flat=True).distinct()
             active_domains = Asset.objects.filter(uuid__in=domain_ids, monitor=True)
             if projectid:
                 active_domains = active_domains.filter(related_project_id=projectid)
-            if uuids_arg:
-                uuid_list = [u.strip() for u in uuids_arg.split(",") if u.strip()]
+            if uuid_list:
                 active_domains = active_domains.filter(uuid__in=uuid_list)
             if scope_filter:
                 active_domains = active_domains.filter(scope=scope_filter)
@@ -109,14 +86,10 @@ class Command(BaseCommand):
             else:
                 active_domains = Asset.objects.filter(monitor=True)
 
-            # Filter by uuids if provided
-            if uuids_arg:
-                uuid_list = [u.strip() for u in uuids_arg.split(",") if u.strip()]
+            if uuid_list:
                 active_domains = active_domains.filter(uuid__in=uuid_list)
-            # Filter by scope if provided
             if scope_filter:
                 active_domains = active_domains.filter(scope=scope_filter)
-            # Filter by new_assets_only if set
             if new_assets_only:
                 active_domains = active_domains.filter(last_scan_time__isnull=True)
 
@@ -207,7 +180,7 @@ class Command(BaseCommand):
                     domain_obj = Asset.objects.filter(value__iexact=domain_value).first()
                     
                 screenshot_defaults = {
-                    "domain": domain_obj,
+                    "asset": domain_obj,
                     "technologies": result.get("technologies", ""),
                     "screenshot_base64": result.get("screenshot_base64", ""),
                     "title": result.get("title", ""),

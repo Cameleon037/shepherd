@@ -21,6 +21,9 @@ import threading
 from jobs.utils import run_job
 import csv
 import json
+import tempfile, os
+from project.scan_utils import write_uuids_file
+
 
 def _filter_assets_for_project(project_id, filters):
     queryset = Asset.objects.filter(related_project_id=project_id, monitor=True)
@@ -59,16 +62,13 @@ def _run_scan_jobs(project_id, user, selected_uuids, scan_new_assets, scans):
         if text:
             triggered_messages.append(text)
 
-    def build_args(extra=""):
+    def launch(command, extra=""):
         args = f'--projectid {project_id}{extra}'
         if selected_uuids:
-            args += f' --uuids {",".join(selected_uuids)}'
+            uuids_file = write_uuids_file(selected_uuids)
+            args += f' --uuids-file {uuids_file}'
         if scan_new_assets:
             args += ' --new-assets'
-        return args
-
-    def launch(command, extra=""):
-        args = build_args(extra)
         run_job(command, args, project_id, user)
 
     def scan_nmap():
@@ -411,7 +411,7 @@ def view_asset(request, uuid):
     if a_obj.type == 'domain':
         dns_records = DNSRecord.objects.filter(related_asset=a_obj).order_by('record_type', 'record_value')
 
-    endpoints_all = Endpoint.objects.filter(domain=a_obj).order_by('-date')
+    endpoints_all = Endpoint.objects.filter(asset=a_obj).order_by('-date')
     endpoints_total = endpoints_all.count()
     endpoints = list(endpoints_all[:20])
     endpoints_remaining = list(endpoints_all[20:])
@@ -419,7 +419,7 @@ def view_asset(request, uuid):
     context = {
         'asset': a_obj,
         'ports': a_obj.port_set.all().order_by('port'),
-        'screenshots': Screenshot.objects.filter(domain=a_obj).order_by('-date'),
+        'screenshots': Screenshot.objects.filter(asset=a_obj).order_by('-date'),
         'findings': a_obj.finding_set.filter(ignore=False).order_by('-severity', '-scan_date', '-id'),
         'ignored_findings': a_obj.finding_set.filter(ignore=True).order_by('-severity', '-scan_date', '-id'),
         'dns_records': dns_records,
@@ -445,8 +445,8 @@ def send_nucleus(request, findingid):
 
     # prepare header
     rheader = {'x-apikey': settings.NUCLEUS_KEY, 'Content-Type': 'application/json'}
-    # asset = tld.get_tld(f_obj.domain.value, fix_protocol=True, as_object=True)
-    asset_name, asset_id = asset_get_or_create(f_obj.domain.value, settings.NUCLEUS_URL, settings.NUCLEUS_PROJECT, rheader)
+    # asset = tld.get_tld(f_obj.asset.value, fix_protocol=True, as_object=True)
+    asset_name, asset_id = asset_get_or_create(f_obj.asset.value, settings.NUCLEUS_URL, settings.NUCLEUS_PROJECT, rheader)
     # print(asset_name, asset_id)
     # add finding
     result, msg = asset_finding_get_or_create(asset_name, asset_id, f_obj, settings.NUCLEUS_URL, settings.NUCLEUS_PROJECT, rheader)
@@ -498,15 +498,15 @@ def recent_findings(request):
     # severity findings
     five_days = datetime.now() - timedelta(days=settings.RECENT_DAYS) # X days ago
     recent_active_domains = prj_obj.asset_set.all().filter(monitor=True, last_scan_time__gte=make_aware(five_days))
-    context['num_info'] = Finding.objects.filter(last_seen__gte=make_aware(five_days), domain__in=recent_active_domains, 
+    context['num_info'] = Finding.objects.filter(last_seen__gte=make_aware(five_days), asset__in=recent_active_domains, 
     severity='info').count()
-    context['num_low'] = Finding.objects.filter(last_seen__gte=make_aware(five_days), domain__in=recent_active_domains, 
+    context['num_low'] = Finding.objects.filter(last_seen__gte=make_aware(five_days), asset__in=recent_active_domains, 
     severity='low').count()
-    context['num_medium'] = Finding.objects.filter(last_seen__gte=make_aware(five_days), domain__in=recent_active_domains, 
+    context['num_medium'] = Finding.objects.filter(last_seen__gte=make_aware(five_days), asset__in=recent_active_domains, 
     severity='medium').count()
-    context['num_high'] = Finding.objects.filter(last_seen__gte=make_aware(five_days), domain__in=recent_active_domains, 
+    context['num_high'] = Finding.objects.filter(last_seen__gte=make_aware(five_days), asset__in=recent_active_domains, 
     severity='high').count()
-    context['num_critical'] = Finding.objects.filter(last_seen__gte=make_aware(five_days), domain__in=recent_active_domains, 
+    context['num_critical'] = Finding.objects.filter(last_seen__gte=make_aware(five_days), asset__in=recent_active_domains, 
     severity='critical').count()
     context['past_days'] = settings.RECENT_DAYS
     context['activetab'] = 'critical'
@@ -584,44 +584,24 @@ def delete_finding(request, uuid, findingid):
     messages.info(request, 'finding deleted!')
     return redirect(reverse('findings:view_asset', args=(uuid,)))
 
+@require_POST
 @login_required
 def scan_assets(request):
+    """Store selected asset UUIDs in session and redirect to the control center."""
     if not request.user.has_perm('findings.add_finding'):
         return HttpResponseForbidden("You do not have permission.")
-    
-    if request.method == 'POST':
-        context = {'projectid': request.session['current_project']['prj_id']}
-        project_id = context['projectid']
 
-        # Fetch selected UUIDs from POST data (if any)
-        selected_uuids = request.POST.getlist('uuid[]')
-        scan_new_assets = request.POST.get('scan_new_assets') == 'on'
-        print('selected_uuids:', selected_uuids)
-        print('scan_new_assets:', scan_new_assets)
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid JSON.'}, status=400)
 
-        # If scan_new_assets is set, override selected_uuids with all new asset UUIDs
-        if scan_new_assets:
-            new_assets = Asset.objects.filter(related_project=project_id, last_scan_time__isnull=True)
-            selected_uuids = list(new_assets.values_list('uuid', flat=True))
+    selected_uuids = payload.get('uuids', [])
+    if not selected_uuids:
+        return JsonResponse({'success': False, 'message': 'No assets selected.'}, status=400)
 
-        scan_flags = {
-            'scan_nmap': 'scan_nmap' in request.POST,
-            'scan_httpx': 'scan_httpx' in request.POST,
-            'scan_playwright': 'scan_playwright' in request.POST,
-            'scan_shepherdai': 'scan_shepherdai' in request.POST,
-            'scan_nuclei': 'scan_nuclei' in request.POST,
-            'scan_nuclei_new_templates': 'scan_nuclei_new_templates' in request.POST,
-        }
-
-        if not any(scan_flags.values()):
-            messages.error(request, 'Please select at least one scanner.')
-            return redirect(reverse('findings:assets'))
-
-        triggered_msgs = _run_scan_jobs(project_id, request.user, selected_uuids, scan_new_assets, scan_flags)
-        for msg in triggered_msgs:
-            messages.info(request, msg)
-
-    return redirect(reverse('findings:assets'))
+    request.session['scan_selected_uuids'] = [str(u) for u in selected_uuids]
+    return JsonResponse({'success': True, 'redirect': reverse('findings:control_center')})
 
 @login_required
 def httpx_results(request):
@@ -653,9 +633,14 @@ def control_center(request):
             unique_sources.update(parts)
         source_options = sorted(unique_sources)
 
+    # Check if assets were pre-selected from the inventory
+    preselected_uuids = request.session.pop('scan_selected_uuids', None) or []
+
     context = {
         'projectid': project_id,
         'source_options': source_options,
+        'preselected_uuids': json.dumps(preselected_uuids),
+        'preselected_count': len(preselected_uuids),
     }
     return render(request, 'findings/control_center.html', context)
 
@@ -676,6 +661,9 @@ def control_center_preview(request):
         'name': request.GET.get('name'),
     }
     queryset = _filter_assets_for_project(project_id, filters)
+    new_assets_only = request.GET.get('new_assets_only')
+    if new_assets_only:
+        queryset = queryset.filter(last_scan_time__isnull=True)
     count = queryset.count()
     sample = list(
         queryset.values('uuid', 'value', 'type', 'scope', 'source')[:25]
@@ -699,15 +687,25 @@ def control_center_launch(request):
 
     filters = payload.get('filters', {})
     scans = payload.get('scans', {})
-    scan_all_assets = payload.get('scan_all_assets', False)
+    asset_mode = payload.get('asset_mode', 'all')
 
-    if scan_all_assets:
-        # When "scan all assets" is selected, don't pass UUIDs to avoid "Argument list too long" errors
+    scan_new_assets = False
+    if asset_mode == 'all':
         asset_ids = []
-        # Get total count for display
-        all_assets_count = Asset.objects.filter(related_project_id=project_id, monitor=True).count()
-        asset_count_display = all_assets_count
+        asset_count_display = Asset.objects.filter(related_project_id=project_id, monitor=True).count()
+    elif asset_mode == 'new':
+        asset_ids = []
+        scan_new_assets = True
+        asset_count_display = Asset.objects.filter(
+            related_project_id=project_id, monitor=True, last_scan_time__isnull=True
+        ).count()
+    elif asset_mode == 'selected':
+        asset_ids = payload.get('selected_uuids', [])
+        if not asset_ids:
+            return JsonResponse({'success': False, 'message': 'No pre-selected assets.'}, status=400)
+        asset_count_display = len(asset_ids)
     else:
+        # "filter" mode: resolve UUIDs via filters
         queryset = _filter_assets_for_project(project_id, filters)
         asset_ids = list(queryset.values_list('uuid', flat=True))
         if not asset_ids:
@@ -727,7 +725,7 @@ def control_center_launch(request):
     if not any(scan_flags.values()):
         return JsonResponse({'success': False, 'message': 'Select at least one scanner.'}, status=400)
 
-    triggered = _run_scan_jobs(project_id, request.user, asset_ids, False, scan_flags)
+    triggered = _run_scan_jobs(project_id, request.user, asset_ids, scan_new_assets, scan_flags)
     return JsonResponse({
         'success': True,
         'asset_count': asset_count_display,
@@ -752,7 +750,7 @@ def export_technologies_csv(request):
     # Get all screenshots for the project
     domains = prj.asset_set.all()
     screenshots = Port.objects.none()    
-    screenshots = Screenshot.objects.filter(domain__in=domains).order_by('-date')
+    screenshots = Screenshot.objects.filter(asset__in=domains).order_by('-date')
 
     # Prepare CSV response
     def screenshot_row(s):
@@ -839,12 +837,12 @@ def export_web_endpoints_csv(request):
         return HttpResponseForbidden("Project does not exist.")
 
     # Get all endpoints for the project
-    endpoints = Endpoint.objects.filter(domain__related_project=prj).select_related('domain').order_by('-date')
+    endpoints = Endpoint.objects.filter(asset__related_project=prj).select_related('asset').order_by('-date')
 
     # Prepare CSV response
     def endpoint_row(endpoint):
         return [
-            endpoint.domain.value if endpoint.domain else '',
+            endpoint.asset.value if endpoint.asset else '',
             endpoint.url,
             endpoint.technologies if endpoint.technologies else '',
             endpoint.date.strftime('%Y-%m-%d %H:%M:%S') if endpoint.date else '',
@@ -1013,11 +1011,55 @@ def web_endpoints(request):
     
     # Get endpoints for the current project, only for monitored assets
     endpoints = Endpoint.objects.filter(
-        domain__related_project=prj,
-        domain__monitor=True
-    ).select_related('domain').order_by('-date')
+        asset__related_project=prj,
+        asset__monitor=True
+    ).select_related('asset').order_by('-date')
     
     context['endpoints'] = endpoints
     context['total_endpoints'] = endpoints.count()
     
     return render(request, 'findings/list_web_endpoints.html', context)
+
+
+@login_required
+@require_POST
+def scan_burp_endpoints(request):
+    """Trigger a Burp Suite scan against selected web endpoint URLs."""
+    if not request.user.has_perm('findings.add_finding'):
+        return JsonResponse({'success': False, 'message': 'Permission denied.'}, status=403)
+
+    project_id = request.session.get('current_project', {}).get('prj_id')
+    if not project_id:
+        return JsonResponse({'success': False, 'message': 'No project selected.'}, status=400)
+
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid JSON payload.'}, status=400)
+
+    urls = payload.get('urls', [])
+    if not urls:
+        return JsonResponse({'success': False, 'message': 'No URLs selected.'}, status=400)
+
+    # Write URLs to a temp file to avoid OS argument length limits
+    fd, urls_file = tempfile.mkstemp(prefix='burp_urls_', suffix='.json', dir='/tmp')
+    try:
+        with os.fdopen(fd, 'w') as f:
+            json.dump(urls, f)
+    except Exception:
+        os.close(fd)
+        return JsonResponse({'success': False, 'message': 'Failed to prepare scan.'}, status=500)
+
+    args = f'--wait --urls-file {urls_file}'
+
+    # Launch the job in a background thread so the request returns immediately
+    thread = threading.Thread(
+        target=run_job,
+        args=('scan_burp', args, project_id, request.user),
+    )
+    thread.start()
+
+    return JsonResponse({
+        'success': True,
+        'message': f'Burp Suite scan triggered for {len(urls)} URL(s). Check Jobs for progress.',
+    })

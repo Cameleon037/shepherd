@@ -43,7 +43,7 @@ def dashboard(request):
 
     # Findings (via asset's related_project)
     # Exclude findings that are ignored OR findings related to ignored domains
-    findings = Finding.objects.filter(domain__related_project_id=project_id).exclude(ignore=True).exclude(domain__ignore=True)
+    findings = Finding.objects.filter(asset__related_project_id=project_id).exclude(ignore=True).exclude(asset__ignore=True)
     context['num_findings'] = findings.count()
     context['findings_by_severity'] = list(
         findings.values('severity')
@@ -65,15 +65,15 @@ def dashboard(request):
 
     # Recent findings (last 10)
     context['recent_findings'] = (
-        findings.select_related('domain')
+        findings.select_related('asset')
         .order_by('-first_seen')[:10]
     )
 
     # Ports (open ports on assets)
-    context['num_ports'] = Port.objects.filter(domain__related_project_id=project_id).count()
+    context['num_ports'] = Port.objects.filter(asset__related_project_id=project_id).count()
 
     # Screenshots count
-    context['num_screenshots'] = Screenshot.objects.filter(domain__related_project_id=project_id).count()
+    context['num_screenshots'] = Screenshot.objects.filter(asset__related_project_id=project_id).count()
 
     # Top finding sources (simple count)
     context['findings_by_source'] = list(
@@ -93,10 +93,10 @@ def dashboard(request):
         output_field=IntegerField(),
     )
     context['most_critical_findings'] = list(
-        findings.select_related('domain')
+        findings.select_related('asset')
         .exclude(severity__isnull=True)
         .exclude(severity='')
-        .exclude(domain__isnull=True)
+        .exclude(asset__isnull=True)
         .order_by(severity_order_expr, '-first_seen')[:10]
     )
 
@@ -104,7 +104,7 @@ def dashboard(request):
     # Count only non-ignored findings from non-ignored domains
     context['most_vulnerable_assets'] = list(
         assets.filter(ignore=False)
-        .annotate(finding_count=Count('finding', filter=Q(finding__ignore=False) & Q(finding__domain__ignore=False)))
+        .annotate(finding_count=Count('finding', filter=Q(finding__ignore=False) & Q(finding__asset__ignore=False)))
         .filter(finding_count__gt=0)
         .order_by('-finding_count')[:10]
         .values('uuid', 'value', 'finding_count')

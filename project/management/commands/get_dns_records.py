@@ -1,5 +1,6 @@
 from django.core.management.base import BaseCommand
 from project.models import Asset, DNSRecord
+from project.scan_utils import resolve_uuids, add_common_scan_arguments
 import concurrent.futures
 import dns.resolver
 from django.utils import timezone
@@ -8,53 +9,27 @@ class Command(BaseCommand):
     help = "Check DNS records for all suggestions and update their active status"
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            '--projectid',
-            type=int,
-            help='Filter by specific project ID',
-            required=False,
-        )
-        parser.add_argument(
-            '--uuids',
-            type=str,
-            help='Comma separated list of suggestion UUIDs to process',
-            required=False,
-        )
-        parser.add_argument(
-            '--flush-old-records',
-            action='store_true',
-            default=True,
-            help='Flush old DNS records before scanning (default: True)',
-        )
-        parser.add_argument(
-            '--no-flush-old-records',
-            action='store_false',
-            dest='flush_old_records',
-            help='Do not flush old DNS records before scanning',
-        )
-        parser.add_argument(
-            '--scope',
-            type=str,
-            help='Filter by scope (e.g., external, internal)',
-            required=False,
-        )
+        parser.add_argument('--projectid', type=int, help='Filter by specific project ID', required=False)
+        add_common_scan_arguments(parser)
+        parser.add_argument('--flush-old-records', action='store_true', default=True,
+                            help='Flush old DNS records before scanning (default: True)')
+        parser.add_argument('--no-flush-old-records', action='store_false', dest='flush_old_records',
+                            help='Do not flush old DNS records before scanning')
+        parser.add_argument('--scope', type=str, help='Filter by scope (e.g., external, internal)', required=False)
 
     def handle(self, *args, **kwargs):
         project_filter = {}
         if kwargs.get('projectid'):
             project_filter['related_project__id'] = kwargs['projectid']
 
-        uuids_arg = kwargs.get('uuids')
         flush_old_records = kwargs.get('flush_old_records', True)
         scope_filter = kwargs.get('scope')
+        uuid_list = resolve_uuids(kwargs)
 
-        # Get total count without loading all objects
         assets_query = Asset.objects.filter(**project_filter).filter(type='domain')
-        # Filter by scope if provided
         if scope_filter:
             assets_query = assets_query.filter(scope=scope_filter)
-        if uuids_arg:
-            uuid_list = [u.strip() for u in uuids_arg.split(",") if u.strip()]
+        if uuid_list:
             assets_query = assets_query.filter(uuid__in=uuid_list)
 
         total_count = assets_query.count()

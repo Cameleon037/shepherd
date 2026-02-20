@@ -26,10 +26,31 @@
     <h4>1. Choose Assets</h4>
     <p class="meta">Filter the assets you want to scan. Shepherd will use these filters when launching scans.</p>
     <div style="margin-bottom:12px;">
-        <div class="checkbox">
+        {% if preselected_count %}
+        <div class="radio">
             <label>
-                <input type="checkbox" id="scan-all-assets" checked>
-                Scan all assets (ignores asset filters)
+                <input type="radio" name="asset-selection" value="selected" checked>
+                Pre-selected assets ({{ preselected_count }})
+                <span class="meta">(from asset inventory)</span>
+            </label>
+        </div>
+        {% endif %}
+        <div class="radio">
+            <label>
+                <input type="radio" name="asset-selection" value="all" {% if not preselected_count %}checked{% endif %}>
+                Scan all assets
+            </label>
+        </div>
+        <div class="radio">
+            <label>
+                <input type="radio" name="asset-selection" value="new">
+                Scan new assets only <span class="meta">(assets never scanned)</span>
+            </label>
+        </div>
+        <div class="radio">
+            <label>
+                <input type="radio" name="asset-selection" value="filter">
+                Manually filter assets
             </label>
         </div>
     </div>
@@ -159,10 +180,6 @@
         </div>
     </div>
 
-    <div class="toggle-row">
-        <input type="checkbox" id="scan-burp" disabled>
-        <label class="text-muted" for="scan-burp">Burp scan (coming soon)</label>
-    </div>
 </div>
 
 <div class="control-card">
@@ -178,6 +195,12 @@
     </div>
     <div id="scan-feedback" class="meta" style="margin-top:10px;"></div>
 </div>
+
+<div class="control-card">
+    <h4>4. Penetration Testing</h4>
+    <p class="meta">Run targeted Burp Suite scans against discovered web endpoints. Select the URLs you want to test on the Web Endpoints page. Run the Katana scan against the asset you want to discover more endpoints on.</p>
+    <a class="btn btn-primary btn-sm" href="{% url 'findings:web_endpoints' %}">Go to Web Endpoints →</a>
+</div>
 {% endspaceless %}
 {% endblock %}
 
@@ -185,6 +208,8 @@
 <script src="{% static 'js/bootbox.min.js' %}"></script>
 <script type="text/javascript">
 $(document).ready(function () {
+    var preselectedUuids = {{ preselected_uuids|safe }};
+
     function syncSourceAllCheckbox() {
         var total = $('.source-option').length;
         var checkedCount = $('.source-option:checked').length;
@@ -279,11 +304,16 @@ $(document).ready(function () {
         updateScreenshotWarning();
     });
 
+    function getAssetMode() {
+        return $('input[name="asset-selection"]:checked').val() || 'all';
+    }
+
     function toggleFiltersDisabled() {
-        var scanAllChecked = $('#scan-all-assets').is(':checked');
+        var mode = getAssetMode();
+        var filtersEnabled = (mode === 'filter');
         var filterElements = $('#filter-type, #filter-scope, #filter-name, #btn-preview-assets, .source-option, #source-all');
-        filterElements.prop('disabled', scanAllChecked);
-        if (scanAllChecked) {
+        filterElements.prop('disabled', !filtersEnabled);
+        if (!filtersEnabled) {
             filterElements.addClass('filters-disabled');
             $('#filter-type, #filter-scope, #filter-name').closest('.col-sm-4').find('label').addClass('filters-disabled');
             $('#filter-source-group label').addClass('filters-disabled');
@@ -292,22 +322,32 @@ $(document).ready(function () {
             $('#filter-type, #filter-scope, #filter-name').closest('.col-sm-4').find('label').removeClass('filters-disabled');
             $('#filter-source-group label').removeClass('filters-disabled');
         }
-        if (scanAllChecked) {
+        if (mode === 'selected') {
+            $('#selected-assets-hint').text(preselectedUuids.length + ' pre-selected asset(s) from inventory.');
+            $('#preview-container').hide();
+        } else if (mode === 'all') {
             $('#selected-assets-hint').text('Scanning all assets - filters are ignored.');
+            $('#preview-container').hide();
+        } else if (mode === 'new') {
+            $('#selected-assets-hint').text('Scanning new assets only (never scanned before).');
             $('#preview-container').hide();
         } else {
             $('#selected-assets-hint').text('No filter applied yet.');
         }
     }
 
-    $('#scan-all-assets').on('change', function() {
+    $('input[name="asset-selection"]').on('change', function() {
         toggleFiltersDisabled();
     });
-    toggleFiltersDisabled(); // Initialize on page load
+    toggleFiltersDisabled();
 
     $('#btn-preview-assets').on('click', function(e) {
         e.preventDefault();
         var filters = getFilters();
+        var mode = getAssetMode();
+        if (mode === 'new') {
+            filters.new_assets_only = '1';
+        }
         $('#selected-assets-hint').text('Loading preview...');
         $('#preview-container').hide();
         $.ajax({
@@ -347,7 +387,7 @@ $(document).ready(function () {
             return;
         }
         var filters = getFilters();
-        var scanAllAssets = $('#scan-all-assets').is(':checked');
+        var assetMode = getAssetMode();
         $('#btn-launch-scans').prop('disabled', true).text('Launching...');
         $('#scan-feedback').text('');
         fetch("{% url 'findings:control_center_launch' %}", {
@@ -356,7 +396,12 @@ $(document).ready(function () {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': getCookie('csrftoken')
             },
-            body: JSON.stringify({filters: filters, scans: scans, scan_all_assets: scanAllAssets})
+            body: JSON.stringify({
+                filters: filters,
+                scans: scans,
+                asset_mode: assetMode,
+                selected_uuids: (assetMode === 'selected') ? preselectedUuids : []
+            })
         }).then(function(response) {
             return response.json().then(function(data) {
                 if (!response.ok) {

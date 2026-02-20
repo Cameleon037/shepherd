@@ -2,6 +2,7 @@ import html
 import tempfile
 import subprocess
 from project.models import Project, Keyword, Asset
+from project.scan_utils import add_common_scan_arguments
 from findings.models import Finding
 import re
 import json
@@ -18,17 +19,8 @@ class Command(BaseCommand):
         super(Command, self).__init__(*args, **kwargs)
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            '--projectid',
-            type=int,
-            help='Filter by specific project ID',
-        )
-        parser.add_argument(
-            '--uuids',
-            type=str,
-            help='Comma separated list of Asset UUIDs to process',
-            required=False,
-        )
+        parser.add_argument('--projectid', type=int, help='Filter by specific project ID')
+        add_common_scan_arguments(parser)
         parser.add_argument(
             '--dig-files',
             action='store_true',

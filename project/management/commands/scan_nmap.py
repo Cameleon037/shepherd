@@ -8,6 +8,7 @@ import dns.resolver
 from collections import defaultdict
 
 from project.models import Project
+from project.scan_utils import resolve_uuids, add_common_scan_arguments
 from findings.models import Port
 
 from django.core.management.base import BaseCommand, CommandError
@@ -28,29 +29,10 @@ class Command(BaseCommand):
     help = 'Run Nmap scan for active domains in a specific project'
 
     def add_arguments(self, parser):
-        # Add an optional projectid argument
-        parser.add_argument(
-            '--projectid',
-            type=int,
-            help='ID of the project to scan',
-        )
-        parser.add_argument(
-            '--uuids',
-            type=str,
-            help='Comma separated list of Asset UUIDs to process',
-            required=False,
-        )
-        parser.add_argument(
-            '--scope',
-            type=str,
-            help='Filter by scope (e.g., external, internal)',
-            required=False,
-        )
-        parser.add_argument(
-            '--new-assets',
-            action='store_true',
-            help='Only scan assets with empty last_scan_time',
-        )
+        parser.add_argument('--projectid', type=int, help='ID of the project to scan')
+        add_common_scan_arguments(parser)
+        parser.add_argument('--scope', type=str, help='Filter by scope (e.g., external, internal)', required=False)
+        parser.add_argument('--new-assets', action='store_true', help='Only scan assets with empty last_scan_time')
 
     def resolve_domain_to_ip(self, domain):
         """Resolve domain name to IP address using DNS A record"""
@@ -71,11 +53,10 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         projectid = options.get('projectid')
-        uuids_arg = options.get('uuids')
+        uuid_list = resolve_uuids(options)
         scope_filter = options.get('scope')
         new_assets_only = options.get('new_assets')
 
-        # Get the projects to scan
         if projectid:
             try:
                 projects = [Project.objects.get(id=projectid)]
@@ -86,14 +67,10 @@ class Command(BaseCommand):
 
         for prj in projects:
             domains_qs = prj.asset_set.filter(monitor=True)
-            # Filter by scope if provided
             if scope_filter:
                 domains_qs = domains_qs.filter(scope=scope_filter)
-            # Filter by uuids if provided
-            if uuids_arg:
-                uuid_list = [u.strip() for u in uuids_arg.split(",") if u.strip()]
+            if uuid_list:
                 domains_qs = domains_qs.filter(uuid__in=uuid_list)
-            # Filter by new_assets_only if set
             if new_assets_only:
                 domains_qs = domains_qs.filter(last_scan_time__isnull=True)
 
@@ -168,9 +145,9 @@ class Command(BaseCommand):
             
             # Flush old port entries for all domains that point to this IP
             for ad_obj in domains_for_ip:
-                old_ports_count = Port.objects.filter(domain=ad_obj).count()
+                old_ports_count = Port.objects.filter(asset=ad_obj).count()
                 if old_ports_count > 0:
-                    Port.objects.filter(domain=ad_obj).delete()
+                    Port.objects.filter(asset=ad_obj).delete()
                     self.stdout.write(f"Flushed {old_ports_count} old port entries for {ad_obj.value}")
 
             # Process the results and save to database for each domain
@@ -182,8 +159,8 @@ class Command(BaseCommand):
                     # Create port entries for all domains that point to this IP
                     for ad_obj in domains_for_ip:
                         port_obj = Port.objects.create(
-                            domain=ad_obj,
-                            domain_name=ad_obj.value,
+                            asset=ad_obj,
+                            asset_name=ad_obj.value,
                             port=port_entry['port'],
                             scan_date=make_aware(datetime.now()),
                             banner=port_entry['banner'],
@@ -230,9 +207,9 @@ class Command(BaseCommand):
                     port_list.append(pdict)
             
             # Flush old port entries for this domain
-            old_ports_count = Port.objects.filter(domain=ad_obj).count()
+            old_ports_count = Port.objects.filter(asset=ad_obj).count()
             if old_ports_count > 0:
-                Port.objects.filter(domain=ad_obj).delete()
+                Port.objects.filter(asset=ad_obj).delete()
                 self.stdout.write(f"Flushed {old_ports_count} old port entries for {ad_obj.value}")
 
             # Process the results and save to database
@@ -241,8 +218,8 @@ class Command(BaseCommand):
                 if port_entry["status"] == "open":
                     open_ports_cnt += 1
                     port_obj = Port.objects.create(
-                        domain=ad_obj,
-                        domain_name=ad_obj.value,
+                        asset=ad_obj,
+                        asset_name=ad_obj.value,
                         port=port_entry['port'],
                         scan_date=make_aware(datetime.now()),
                         banner=port_entry['banner'],

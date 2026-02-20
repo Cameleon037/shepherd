@@ -21,84 +21,10 @@
   <div class="panel panel-default">
     <div class="panel-heading">// General Actions</div>
     <div class="panel-body">
-      <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#AssetModal">Add Domain</button>&nbsp;
-      <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#UploadDomainsModal">Upload Domains</button>&nbsp;
+      <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#AssetModal">Add Asset</button>&nbsp;
+      <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#UploadDomainsModal">Upload Assets</button>&nbsp;
       <a class="btn btn-primary btn-xs" href="{% url 'findings:export_monitored_assets_csv' %}">Export to csv</a>&nbsp;
       <a class="btn btn-primary btn-xs confirm" href="{% url 'findings:move_all_assets' %}">Move all assets back to suggestions</a>&nbsp;
-      <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#ScanAssetsModal">Scan all assets</button>&nbsp;
-      <button type="button" class="btn btn-primary btn-xs" id="scan-new-assets-btn" data-toggle="modal" data-target="#ScanAssetsModal">Scan new assets</button>&nbsp;
-    </div>
-  </div>
-</div>
-
-<!-- Scan Assets Modal -->
-<div class="modal fade" id="ScanAssetsModal" tabindex="-1" role="dialog" aria-labelledby="scanAssetsModalLabel">
-  <div class="modal-dialog" role="document">
-    <div class="modal-content">
-      <form id="scan-assets-form" action="{% url 'findings:scan_assets' %}" method="post">
-        <div class="modal-header">
-          <h4>Scan Assets</h4>
-        </div>
-        <div class="modal-body">
-          {% csrf_token %}
-
-          <div class="form-check d-flex align-items-center" style="gap: 8px;">
-            <input type="checkbox" class="form-check-input" id="scan_nmap" name="scan_nmap" checked>
-            <label class="form-check-label mb-0" for="scan_nmap" style="margin-bottom:0; margin-left:6px;">
-              Nmap
-            </label>
-          </div>
-
-          <div class="form-check d-flex align-items-center" style="gap: 8px;">
-            <input type="checkbox" class="form-check-input" id="scan_httpx" name="scan_httpx" checked>
-            <label class="form-check-label mb-0" for="scan_httpx" style="margin-bottom:0; margin-left:6px;">
-              Httpx (screenshots) <span style="font-size:0.9em;color:#888;">(requires a prior Nmap scan if not existing yet)</span>
-            </label>
-          </div>
-
-          <div class="form-check d-flex align-items-center" style="gap: 8px;">
-            <input type="checkbox" class="form-check-input" id="scan_playwright" name="scan_playwright" checked>
-            <label class="form-check-label mb-0" for="scan_playwright" style="margin-bottom:0; margin-left:6px;">
-              Playwright (Screenshots) <span style="font-size:0.9em;color:#888;">(requires a prior Nmap scan if not existing yet)</span>
-            </label>
-          </div>
-
-          <div class="form-check d-flex align-items-center" style="gap: 8px;">
-            <input type="checkbox" class="form-check-input" id="scan_shepherdai" name="scan_shepherdai" checked>
-            <label class="form-check-label mb-0" for="scan_shepherdai" style="margin-bottom:0; margin-left:6px;">
-              Shepherd AI (findings review)
-            </label>
-          </div>
-
-          <div class="form-check d-flex align-items-center" style="gap: 8px;">
-            <input type="checkbox" class="form-check-input" id="scan_burp" name="scan_burp" disabled>
-            <label class="form-check-label mb-0 text-muted" for="scan_burp" style="margin-bottom:0; margin-left:6px;">
-              Burp scan (coming soon)
-            </label>
-          </div>
-
-          <div class="form-group">
-            <div class="form-check d-flex align-items-center" style="gap: 8px;">
-              <input type="checkbox" class="form-check-input" id="scan_nuclei" name="scan_nuclei" checked>
-              <label class="form-check-label mb-0" for="scan_nuclei" style="margin-bottom:0; margin-left:6px;">
-                Nuclei
-              </label>
-            </div>
-
-            <div class="form-check d-flex align-items-center" style="gap: 8px; margin-left: 24px;">
-              <input type="checkbox" class="form-check-input" id="scan_nuclei_new_templates" name="scan_nuclei_new_templates" checked>
-              <label class="form-check-label mb-0" for="scan_nuclei_new_templates" style="margin-bottom:0; margin-left:6px;">
-                New templates only <span style="font-size:0.9em;color:#888;">(only if Nuclei is selected)</span>
-              </label>
-            </div>
-          </div>
-          
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary">Run</button>
-        </div>
-      </form>
     </div>
   </div>
 </div>
@@ -123,14 +49,14 @@
   </div>
 </div>
 
-<!-- Upload Domains Modal -->
+<!-- Upload Assets Modal -->
 <div class="modal fade" id="UploadDomainsModal" tabindex="-1" role="dialog" aria-labelledby="uploadDomainsModalLabel">
   <div class="modal-dialog" role="document">
     <div class="modal-content">
       <form id="upload-domains-form" action="{% url 'findings:upload_assets' %}" method="post" enctype="multipart/form-data">
         <div class="modal-header">
           <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-          <h4>Upload Domains</h4>
+          <h4>Upload Assets</h4>
         </div>
         <div class="modal-body">
           {% csrf_token %}
@@ -180,7 +106,7 @@
         <div class="panel-body">
           <button type="submit" name="btnignore" id="ignore-selected" class="btn btn-primary btn-xs">Ignore selected</button>&nbsp;
           <button type="submit" name="btnmove" id="move-selected" class="btn btn-primary btn-xs">Move back to suggestions</button>&nbsp;
-          <button type="button" id="scan-selected-assets-btn" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#ScanAssetsModal">Scan selected assets</button>&nbsp;
+          <button type="button" id="scan-selected-assets-btn" class="btn btn-primary btn-xs">Scan selected assets</button>&nbsp;
         </div>
       </div>
     </div>
@@ -436,12 +362,8 @@ $(document).ready(function () {
     // Setup select all for multiple tables
     setupStandaloneSelectAll('#select-all-items', '#table_list_assets');
 
-    // Track if scan was triggered for selected assets
-    var scanSelectedAssets = false;
-
-    // When "Scan selected assets" is clicked, set flag and open modal
+    // "Scan selected assets" -> store UUIDs in session and redirect to control center
     $('#scan-selected-assets-btn').on('click', function (e) {
-      // Collect checked checkboxes from monitored table
       var selectedUuids = [];
       monitoredTable.$('input[type="checkbox"][name="id[]"]:checked').each(function () {
         selectedUuids.push($(this).val());
@@ -450,59 +372,29 @@ $(document).ready(function () {
       if (selectedUuids.length === 0) {
         e.preventDefault();
         bootbox.alert("Please select at least one asset to scan.");
-        scanSelectedAssets = false;
         return false;
       }
-      scanSelectedAssets = true;
-      // Modal opens automatically due to data-toggle
-    });
 
-    // Track if scan was triggered for new assets
-    var scanNewAssets = false;
+      var btn = $(this);
+      btn.prop('disabled', true).text('Redirecting...');
 
-    // When "Scan new assets" is clicked, set flag and open modal
-    $('#scan-new-assets-btn').on('click', function (e) {
-      scanNewAssets = true;
-    });
-    // When "Scan all assets" is clicked, clear flag
-    $('[data-target="#ScanAssetsModal"]').not('#scan-new-assets-btn').on('click', function (e) {
-      scanNewAssets = false;
-    });
-    // On modal form submit, if scanNewAssets, add POST param instead of GET
-    $('#scan-assets-form').on('submit', function (e) {
-      // Remove any previous scan_new_assets hidden input
-      $(this).find('input[name="scan_new_assets"]').remove();
-      if (scanNewAssets) {
-        // Add as hidden input for POST
-        $('<input>')
-          .attr('type', 'hidden')
-          .attr('name', 'scan_new_assets')
-          .val('on')
-          .appendTo(this);
-      }
-      if (scanSelectedAssets) {
-        // Remove any previous uuid[] hidden inputs
-        $(this).find('input[name="uuid[]"]').remove();
-
-        // Collect checked checkboxes from monitored table
-        var selectedUuids = [];
-        monitoredTable.$('input[type="checkbox"][name="id[]"]:checked').each(function () {
-          selectedUuids.push($(this).val());
-        });
-
-        // Add as hidden inputs
-        for (var i = 0; i < selectedUuids.length; i++) {
-          $('<input>')
-            .attr('type', 'hidden')
-            .attr('name', 'uuid[]')
-            .val(selectedUuids[i])
-            .appendTo(this);
+      $.ajax({
+        url: "{% url 'findings:scan_assets' %}",
+        method: 'POST',
+        contentType: 'application/json',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        data: JSON.stringify({ uuids: selectedUuids }),
+        success: function (resp) {
+          window.location.href = resp.redirect;
+        },
+        error: function () {
+          bootbox.alert("Failed to transfer assets. Please try again.");
+          btn.prop('disabled', false).text('Scan selected assets');
         }
-      }
-      // else: normal scan, no UUIDs added
+      });
     });
 
-    // ========== Upload Domains Modal ==========
+    // ========== Upload Assets Modal ==========
     initializeUploadModal({
         modalId: '#UploadDomainsModal',
         dropZoneId: '#upload-drop-zone',
