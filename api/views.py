@@ -14,7 +14,7 @@ from rest_framework.authentication import SessionAuthentication, TokenAuthentica
 
 from api.pagination import CustomPaginator
 from api.serializer import JobSerializer, ProjectSerializer, KeywordSerializer, SuggestionSerializer, AssetSerializer, FindingSerializer, PortSerializer, ScreenshotSerializer, DNSRecordSerializer, EndpointSerializer
-from api.utils import get_ordering_vars, apply_search_filter, apply_column_search
+from api.utils import get_ordering_vars, apply_search_filter, apply_column_search, apply_column_search_multi
 
 from project.models import Project, Keyword, Asset, Job, DNSRecord
 from findings.models import Finding, Port, Screenshot, Endpoint
@@ -313,7 +313,7 @@ def list_assets(request, projectid, selection, format=None):
                 queryset = queryset.filter(**{f"{severity_map[severity_filter]}__gt": 0})
 
     queryset = apply_column_search(queryset, search_columns['tag'], 'tag__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_columns['source'], 'source__icontains')
+    queryset = apply_column_search_multi(queryset, search_columns['source'], 'source__icontains')
     queryset = apply_column_search(queryset, search_columns['description'], 'description__icontains')
     queryset = apply_column_search(queryset, search_columns['last_scan_time'], 'last_scan_time__icontains')
     queryset = apply_column_search(queryset, search_columns['creation_time'], 'creation_time__icontains')
@@ -1081,13 +1081,60 @@ def list_scheduled_jobs(request):
         return HttpResponseForbidden("You do not have permission.")
 
     # Fetch all periodic tasks (scheduled jobs)
-    scheduled_jobs = PeriodicTask.objects.all().select_related('interval', 'crontab', 'clocked')
-    # Use CustomPaginator for DataTables server-side pagination
+    queryset = PeriodicTask.objects.all().select_related('interval', 'crontab', 'clocked')
+
+    # Column-specific search (DataTables columns 0-5: name, task, schedule, enabled, last_run_at, description)
+    search_name = request.query_params.get('columns[0][search][value]', None)
+    search_task = request.query_params.get('columns[1][search][value]', None)
+    search_schedule = request.query_params.get('columns[2][search][value]', None)
+    search_enabled = request.query_params.get('columns[3][search][value]', None)
+    search_last_run_at = request.query_params.get('columns[4][search][value]', None)
+    search_description = request.query_params.get('columns[5][search][value]', None)
+
+    queryset = apply_column_search(queryset, search_name, 'name__icontains', min_length=1)
+    queryset = apply_column_search(queryset, search_task, 'task__icontains', min_length=1)
+
+    # Schedule is computed from interval/crontab/clocked; filter by interval period (e.g. "minutes") or crontab presence
+    if search_schedule and len(search_schedule.strip()) >= 1:
+        is_negative = search_schedule.startswith('!')
+        schedule_value = search_schedule.strip().lstrip('!').lower()
+        if schedule_value:
+            schedule_q = Q(interval__period__icontains=schedule_value)
+            if is_negative:
+                queryset = queryset.exclude(schedule_q)
+            else:
+                queryset = queryset.filter(schedule_q)
+
+    # Enabled: exact boolean match
+    if search_enabled and search_enabled.strip().lower() in ('true', 'false'):
+        queryset = queryset.filter(enabled=(search_enabled.strip().lower() == 'true'))
+
+    # Last run: filter by year when 4 digits
+    if search_last_run_at and len(search_last_run_at.strip()) >= 1:
+        last_run_val = search_last_run_at.strip()
+        if len(last_run_val) == 4 and last_run_val.isdigit():
+            queryset = queryset.filter(last_run_at__year=int(last_run_val))
+
+    if hasattr(PeriodicTask, 'description'):
+        queryset = apply_column_search(queryset, search_description, 'description__icontains', min_length=1)
+
+    # Ordering: use get_ordering_vars (reads columns[order[0][column]][data])
+    order_by_column, order_direction = get_ordering_vars(
+        request.query_params,
+        default_column='name',
+        default_direction=''
+    )
+    # Map frontend column names to DB fields (schedule is computed, sort by last_run_at)
+    if order_by_column == 'schedule':
+        order_by_column = 'last_run_at'
+    if order_by_column and order_by_column in ('name', 'task', 'enabled', 'last_run_at', 'description'):
+        sort_field = order_direction + order_by_column
+        queryset = queryset.order_by(sort_field)
+
     paginator = CustomPaginator()
-    jobs_page = paginator.paginate_queryset(scheduled_jobs, request)
+    jobs_page = paginator.paginate_queryset(queryset, request)
     results = []
     for job in jobs_page:
-        # Prepare schedule string
         if job.interval:
             schedule = str(job.interval)
         elif job.crontab:
@@ -1104,5 +1151,4 @@ def list_scheduled_jobs(request):
             'last_run_at': job.last_run_at.isoformat() if job.last_run_at else '',
             'description': getattr(job, 'description', ''),
         })
-    # Return paginated response for DataTables
     return paginator.get_paginated_response(results)

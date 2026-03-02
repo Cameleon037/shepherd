@@ -297,6 +297,39 @@
 </div>
 
 
+<!-- Recent assets (monitored) -->
+<div class="row">
+    <div class="col-md-6">
+        <div class="panel panel-default">
+            <div class="panel-heading">Recent assets <a href="{% url 'findings:assets' %}" class="btn btn-xs btn-default pull-right">View all</a></div>
+            <div class="panel-body" style="padding: 0;">
+                {% if recent_assets %}
+                <table class="table table-condensed table-striped table-bordered" style="font-size: 0.85em; margin: 0;">
+                    <thead>
+                        <tr>
+                            <th>Asset</th>
+                            <th>Type</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for asset in recent_assets %}
+                        <tr>
+                            <td><a href="{% url 'findings:view_asset' asset.uuid %}">{{ asset.value|truncatechars:45 }}</a></td>
+                            <td>{{ asset.type|default:"—" }}</td>
+                            <td>{{ asset.creation_time|date:"Y-m-d H:i" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="text-muted" style="padding: 12px;">No monitored assets yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Extra asset stats & recent findings -->
 <div class="row">
     <div class="col-md-4">

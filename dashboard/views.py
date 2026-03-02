@@ -69,6 +69,12 @@ def dashboard(request):
         .order_by('-first_seen')[:10]
     )
 
+    # Recent assets (monitored only, latest creation date first)
+    context['recent_assets'] = (
+        assets.filter(monitor=True)
+        .order_by('-creation_time')[:10]
+    )
+
     # Ports (open ports on assets)
     context['num_ports'] = Port.objects.filter(asset__related_project_id=project_id).count()
 

@@ -104,3 +104,35 @@ def apply_column_search(queryset, search_value, field_path, min_length=1):
         queryset = queryset.filter(**{field_path: search_value})
     
     return queryset
+
+
+def apply_column_search_multi(queryset, search_value, field_path, delimiter=',', min_length=1):
+    """
+    Apply column search with multiple comma-separated values; each segment can be
+    "!value" (exclude) or "value" (include). E.g. "!a,!b" excludes rows where
+    the field contains "a" and also excludes rows where it contains "b".
+
+    Args:
+        queryset: Django queryset to filter
+        search_value: Search string; split on delimiter; each segment can start with ! for exclude
+        field_path: Django field path (e.g. "source__icontains")
+        delimiter: Split search_value on this (default: comma)
+        min_length: Minimum length of each segment (after stripping !) to apply (default: 1)
+
+    Returns:
+        Filtered queryset
+    """
+    if not search_value:
+        return queryset
+    segments = [s.strip() for s in search_value.split(delimiter) if s.strip()]
+    for segment in segments:
+        is_negative = segment.startswith('!')
+        if is_negative:
+            segment = segment[1:].strip()
+        if not segment or len(segment) < min_length:
+            continue
+        if is_negative:
+            queryset = queryset.exclude(**{field_path: segment})
+        else:
+            queryset = queryset.filter(**{field_path: segment})
+    return queryset

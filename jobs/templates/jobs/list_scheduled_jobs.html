@@ -89,15 +89,15 @@ $(document).ready(function () {
     }
 
     const scheduledJobColumns = [
-        { 'data': 'name', 'sName': 'Name' },
-        { 'data': 'task', 'sName': 'Task' },
-        { 'data': 'schedule', 'sName': 'Schedule' },
-        { 'data': 'enabled', 'sName': 'Enabled',
+        { 'data': 'name', 'sName': 'Name', 'orderable': true },
+        { 'data': 'task', 'sName': 'Task', 'orderable': true },
+        { 'data': 'schedule', 'sName': 'Schedule', 'orderable': true },
+        { 'data': 'enabled', 'sName': 'Enabled', 'orderable': true,
           'render': function(data, type, row) {
             return data ? '<span class="label label-success">Enabled</span>' : '<span class="label label-danger">Disabled</span>';
           }
         },
-        { 'data': 'last_run_at', 'sName': 'Last Run',
+        { 'data': 'last_run_at', 'sName': 'Last Run', 'orderable': true,
           'render': function(data, type, row) {
             if (!data) return '';
             if (window.moment) {
@@ -109,7 +109,7 @@ $(document).ready(function () {
             return data;
           }
         },
-        { 'data': 'description', 'sName': 'Description' }
+        { 'data': 'description', 'sName': 'Description', 'orderable': true }
     ];
 
     var scheduledJobTable = initializeDataTable(
