@@ -194,6 +194,8 @@ class Command(BaseCommand):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,   # merge stderr → stdout for a single stream
             text=True,
+            encoding='utf-8',
+            errors='replace',           # avoid crash if nuclei prints non-UTF-8 (e.g. in template/finding)
             bufsize=1,                  # line-buffered
         )
 
@@ -223,9 +225,10 @@ class Command(BaseCommand):
                 self.stderr.write(f'    | {t}')
 
         # Parse JSON export file — try even on non-zero exit (nuclei may have partial results)
+        # Use errors='replace' so non-UTF-8 in matched content (e.g. response snippets) doesn't crash the scan
         findings = []
         if os.path.exists(results_path) and os.path.getsize(results_path) > 0:
-            with open(results_path, 'r') as f:
+            with open(results_path, 'r', encoding='utf-8', errors='replace') as f:
                 content = f.read().strip()
                 if content:
                     findings = json.loads(content)
