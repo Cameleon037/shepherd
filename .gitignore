@@ -3,6 +3,7 @@ settings.py
 custom-navbar.css
 custom-logo-standalone.svg
 *.bak
+jobs/custom_tasks/
 
 # Test files
 project/management/commands/test_custom.py

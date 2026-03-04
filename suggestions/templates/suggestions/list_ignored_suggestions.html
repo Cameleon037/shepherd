@@ -17,7 +17,7 @@
 </div>
 {% if messages %}{% for message in messages %}<div {% if message.tags %} class="alert alert-{{ message.tags }}"{% endif %}>{{ message }}</div>{% endfor %}{% endif %}
 
-<form id="form-selected" action="" method="POST">
+<form id="form-selected">
     {% csrf_token %}
 
 <div class="container-fluid" style="padding-left:0; padding-right:0;">
@@ -26,8 +26,8 @@
             <div class="panel panel-default">
                 <div class="panel-heading">// Selected Actions</div>
                 <div class="panel-body">
-                    <button type="submit" name="btnmove" id="move-selected" class="btn btn-primary btn-xs">Suggest selected</button>&nbsp;
-                    <button type="submit" name="btndelete" id="delete-selected" class="btn btn-primary btn-xs">Delete selected</button>
+                    <button type="button" name="btnmove" id="move-selected" class="btn btn-primary btn-xs">Suggest selected</button>&nbsp;
+                    <button type="button" name="btndelete" id="delete-selected" class="btn btn-primary btn-xs">Delete selected</button>
                 </div>
             </div>
         </div>
@@ -136,10 +136,17 @@ $(document).ready( function () {
         tableSelector: '#table_list_ignored_suggestions'
     });
 
-    // Setup form submission for DataTable checkboxes
-    setupFormSubmission(pTable);
-
-
+    // Bulk actions via API (no page refresh)
+    setupBulkActions({
+        formSelector: '#form-selected',
+        apiUrl: '/api/v1/project/{{ projectid }}/suggestions/ignored/bulk/',
+        checkboxName: 'id[]',
+        tableInstances: [pTable],
+        buttons: [
+            { name: 'btnmove', action: 'move', confirm: false },
+            { name: 'btndelete', action: 'delete', confirm: true }
+        ]
+    });
 });
 
 </script>

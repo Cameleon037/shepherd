@@ -78,32 +78,28 @@ def export_assets_csv(project_id, monitored_only=False, scope='external'):
     return response
 
 
-def auto_monitor_trusted_assets(project_id):
+def auto_monitor_trusted_assets(project_id, source_list=None):
     """
     Automatically monitor assets that:
     1) Are of type "domain" or "ip"
     2) Are not ignored (ignore=False)
     3) Are active (active=True)
     4) Are not monitored (monitor=False)
-    5) Come from a "trusted" source (subfinder, domaintools, file_upload)
-    
-    Args:
-        project_id: Project ID. Only processes assets for this project.
-    
+    5) Come from a source in source_list (default: subfinder, domaintools)
+
     Returns:
         tuple: (count_updated, list_of_updated_assets)
     """
+    if source_list is None:
+        source_list = ['subfinder', 'domaintools']
     try:
         project = Project.objects.get(id=project_id)
     except Project.DoesNotExist:
         return 0, []
-    
-    # Trusted sources
-    trusted_sources = ['subfinder', 'domaintools', 'file_upload']
-    
+
     # Build Q objects for source filtering (check if source contains any trusted source)
     source_filters = Q()
-    for source in trusted_sources:
+    for source in source_list:
         source_filters |= Q(source__icontains=source)
     
     # Base queryset filters (only domain and ip assets)

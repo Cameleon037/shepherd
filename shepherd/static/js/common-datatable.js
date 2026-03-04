@@ -144,20 +144,113 @@ function setupToggleIgnoreFinding(table) {
     });
 }
 
-// Common bulk toggle ignore status (using form submission)
-function setupBulkToggleIgnore(table) {
-    $('#toggle-ignore-selected-findings').on('click', function(e) {
-        // Don't prevent default - let the form submit normally
-        // The form will handle the bulk operation via POST
-        var checked = $('#table_list_findings input[type="checkbox"][name="id[]"]:checked');
-        if (checked.length === 0) {
-            e.preventDefault();
-            displayMessage('warning', 'No findings selected.');
+/**
+ * Gather selected IDs from form and/or DataTables.
+ * @param {object} config - formSelector, checkboxName, tableInstances (optional array of DataTable API instances)
+ * @returns {string[]} - array of selected id/uuid values
+ */
+function getSelectedIdsFromBulkConfig(config) {
+    var checkboxName = config.checkboxName || 'id[]';
+    var ids = [];
+    var seen = {};
+    if (config.formSelector) {
+        $(config.formSelector + ' input[type="checkbox"][name="' + checkboxName + '"]:checked').each(function() {
+            var v = $(this).val();
+            if (v && !seen[v]) { seen[v] = true; ids.push(v); }
+        });
+    }
+    if (config.tableInstances && config.tableInstances.length) {
+        config.tableInstances.forEach(function(table) {
+            if (table && table.$) {
+                table.$('input[type="checkbox"][name="' + checkboxName + '"]:checked').each(function() {
+                    var v = $(this).val();
+                    if (v && !seen[v]) { seen[v] = true; ids.push(v); }
+                });
+            }
+        });
+    }
+    return ids;
+}
+
+/**
+ * Setup bulk actions: intercept form/buttons, collect selected IDs, POST to API, reload tables.
+ * @param {object} config - apiUrl, formSelector, checkboxName ('id[]' or 'uuid[]'), tableInstances (DataTable APIs to reload), buttons [{ name, action, confirm }]
+ *   Example: { apiUrl: '/api/v1/project/123/assets/bulk/', formSelector: '#form-selected', checkboxName: 'id[]', tableInstances: [assetsTable], buttons: [{ name: 'btnignore', action: 'ignore', confirm: false }, { name: 'btndelete', action: 'delete', confirm: true }] }
+ */
+function setupBulkActions(config) {
+    if (!config || !config.apiUrl || !config.buttons || !config.buttons.length) return;
+    var formSelector = config.formSelector || '#form-selected';
+    var checkboxName = config.checkboxName || 'id[]';
+    var tableInstances = config.tableInstances || [];
+    var apiUrl = config.apiUrl;
+
+    function doBulkAction(action, needConfirm, done) {
+        var ids = getSelectedIdsFromBulkConfig({ formSelector: formSelector, checkboxName: checkboxName, tableInstances: tableInstances });
+        if (!ids.length) {
+            displayMessage('warning', 'No items selected.');
+            if (done) done();
             return;
         }
-        // Form submission will be handled by the browser
-        // The page will redirect and show a success message
+        function sendRequest() {
+            var formData = new FormData();
+            formData.append('action', action);
+            formData.append('csrfmiddlewaretoken', getCookie('csrftoken'));
+            ids.forEach(function(id) { formData.append(checkboxName, id); });
+            $.ajax({
+                url: apiUrl,
+                type: 'POST',
+                headers: { 'X-CSRFToken': getCookie('csrftoken') },
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    if (response.success) {
+                        displayMessage('info', response.message || 'Action completed.');
+                        tableInstances.forEach(function(t) { if (t && t.ajax && t.ajax.reload) t.ajax.reload(); });
+                        $(formSelector + ' input[type="checkbox"][name="select_all"], ' + formSelector + ' input[id^="select-all-"]').prop('checked', false).prop('indeterminate', false);
+                    } else {
+                        displayMessage('danger', response.error || 'Action failed.');
+                    }
+                    if (done) done();
+                },
+                error: function(xhr) {
+                    var err = 'Action failed.';
+                    try { var r = JSON.parse(xhr.responseText); if (r.error) err = r.error; } catch (e) {}
+                    displayMessage('danger', err);
+                    if (done) done();
+                }
+            });
+        }
+        if (needConfirm && typeof bootbox !== 'undefined') {
+            bootbox.confirm('Are you sure?', function(confirmed) {
+                if (confirmed) sendRequest(); else if (done) done();
+            });
+        } else {
+            sendRequest();
+        }
+    }
+
+    config.buttons.forEach(function(btn) {
+        var name = btn.name || btn.id;
+        var action = btn.action;
+        var needConfirm = !!btn.confirm;
+        if (!name || action === undefined) return;
+        $(formSelector).on('click', '[name="' + name + '"], [id="' + name + '"]', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            doBulkAction(action, needConfirm);
+        });
     });
+
+    $(formSelector).on('submit', function(e) {
+        e.preventDefault();
+        return false;
+    });
+}
+
+// Common bulk toggle ignore status (legacy: now use setupBulkActions with API URL)
+function setupBulkToggleIgnore(table) {
+    // No-op; bulk actions go through setupBulkActions and API
 }
 
 // Common bootbox confirm dialog
@@ -427,10 +520,11 @@ function initializeCommonDataTableFeatures(table, options) {
     setupToggleIgnoreFinding(table);
     setupConfirmDialog(table);
     setupSelectAllCheckboxes(table, options.selectAllId, options.tableId);
-    setupFormSubmission(table);
-    
-    // Optional features
-    if (options.enableBulkIgnore) {
+    // When using bulk API (setupBulkActions), form submit is handled there; skip legacy form submission
+    if (!options.useBulkActionsApi) {
+        setupFormSubmission(table);
+    }
+    if (options.enableBulkIgnore && !options.useBulkActionsApi) {
         setupBulkToggleIgnore(table);
     }
     

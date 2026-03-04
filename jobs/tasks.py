@@ -1,7 +1,11 @@
 from celery import shared_task
 from jobs.utils import run_job
 from django.contrib.auth import get_user_model
-from suggestions.utils import auto_monitor_trusted_assets, auto_unmonitor_assets
+
+try:
+    import jobs.custom_tasks.tasks  # noqa: F401
+except ImportError:
+    pass
 
 """
 # Assets population
@@ -191,21 +195,3 @@ def scan_httpx_missing_screenshots_task():
     args = f'--projectid {project_id} --missing-screenshots --scope external'
     run_job(command, args, project_id, user=scheduler_user)
     return "scan_httpx --missing-screenshots completed"
-
-@shared_task
-def auto_monitor_trusted_assets_task(project_id=None):
-    """Automatically monitor trusted assets for a project"""
-    if project_id is None:
-        project_id = 1  # Default to project 1 if not specified
-    
-    count, assets = auto_monitor_trusted_assets(project_id)
-    return f"auto_monitor_trusted_assets completed: {count} assets updated"
-
-@shared_task
-def auto_unmonitor_assets_task(project_id=None):
-    """Automatically unmonitor inactive assets for a project"""
-    if project_id is None:
-        project_id = 1  # Default to project 1 if not specified
-    
-    count, assets = auto_unmonitor_assets(project_id)
-    return f"auto_unmonitor_assets completed: {count} assets unmonitored"

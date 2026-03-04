@@ -9,7 +9,10 @@ urlpatterns = [
     path('v1/projects/', views.list_projects, name='list_projects'),
     path('v1/project/create/', views.create_project, name='create_project'),
     path('v1/project/<str:projectid>/keywords/<str:selection>/', views.list_keywords, name='list_keywords'),
+    path('v1/project/<str:projectid>/suggestions/bulk/', views.bulk_suggestions, name='bulk_suggestions'),
+    path('v1/project/<str:projectid>/suggestions/ignored/bulk/', views.bulk_suggestions_ignored, name='bulk_suggestions_ignored'),
     path('v1/project/<str:projectid>/suggestions/<str:selection>/<str:vtype>/', views.list_suggestions, name='list_suggestions'),
+    path('v1/project/<str:projectid>/assets/bulk/', views.bulk_assets, name='bulk_assets'),
     path('v1/project/<str:projectid>/assets/<str:selection>/', views.list_assets, name='list_assets'),
     path('v1/project/<str:projectid>/dns_records/', views.list_dns_records, name='list_dns_records'),
     path('v1/project/<str:projectid>/endpoints/', views.list_endpoints, name='list_endpoints'),
@@ -22,11 +25,14 @@ urlpatterns = [
 
     # ports APIs
     path('v1/project/<str:projectid>/ports/', views.list_ports, name='list_ports'),
+    path('v1/project/<str:projectid>/ports/bulk/', views.bulk_ports, name='bulk_ports'),
     path('v1/project/<str:projectid>/ports/<str:portid>/delete/', views.delete_port, name='delete_port'),
 
     # Findings APIs
     path('v1/project/<str:projectid>/findings/all/', views.list_all_findings, name='list_all_findings'),
+    path('v1/project/<str:projectid>/findings/bulk/', views.bulk_findings, name='bulk_findings'),
     path('v1/project/<str:projectid>/findings/data_leaks/', views.list_data_leaks, name='list_data_leaks'),
+    path('v1/project/<str:projectid>/findings/data_leaks/bulk/', views.bulk_findings_data_leaks, name='bulk_findings_data_leaks'),
     path('v1/project/<str:projectid>/findings/delete/<str:findingid>/', views.delete_finding, name='delete_finding'),
     path('v1/project/<str:projectid>/findings/<str:findingid>/update_comment/', views.update_finding_comment, name='update_finding_comment'),
     # path('v1/project/<str:projectid>/recent/<str:severity>/', views.list_recent_findings, name='list_recent_findings'),

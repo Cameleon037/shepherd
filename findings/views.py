@@ -212,55 +212,6 @@ def assets(request):
     
     # Add form for manual asset addition
     context['assetform'] = AddAssetForm()
-
-    # check for POST request
-    if request.method == 'POST':
-        if not request.user.has_perm('project.change_asset'):
-            return HttpResponseForbidden("You do not have permission.")
-        # determine action
-        if "btnignore" in request.POST:
-            action = "ignore"
-        elif "btnmove" in request.POST:
-            action = "move"
-        elif "btndelete" in request.POST:
-            action = "delete"
-        else:
-            messages.error(request, 'Unknown action received!')
-            return redirect(reverse('findings:assets'))
-        # get UUIDs of items
-        id_lst = request.POST.getlist('id[]')
-        for uuid in id_lst:
-            if action == "ignore":
-                try:
-                    ignore_asset(uuid, prj)
-                except Asset.DoesNotExist:
-                    messages.error(request, 'Unknown Asset: %s' % uuid)
-                    continue # take next item
-                messages.info(request, 'Ignored Asset: %s' % Asset.objects.get(uuid=uuid).value)
-            elif action == "move":
-                try:
-                    a_obj = Asset.objects.get(uuid=uuid)
-                    # disable monitoring (equivalent to moving back to suggestions)
-                    a_obj.monitor = False
-                    a_obj.save()
-                except Exception as error:
-                    messages.error(request, 'Unknown: %s' % error)
-                    continue # take next item
-                messages.info(request, 'Disabled monitoring for Asset: %s' % a_obj.value)
-            elif action == "delete":
-                try:
-                    a_obj = Asset.objects.get(uuid=uuid)
-                    domain_to_delete = a_obj.value
-                    a_obj.delete()
-                    messages.info(request, 'Deleted Asset: %s' % domain_to_delete)
-                except Asset.DoesNotExist:
-                    messages.error(request, 'Unknown Asset: %s' % uuid)
-                    continue  # take next item
-        # redirect to asset list
-        return redirect(reverse('findings:assets'))
-    else:
-        # anything that needs to be done for GET request?
-        pass
     return render(request, 'findings/list_assets.html', context)
 
 @login_required
@@ -464,21 +415,7 @@ def send_nucleus(request, findingid):
 def nmap_results(request):
     if not request.user.has_perm('findings.view_port'):
         return HttpResponseForbidden("You do not have permission.")
-    
     context = {'projectid': request.session['current_project']['prj_id']}
-    if request.method == 'POST':
-        if 'btndelete' in request.POST:
-            if not request.user.has_perm('findings.delete_port'):
-                return HttpResponseForbidden("You do not have permission.")
-
-            port_ids = request.POST.getlist('id[]')
-            port_objs = Port.objects.filter(id__in=port_ids)
-            for port_obj in port_objs:
-                port_obj.delete()
-            messages.info(request, 'Deleted selected ports')
-        else:
-            messages.error(request, 'Unknown action received!')
-        print(request.POST)
     return render(request, 'findings/list_nmap_results.html', context)
 
 
@@ -516,56 +453,7 @@ def recent_findings(request):
 def all_findings(request):
     if not request.user.has_perm('findings.view_finding'):
         return HttpResponseForbidden("You do not have permission.")
-    
     context = {'projectid': request.session['current_project']['prj_id']}
-
-    if request.method == 'POST':
-        # determine action
-        if "btndelete" in request.POST:
-            if not request.user.has_perm('findings.delete_finding'):
-                return HttpResponseForbidden("You do not have permission.")
-            action = "delete"
-        elif "btnreport" in request.POST:
-            if not request.user.has_perm('findings.change_finding'):
-                return HttpResponseForbidden("You do not have permission.")
-            action = "report"
-        elif "btnignore" in request.POST:
-            if not request.user.has_perm('findings.change_finding'):
-                return HttpResponseForbidden("You do not have permission.")
-            action = "ignore"
-        else:
-            messages.error(request, 'Unknown action received!')
-            return redirect(reverse('findings:all_findings'))
-        # get IDs of items
-        id_lst = request.POST.getlist('id[]')
-
-        if action == "delete":
-            for findingid in id_lst:
-                try:
-                    Finding.objects.get(id=findingid).delete()
-                except Finding.DoesNotExist:
-                    messages.error(request, 'Unknown Finding: %s' % findingid)
-                    continue  # take next item
-            messages.info(request, 'Selected findings deleted successfully.')
-
-        if action == "report":
-            for findingid in id_lst:
-                try:
-                    send_nucleus(request, findingid)
-                except Finding.DoesNotExist:
-                    messages.error(request, 'Failed reporting Finding: %s' % findingid)
-                    continue  # take next item
-
-        if action == "ignore":
-            for findingid in id_lst:
-                try:
-                    ignore_finding(findingid)
-                except Finding.DoesNotExist:
-                    messages.error(request, 'Unknown Finding: %s' % findingid)
-                    continue  # take next item
-            messages.info(request, 'Ignore status toggled for selected findings.')
-
-        return redirect(reverse('findings:all_findings'))
     return render(request, 'findings/list_findings.html', context)
 
 @login_required
@@ -879,43 +767,7 @@ def export_monitored_assets_csv(request):
 def data_leaks(request):
     if not request.user.has_perm('findings.view_finding'):
         return HttpResponseForbidden("You do not have permission.")
-    
     context = {'projectid': request.session['current_project']['prj_id']}
-
-    if request.method == 'POST':
-        # determine action
-        if "btndelete" in request.POST:
-            if not request.user.has_perm('findings.delete_finding'):
-                return HttpResponseForbidden("You do not have permission.")
-            action = "delete"
-        elif "btnignore" in request.POST:
-            if not request.user.has_perm('findings.change_finding'):
-                return HttpResponseForbidden("You do not have permission.")
-            action = "ignore"
-        else:
-            messages.error(request, 'Unknown action received!')
-            return redirect(reverse('findings:data_leaks'))
-        # get IDs of items
-        id_lst = request.POST.getlist('id[]')
-
-        if action == "delete":
-            for findingid in id_lst:
-                try:
-                    Finding.objects.get(id=findingid).delete()
-                except Finding.DoesNotExist:
-                    messages.error(request, 'Unknown Finding: %s' % findingid)
-                    continue  # take next item
-            messages.info(request, 'Selected findings deleted successfully.')
-
-        if action == "ignore":
-            for findingid in id_lst:
-                try:
-                    ignore_finding(findingid)
-                except Finding.DoesNotExist:
-                    messages.error(request, 'Unknown Finding: %s' % findingid)
-                    continue  # take next item
-            messages.info(request, 'Ignore status toggled for selected findings.')
-
     return render(request, 'findings/list_data_leaks.html', context)
 
 

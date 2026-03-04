@@ -18,6 +18,8 @@ from api.utils import get_ordering_vars, apply_search_filter, apply_column_searc
 
 from project.models import Project, Keyword, Asset, Job, DNSRecord
 from findings.models import Finding, Port, Screenshot, Endpoint
+from findings.utils import ignore_asset, ignore_finding
+from findings.views import send_nucleus
 from django_celery_beat.models import PeriodicTask, IntervalSchedule, CrontabSchedule, ClockedSchedule
 
 # Create your views here.
@@ -219,6 +221,115 @@ def list_suggestions(request, projectid, selection, vtype, format=None):
     return paginator.get_paginated_response(serialized_data)
 
 
+@api_view(['POST'])
+@authentication_classes((SessionAuthentication,))
+@permission_classes((IsAuthenticated,))
+def bulk_suggestions(request, projectid, format=None):
+    """Bulk actions on suggestions: monitor, ignore, delete. POST body: action=monitor|ignore|delete, id[]=uuid..."""
+    if not request.user.has_perm('project.view_asset'):
+        return HttpResponseForbidden("You do not have permission.")
+    try:
+        prj = Project.objects.get(id=projectid)
+    except Project.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Project not found'}, status=404)
+    action = request.POST.get('action')
+    if not action:
+        if 'btnmonitor' in request.POST:
+            action = 'monitor'
+        elif 'btnignore' in request.POST:
+            action = 'ignore'
+        elif 'btndelete' in request.POST:
+            action = 'delete'
+    if action not in ('monitor', 'ignore', 'delete'):
+        return JsonResponse({'success': False, 'error': 'Unknown action'}, status=400)
+    if action in ('monitor', 'ignore') and not request.user.has_perm('project.change_asset'):
+        return HttpResponseForbidden("You do not have permission.")
+    if action == 'delete' and not request.user.has_perm('project.delete_asset'):
+        return HttpResponseForbidden("You do not have permission.")
+    id_lst = request.POST.getlist('id[]')
+    if not id_lst:
+        return JsonResponse({'success': False, 'error': 'No items selected'}, status=400)
+    errors = []
+    for item in id_lst:
+        try:
+            s_obj = Asset.objects.get(uuid=item, scope='external')
+            if action == 'delete':
+                s_obj.delete()
+            elif action == 'ignore':
+                s_obj.ignore = True
+                s_obj.save()
+            elif action == 'monitor':
+                if s_obj.type in ['certificate', 'domain']:
+                    try:
+                        m_obj = Asset.objects.get(uuid=s_obj.uuid)
+                    except Asset.DoesNotExist:
+                        m_obj = Asset()
+                        m_obj.related_keyword = s_obj.related_keyword
+                        m_obj.related_project = s_obj.related_project
+                        m_obj.value = s_obj.value
+                        m_obj.uuid = s_obj.uuid
+                        m_obj.source = s_obj.source
+                        m_obj.creation_time = s_obj.creation_time
+                        m_obj.description = s_obj.description
+                        m_obj.link = s_obj.link
+                        m_obj.save()
+                    s_obj.monitor = True
+                    s_obj.save()
+                else:
+                    errors.append('Unsupported type: %s' % s_obj.type)
+        except Asset.DoesNotExist:
+            errors.append('Unknown Suggestion: %s' % item)
+        except Exception as e:
+            errors.append(str(e))
+    if errors:
+        return JsonResponse({'success': False, 'error': '; '.join(errors[:5])}, status=400)
+    return JsonResponse({'success': True, 'message': 'Action completed successfully'})
+
+
+@api_view(['POST'])
+@authentication_classes((SessionAuthentication,))
+@permission_classes((IsAuthenticated,))
+def bulk_suggestions_ignored(request, projectid, format=None):
+    """Bulk actions on ignored suggestions: move (reactivate), delete. POST body: action=move|delete, id[]=uuid..."""
+    if not request.user.has_perm('project.view_asset'):
+        return HttpResponseForbidden("You do not have permission.")
+    try:
+        Project.objects.get(id=projectid)
+    except Project.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Project not found'}, status=404)
+    action = request.POST.get('action')
+    if not action:
+        if 'btnmove' in request.POST:
+            action = 'move'
+        elif 'btndelete' in request.POST:
+            action = 'delete'
+    if action not in ('move', 'delete'):
+        return JsonResponse({'success': False, 'error': 'Unknown action'}, status=400)
+    if action == 'move' and not request.user.has_perm('project.change_asset'):
+        return HttpResponseForbidden("You do not have permission.")
+    if action == 'delete' and not request.user.has_perm('project.delete_asset'):
+        return HttpResponseForbidden("You do not have permission.")
+    id_lst = request.POST.getlist('id[]')
+    if not id_lst:
+        return JsonResponse({'success': False, 'error': 'No items selected'}, status=400)
+    errors = []
+    for item in id_lst:
+        try:
+            s_obj = Asset.objects.get(uuid=item, scope='external')
+            if action == 'delete':
+                s_obj.delete()
+            elif action == 'move':
+                s_obj.ignore = False
+                s_obj.save()
+        except Asset.DoesNotExist:
+            errors.append('Unknown Suggestion: %s' % item)
+        except Exception as e:
+            errors.append(str(e))
+    if errors:
+        return JsonResponse({'success': False, 'error': '; '.join(errors[:5])}, status=400)
+    return JsonResponse({'success': True, 'message': 'Action completed successfully'})
+
+
 ##### END SUGGESTIONS ###########
 
 
@@ -343,6 +454,55 @@ def list_assets(request, projectid, selection, format=None):
     assets = paginator.paginate_queryset(queryset, request)
     serializer = AssetSerializer(instance=assets, many=True)
     return paginator.get_paginated_response(serializer.data)
+
+
+@api_view(['POST'])
+@authentication_classes((SessionAuthentication,))
+@permission_classes((IsAuthenticated,))
+def bulk_assets(request, projectid, format=None):
+    """Bulk actions on assets: ignore, move, delete. POST body: action=ignore|move|delete, id[]=uuid..."""
+    if not request.user.has_perm('project.view_asset'):
+        return HttpResponseForbidden("You do not have permission.")
+    if not request.user.has_perm('project.change_asset'):
+        return HttpResponseForbidden("You do not have permission.")
+    try:
+        prj = Project.objects.get(id=projectid)
+    except Project.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Project not found'}, status=404)
+    action = request.POST.get('action')
+    if not action:
+        if 'btnignore' in request.POST:
+            action = 'ignore'
+        elif 'btnmove' in request.POST:
+            action = 'move'
+        elif 'btndelete' in request.POST:
+            action = 'delete'
+    if action not in ('ignore', 'move', 'delete'):
+        return JsonResponse({'success': False, 'error': 'Unknown action'}, status=400)
+    if action == 'delete' and not request.user.has_perm('project.delete_asset'):
+        return HttpResponseForbidden("You do not have permission.")
+    id_lst = request.POST.getlist('id[]')
+    if not id_lst:
+        return JsonResponse({'success': False, 'error': 'No items selected'}, status=400)
+    errors = []
+    for uuid in id_lst:
+        try:
+            if action == 'ignore':
+                ignore_asset(uuid, prj)
+            elif action == 'move':
+                a_obj = Asset.objects.get(uuid=uuid)
+                a_obj.monitor = False
+                a_obj.save()
+            elif action == 'delete':
+                a_obj = Asset.objects.get(uuid=uuid)
+                a_obj.delete()
+        except Asset.DoesNotExist:
+            errors.append('Unknown Asset: %s' % uuid)
+        except Exception as e:
+            errors.append(str(e))
+    if errors:
+        return JsonResponse({'success': False, 'error': '; '.join(errors[:5])}, status=400)
+    return JsonResponse({'success': True, 'message': 'Action completed successfully'})
 
 
 ##### END ASSETS ###########
@@ -655,6 +815,34 @@ def delete_port(request, projectid, portid):
     port_obj.delete()
     return JsonResponse({'success': True})
 
+
+@api_view(['POST'])
+@authentication_classes((SessionAuthentication,))
+@permission_classes((IsAuthenticated,))
+def bulk_ports(request, projectid, format=None):
+    """Bulk delete ports. POST body: action=delete, id[]=id..."""
+    if not request.user.has_perm('findings.view_port'):
+        return HttpResponseForbidden("You do not have permission.")
+    if not request.user.has_perm('findings.delete_port'):
+        return HttpResponseForbidden("You do not have permission.")
+    try:
+        Project.objects.get(id=projectid)
+    except Project.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Project not found'}, status=404)
+    action = request.POST.get('action')
+    if not action and 'btndelete' in request.POST:
+        action = 'delete'
+    if action != 'delete':
+        return JsonResponse({'success': False, 'error': 'Unknown action'}, status=400)
+    port_ids = request.POST.getlist('id[]')
+    if not port_ids:
+        return JsonResponse({'success': False, 'error': 'No items selected'}, status=400)
+    port_objs = Port.objects.filter(id__in=port_ids, asset__related_project__id=projectid)
+    count = port_objs.count()
+    port_objs.delete()
+    return JsonResponse({'success': True, 'message': 'Deleted %s port(s)' % count})
+
+
 ##### END PORTS ###############
 
 
@@ -911,6 +1099,94 @@ def delete_finding(request, projectid, findingid):
         return JsonResponse({'message': 'Finding successfully deleted', 'status': 'success'}, status=200)
     except Finding.DoesNotExist:
         return JsonResponse({'message': 'Finding does not exist', 'status': 'failure'}, status=404)
+
+
+@api_view(['POST'])
+@authentication_classes((SessionAuthentication,))
+@permission_classes((IsAuthenticated,))
+def bulk_findings(request, projectid, format=None):
+    """Bulk actions on findings: ignore, delete, report. POST body: action=ignore|delete|report, id[]=id..."""
+    if not request.user.has_perm('findings.view_finding'):
+        return HttpResponseForbidden("You do not have permission.")
+    try:
+        Project.objects.get(id=projectid)
+    except Project.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Project not found'}, status=404)
+    action = request.POST.get('action')
+    if not action:
+        if 'btnignore' in request.POST:
+            action = 'ignore'
+        elif 'btndelete' in request.POST:
+            action = 'delete'
+        elif 'btnreport' in request.POST:
+            action = 'report'
+    if action not in ('ignore', 'delete', 'report'):
+        return JsonResponse({'success': False, 'error': 'Unknown action'}, status=400)
+    if action in ('ignore', 'report') and not request.user.has_perm('findings.change_finding'):
+        return HttpResponseForbidden("You do not have permission.")
+    if action == 'delete' and not request.user.has_perm('findings.delete_finding'):
+        return HttpResponseForbidden("You do not have permission.")
+    id_lst = request.POST.getlist('id[]')
+    if not id_lst:
+        return JsonResponse({'success': False, 'error': 'No items selected'}, status=400)
+    errors = []
+    for findingid in id_lst:
+        try:
+            if action == 'delete':
+                Finding.objects.get(id=findingid).delete()
+            elif action == 'ignore':
+                ignore_finding(findingid)
+            elif action == 'report':
+                send_nucleus(request, findingid)
+        except Finding.DoesNotExist:
+            errors.append('Unknown Finding: %s' % findingid)
+        except Exception as e:
+            errors.append(str(e))
+    if errors:
+        return JsonResponse({'success': False, 'error': '; '.join(errors[:5])}, status=400)
+    return JsonResponse({'success': True, 'message': 'Action completed successfully'})
+
+
+@api_view(['POST'])
+@authentication_classes((SessionAuthentication,))
+@permission_classes((IsAuthenticated,))
+def bulk_findings_data_leaks(request, projectid, format=None):
+    """Bulk actions on data leak findings: ignore, delete. POST body: action=ignore|delete, id[]=id..."""
+    if not request.user.has_perm('findings.view_finding'):
+        return HttpResponseForbidden("You do not have permission.")
+    try:
+        Project.objects.get(id=projectid)
+    except Project.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Project not found'}, status=404)
+    action = request.POST.get('action')
+    if not action:
+        if 'btnignore' in request.POST:
+            action = 'ignore'
+        elif 'btndelete' in request.POST:
+            action = 'delete'
+    if action not in ('ignore', 'delete'):
+        return JsonResponse({'success': False, 'error': 'Unknown action'}, status=400)
+    if action == 'ignore' and not request.user.has_perm('findings.change_finding'):
+        return HttpResponseForbidden("You do not have permission.")
+    if action == 'delete' and not request.user.has_perm('findings.delete_finding'):
+        return HttpResponseForbidden("You do not have permission.")
+    id_lst = request.POST.getlist('id[]')
+    if not id_lst:
+        return JsonResponse({'success': False, 'error': 'No items selected'}, status=400)
+    errors = []
+    for findingid in id_lst:
+        try:
+            if action == 'delete':
+                Finding.objects.get(id=findingid).delete()
+            elif action == 'ignore':
+                ignore_finding(findingid)
+        except Finding.DoesNotExist:
+            errors.append('Unknown Finding: %s' % findingid)
+        except Exception as e:
+            errors.append(str(e))
+    if errors:
+        return JsonResponse({'success': False, 'error': '; '.join(errors[:5])}, status=400)
+    return JsonResponse({'success': True, 'message': 'Action completed successfully'})
 
 
 @api_view(['POST'])

@@ -29,7 +29,7 @@
   </div>
 </div>
 
-<form id="form-selected" action="" method="POST">
+<form id="form-selected">
   {% csrf_token %}
 
   <div class="container-fluid" style="padding-left:0; padding-right:0;">
@@ -38,9 +38,9 @@
         <div class="panel panel-default">
           <div class="panel-heading">// Selected Actions</div>
           <div class="panel-body">
-            <button type="submit" name="btnmonitor" id="monitor-selected" class="btn btn-primary btn-xs">Monitor selected</button>&nbsp;
-            <button type="submit" name="btnignore" id="ignore-selected" class="btn btn-primary btn-xs">Ignore selected</button>&nbsp;
-            <button type="submit" name="btndelete" id="delete-selected" class="btn btn-primary btn-xs confirm">Delete selected</button>&nbsp;
+            <button type="button" name="btnmonitor" id="monitor-selected" class="btn btn-primary btn-xs">Monitor selected</button>&nbsp;
+            <button type="button" name="btnignore" id="ignore-selected" class="btn btn-primary btn-xs">Ignore selected</button>&nbsp;
+            <button type="button" name="btndelete" id="delete-selected" class="btn btn-primary btn-xs confirm">Delete selected</button>&nbsp;
             <button type="button" id="scan-selected-suggestions-btn" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#ScanSuggestionsModal">Scan selected suggestions</button>&nbsp;
           </div>
         </div>
@@ -606,24 +606,17 @@
     setupStandaloneSelectAll('#select-all-items-starred', '#table_list_starreddomain_suggestions');
     setupStandaloneSelectAll('#select-all-items-ip', '#table_list_ipaddress_suggestions');
 
-    // Setup form submission for multiple DataTables
-    $('#form-selected').on('submit', function (e) {
-      var form = this;
-      // Use the common form submission logic for each table
-      [domTable, subTable, starredTable, ipTable].forEach(function(table) {
-        table.$('input[type="checkbox"]').each(function () {
-          if (!$.contains(document, this)) {
-            if (this.checked) {
-              $(form).append(
-                $('<input>')
-                  .attr('type', 'hidden')
-                  .attr('name', this.name)
-                  .val(this.value)
-              );
-            }
-          }
-        });
-      });
+    // Bulk actions via API (no page refresh)
+    setupBulkActions({
+      formSelector: '#form-selected',
+      apiUrl: '/api/v1/project/{{ projectid }}/suggestions/bulk/',
+      checkboxName: 'id[]',
+      tableInstances: [domTable, subTable, starredTable, ipTable],
+      buttons: [
+        { name: 'btnmonitor', action: 'monitor', confirm: false },
+        { name: 'btnignore', action: 'ignore', confirm: false },
+        { name: 'btndelete', action: 'delete', confirm: true }
+      ]
     });
 
     $(document).on("click", ".confirm", function (e) {

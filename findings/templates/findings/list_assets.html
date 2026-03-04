@@ -95,7 +95,7 @@
   </div>
 </div>
 
-<form id="form-selected" action="" method="POST">
+<form id="form-selected">
   {% csrf_token %}
 
 <div class="container-fluid" style="padding-left:0; padding-right:0;">
@@ -104,8 +104,8 @@
       <div class="panel panel-default">
             <div class="panel-heading">// Selected Actions</div>
         <div class="panel-body">
-          <button type="submit" name="btnignore" id="ignore-selected" class="btn btn-primary btn-xs">Ignore selected</button>&nbsp;
-          <button type="submit" name="btnmove" id="move-selected" class="btn btn-primary btn-xs">Move back to suggestions</button>&nbsp;
+          <button type="button" name="btnignore" id="ignore-selected" class="btn btn-primary btn-xs">Ignore selected</button>&nbsp;
+          <button type="button" name="btnmove" id="move-selected" class="btn btn-primary btn-xs">Move back to suggestions</button>&nbsp;
           <button type="button" id="scan-selected-assets-btn" class="btn btn-primary btn-xs">Scan selected assets</button>&nbsp;
         </div>
       </div>
@@ -361,6 +361,18 @@ $(document).ready(function () {
     
     // Setup select all for multiple tables
     setupStandaloneSelectAll('#select-all-items', '#table_list_assets');
+
+    // Bulk actions via API (no page refresh)
+    setupBulkActions({
+      formSelector: '#form-selected',
+      apiUrl: '/api/v1/project/{{ projectid }}/assets/bulk/',
+      checkboxName: 'id[]',
+      tableInstances: [monitoredTable],
+      buttons: [
+        { name: 'btnignore', action: 'ignore', confirm: false },
+        { name: 'btnmove', action: 'move', confirm: false }
+      ]
+    });
 
     // "Scan selected assets" -> store UUIDs in session and redirect to control center
     $('#scan-selected-assets-btn').on('click', function (e) {
