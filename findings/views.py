@@ -98,8 +98,12 @@ def _run_scan_jobs(project_id, user, selected_uuids, scan_new_assets, scans):
     def scan_domain_redirect():
         launch('get_domain_redirect')
 
+    def scan_domaintools():
+        launch('scan_domaintools')
+
     scan_dns_records_flag = scans.get('scan_dns_records')
     scan_domain_redirect_flag = scans.get('scan_domain_redirect')
+    scan_domaintools_flag = scans.get('scan_domaintools')
     scan_nmap_flag = scans.get('scan_nmap')
     scan_httpx_flag = scans.get('scan_httpx')
     scan_playwright_flag = scans.get('scan_playwright')
@@ -124,6 +128,10 @@ def _run_scan_jobs(project_id, user, selected_uuids, scan_new_assets, scans):
     if scan_domain_redirect_flag:
         primary_threads.append(threading.Thread(target=scan_domain_redirect))
         add_message('Domain Redirect scan has been triggered in the background. (check jobs)')
+
+    if scan_domaintools_flag:
+        primary_threads.append(threading.Thread(target=scan_domaintools))
+        add_message('DomainTools registrant scan has been triggered in the background. (check jobs)')
 
     if nmap_chained:
         # Create a chained thread: Nmap runs first, then screenshot engine(s) and/or Katana after completion
@@ -608,6 +616,7 @@ def control_center_launch(request):
         'scan_shepherdai': bool(scans.get('scan_shepherdai')),
         'scan_nuclei': bool(scans.get('scan_nuclei')),
         'scan_nuclei_new_templates': bool(scans.get('scan_nuclei_new_templates')),
+        'scan_domaintools': bool(scans.get('scan_domaintools')),
     }
 
     if not any(scan_flags.values()):

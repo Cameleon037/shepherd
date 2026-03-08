@@ -94,7 +94,10 @@ class Asset(models.Model):
     owner = models.TextField(blank=True, default='')
     
     raw = models.JSONField(null=True, default=None)
-    
+
+    # Registrant/WHOIS info from DomainTools (scan_domaintools)
+    registrant_info = models.JSONField(null=True, default=None, blank=True)
+
     def __str__(self):
         return "%s - %s" % (self.value, self.source)
 

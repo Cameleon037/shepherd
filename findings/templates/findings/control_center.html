@@ -172,6 +172,15 @@
     </div>
 
     <div class="scanner-section">
+        <h5>WHOIS enrichment</h5>
+        <div class="scanner-legend">Fetches registrant info (email, org, registrar…) for each monitored domain via DomainTools Iris Investigate.</div>
+        <div class="toggle-row">
+            <input type="checkbox" id="scan-domaintools">
+            <label for="scan-domaintools">DomainTools (registrant info)</label>
+        </div>
+    </div>
+
+    <div class="scanner-section">
         <h5>Shepherd AI <span class="hint-pill">Uses gathered data</span></h5>
         <div class="scanner-legend">Reviews ports, screenshots, and findings for extra insights.</div>
         <div class="toggle-row">
@@ -264,7 +273,8 @@ $(document).ready(function () {
             scan_katana: $('#scan-katana').is(':checked'),
             scan_shepherdai: $('#scan-shepherdai').is(':checked'),
             scan_nuclei: $('#scan-nuclei').is(':checked'),
-            scan_nuclei_new_templates: $('#scan-nuclei-new').is(':checked')
+            scan_nuclei_new_templates: $('#scan-nuclei-new').is(':checked'),
+            scan_domaintools: $('#scan-domaintools').is(':checked')
         };
     }
 

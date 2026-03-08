@@ -120,6 +120,13 @@ def scan_ransomlook_task():
     return "scan_ransomlook completed"
 
 @shared_task
+def scan_domaintools_task():
+    command = 'scan_domaintools'
+    args = f'--projectid {project_id}'
+    run_job(command, args, project_id, user=scheduler_user)
+    return "scan_domaintools completed"
+
+@shared_task
 def scan_subfinder_task():
     command = 'scan_subfinder'
     args = f'--projectid {project_id}'

@@ -14,12 +14,32 @@ class KeywordSerializer(serializers.ModelSerializer):
         model = Keyword
         fields = '__all__'
 
+def _format_registrant_info_display(registrant_info):
+    """Format registrant_info JSON into a short readable string for table display."""
+    if not registrant_info or not isinstance(registrant_info, dict):
+        return ''
+    parts = []
+    if registrant_info.get('registrant_org'):
+        parts.append('Org: ' + str(registrant_info['registrant_org'])[:40])
+    if registrant_info.get('registrant_name'):
+        parts.append('Name: ' + str(registrant_info['registrant_name'])[:30])
+    if registrant_info.get('registrant') and not parts:
+        parts.append(str(registrant_info['registrant'])[:50])
+    if registrant_info.get('registrar') and len(parts) < 2:
+        parts.append('Registrar: ' + str(registrant_info['registrar'])[:25])
+    return ' • '.join(parts) if parts else '—'
+
+
 class SuggestionSerializer(serializers.ModelSerializer):
     ip = serializers.SerializerMethodField()
+    registrant_info_display = serializers.SerializerMethodField()
 
     class Meta:
         model = Asset
         fields = '__all__'
+
+    def get_registrant_info_display(self, obj):
+        return _format_registrant_info_display(obj.registrant_info)
 
     def get_ip(self, obj):
         ips = []
@@ -47,10 +67,14 @@ class AssetSerializer(serializers.ModelSerializer):
     vuln_info = serializers.IntegerField()
     vulns = serializers.SerializerMethodField()
     ip = serializers.SerializerMethodField()
+    registrant_info_display = serializers.SerializerMethodField()
 
     class Meta:
         model = Asset
         fields = '__all__'
+
+    def get_registrant_info_display(self, obj):
+        return _format_registrant_info_display(obj.registrant_info)
 
     def get_vulns(self, obj):
         return '<span class="label label-default">'+str(obj.vuln_critical)+'</span><span class="label label-danger">'+str(obj.vuln_high)+'</span><span class="label label-warning">'+str(obj.vuln_medium)+'</span><span class="label label-success">'+str(obj.vuln_low)+'</span><span  class="label label-primary">'+str(obj.vuln_info)+'</span>'

@@ -2,7 +2,8 @@ from datetime import datetime, timedelta
 
 from django.shortcuts import render
 from django.http import HttpResponseForbidden, JsonResponse, HttpResponse, HttpResponseRedirect
-from django.db.models import Q, Prefetch, Count, F, Case, When, IntegerField
+from django.db.models import Q, Prefetch, Count, F, Case, When, IntegerField, TextField
+from django.db.models.functions import Cast
 from django.conf import settings
 from django.utils.timezone import make_aware
 
@@ -110,7 +111,8 @@ def list_suggestions(request, projectid, selection, vtype, format=None):
     search_ip = request.query_params.get('columns[9][search][value]', None)
     search_owner = request.query_params.get('columns[10][search][value]', None)
     search_scope = request.query_params.get('columns[11][search][value]', None)
-    
+    search_registrant_info = request.query_params.get('columns[12][search][value]', None)
+
     ### create queryset
     if selection in ['ignored']:
         queryset = prj.asset_set.filter(ignore=True)
@@ -193,6 +195,13 @@ def list_suggestions(request, projectid, selection, vtype, format=None):
         elif search_scope.lower() == 'internal':
             queryset = queryset.filter(scope='internal')
         # 'all' returns all, no additional filter
+
+    # Registrant info filter: match if search text appears anywhere in the JSON values
+    if search_registrant_info and search_registrant_info.strip():
+        term = search_registrant_info.strip()
+        queryset = queryset.filter(registrant_info__isnull=False).annotate(
+            ri_text=Cast('registrant_info', TextField())
+        ).filter(ri_text__icontains=term)
 
     ### get variables
     order_by_column, order_direction = get_ordering_vars(request.query_params,
@@ -370,6 +379,7 @@ def list_assets(request, projectid, selection, format=None):
         'ip': request.query_params.get('columns[8][search][value]', None),
         'owner': request.query_params.get('columns[9][search][value]', None),
         'scope': request.query_params.get('columns[10][search][value]', None),
+        'registrant_info': request.query_params.get('columns[11][search][value]', None),
     }
 
     ### create queryset
@@ -438,6 +448,13 @@ def list_assets(request, projectid, selection, format=None):
         )
     
     queryset = apply_column_search(queryset, search_columns['owner'], 'owner__icontains', min_length=1)
+
+    # Registrant info filter: match if search text appears anywhere in the JSON values
+    if search_columns['registrant_info'] and search_columns['registrant_info'].strip():
+        term = search_columns['registrant_info'].strip()
+        queryset = queryset.filter(registrant_info__isnull=False).annotate(
+            ri_text=Cast('registrant_info', TextField())
+        ).filter(ri_text__icontains=term)
 
     ### get variables
     order_by_column, order_direction = get_ordering_vars(

@@ -654,3 +654,60 @@ function initializeUploadModal(config) {
         updateFileDisplay(null);
     });
 }
+
+/**
+ * Render an Asset.registrant_info dict as a compact key-value block.
+ * Shows the first field as a preview; hover reveals the rest.
+ * Non-display types return raw JSON for sorting/filtering.
+ *
+ * Usage in DataTable column definition:
+ *   render: function(data, type, row) { return renderRegistrantInfo(data, type); },
+ *   fnCreatedCell: function(nTd) { initRegistrantCellHover(nTd); }
+ */
+function renderRegistrantInfo(data, type) {
+    if (type && type !== 'display') return JSON.stringify(data || '');
+    if (!data || typeof data !== 'object') return '';
+    var fields = [
+        ['Org',       data.registrant_org],
+        ['Name',      data.registrant_name],
+        ['Email',     data.registrant_email],
+        ['Phone',     data.registrant_phone],
+        ['City',      data.registrant_city],
+        ['Country',   data.registrant_country],
+        ['Registrar', data.registrar],
+        ['Created',   data.registration_created],
+        ['Expires',   data.registration_expires],
+        ['Active',    data.active != null ? String(data.active) : null],
+    ];
+    var lines = fields
+        .filter(function(f) { return f[1]; })
+        .map(function(f) {
+            return '<b>' + f[0] + ':</b> ' + $('<span/>').text(f[1]).html();
+        });
+    if (!lines.length) return '';
+    if (lines.length === 1) return '<small>' + lines[0] + '</small>';
+    return '<small class="registrant-cell" style="cursor:pointer;">' +
+        '<span class="registrant-preview">' + lines[0] +
+        ' <span class="text-muted">(+' + (lines.length - 1) + ')</span></span>' +
+        '<span class="registrant-rest" style="display:none;">' + lines.join('<br>') + '</span>' +
+        '</small>';
+}
+
+/**
+ * Wire up hover expand/collapse for cells rendered by renderRegistrantInfo.
+ * Call this in fnCreatedCell for the registrant_info column.
+ */
+function initRegistrantCellHover(nTd) {
+    var $cell = $(nTd).find('.registrant-cell');
+    if (!$cell.length) return;
+    $cell.hover(
+        function() {
+            $(this).find('.registrant-preview').hide();
+            $(this).find('.registrant-rest').show();
+        },
+        function() {
+            $(this).find('.registrant-rest').hide();
+            $(this).find('.registrant-preview').show();
+        }
+    );
+}

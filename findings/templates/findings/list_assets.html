@@ -133,6 +133,7 @@
           <th>IP</th>
           <th>Owner</th>
           <th>Scope</th>
+          <th>Registrant info</th>
         </tr>
         <tr>
           <th></th>
@@ -160,6 +161,9 @@
               <option value="external">External</option>
               <option value="internal">Internal</option>
             </select>
+          </th>
+          <th>
+            <input type="text" placeholder="Search in registrant info" class="column-search-input form-control input-sm" title="Match if text appears anywhere in registrant info">
           </th>
         </tr>
       </thead>
@@ -277,7 +281,11 @@ $(document).ready(function () {
             initTruncatedCellTooltips(nTd);
           }
         },
-        {'data': 'scope', 'sName': 'Scope'}
+        {'data': 'scope', 'sName': 'Scope'},
+        {'data': 'registrant_info', 'sName': 'Registrant info',
+          'render': function(data, type, row) { return renderRegistrantInfo(data, type); },
+          'fnCreatedCell': function(nTd) { initRegistrantCellHover(nTd); }
+        }
     ];
 
     // Define columns for the ignored assets table
@@ -332,6 +340,10 @@ $(document).ready(function () {
               return '<span class="label label-purple" style="margin-right: 4px;">' + $('<div/>').text(tag).html() + '</span>';
             }).join('');
           }
+        },
+        {'data': 'registrant_info', 'sName': 'Registrant info',
+          'render': function(data, type, row) { return renderRegistrantInfo(data, type); },
+          'fnCreatedCell': function(nTd) { initRegistrantCellHover(nTd); }
         }
     ];
 
