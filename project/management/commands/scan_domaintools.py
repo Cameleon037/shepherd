@@ -16,8 +16,10 @@ from project.scan_utils import resolve_uuids, add_common_scan_arguments
 class Command(BaseCommand):
     help = 'Fetch registrant information from DomainTools Iris Investigate for monitored domain assets and store in Asset.registrant_info'
 
-    # Delay between API calls to avoid rate limiting (seconds)
-    RATE_LIMIT_DELAY = 1.0
+    # Iris Investigate accepts up to 100 domains per request
+    BATCH_SIZE = 100
+    # Seconds to wait between batch requests (20 req/min limit → 3 s gives headroom)
+    RATE_LIMIT_DELAY = 3.0
 
     def add_arguments(self, parser):
         parser.add_argument('--projectid', type=int, help='ID of the project to scan')
@@ -36,8 +38,11 @@ class Command(BaseCommand):
             digestmod=hashlib.sha1,
         ).hexdigest()
 
-    def _iris_lookup(self, domain):
-        """Query Iris Investigate for a single domain. Returns the first result item or None."""
+    def _iris_lookup_batch(self, domains):
+        """Query Iris Investigate for up to 100 domains in one request.
+
+        Returns a dict {domain: result_item} for every domain that had a result.
+        """
         uri = "/v1/iris-investigate/"
         url = f"https://api.domaintools.com{uri}"
         ts = self.timestamp()
@@ -45,17 +50,17 @@ class Command(BaseCommand):
             "api_username": settings.DOMAINTOOLS_USER,
             "timestamp": ts,
             "signature": self.sign(ts, uri),
-            "domain": domain,
+            "domain": ",".join(domains),
         }
         try:
-            rsp = requests.get(url, params=params, timeout=30)
-            # print(rsp.json())
+            rsp = requests.get(url, params=params, timeout=60)
             rsp.raise_for_status()
             results = rsp.json()["response"]["results"]
-            return results[0] if results else None
+            # Each result item has a 'domain' key with the queried domain name
+            return {item["domain"]: item for item in results if item.get("domain")}
         except Exception as e:
-            self.stderr.write(f"Iris Investigate failed for {domain}: {e}")
-            return None
+            self.stderr.write(f"Iris Investigate batch failed for {domains}: {e}")
+            return {}
 
     def _val(self, field):
         """Safely extract 'value' from an Iris Investigate field.
@@ -145,22 +150,29 @@ class Command(BaseCommand):
             else:
                 self.stdout.write(f"Skipping (invalid domain): {asset.value}")
 
+        all_domains = list(domain_to_assets.keys())
+        total_batches = (len(all_domains) + self.BATCH_SIZE - 1) // self.BATCH_SIZE
+        self.stdout.write(f"Querying {len(all_domains)} unique root domain(s) in {total_batches} batch(es) of up to {self.BATCH_SIZE}.")
+
         count = 0
-        for domain, domain_assets in domain_to_assets.items():
-            self.stdout.write(f"Fetching Iris Investigate data for: {domain}")
-            item = self._iris_lookup(domain)
-            if not item:
+        for batch_num, i in enumerate(range(0, len(all_domains), self.BATCH_SIZE), start=1):
+            batch = all_domains[i:i + self.BATCH_SIZE]
+            self.stdout.write(f"Batch {batch_num}/{total_batches}: {batch}")
+            results = self._iris_lookup_batch(batch)
+
+            for domain in batch:
+                item = results.get(domain)
+                if not item:
+                    self.stdout.write(f"  No result for: {domain}")
+                    continue
+                info = self._build_registrant_info(item)
+                for asset in domain_to_assets[domain]:
+                    asset.registrant_info = info
+                    asset.save(update_fields=["registrant_info"])
+                    self.stdout.write(f"  Updated {asset.value}")
+                    count += 1
+
+            if batch_num < total_batches:
                 time.sleep(self.RATE_LIMIT_DELAY)
-                continue
-
-            info = self._build_registrant_info(item)
-
-            for asset in domain_assets:
-                asset.registrant_info = info
-                asset.save(update_fields=["registrant_info"])
-                self.stdout.write(f"  Updated {asset.value}")
-                count += 1
-
-            time.sleep(self.RATE_LIMIT_DELAY)
 
         self.stdout.write(self.style.SUCCESS(f"Updated registrant_info for {count} asset(s)."))
