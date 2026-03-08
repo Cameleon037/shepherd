@@ -375,6 +375,10 @@ def view_asset(request, uuid):
     endpoints = list(endpoints_all[:20])
     endpoints_remaining = list(endpoints_all[20:])
 
+    registrant_info_json = ''
+    if a_obj.registrant_info:
+        registrant_info_json = json.dumps(a_obj.registrant_info, indent=2)
+
     context = {
         'asset': a_obj,
         'ports': a_obj.port_set.all().order_by('port'),
@@ -385,6 +389,7 @@ def view_asset(request, uuid):
         'endpoints': endpoints,
         'endpoints_total': endpoints_total,
         'endpoints_remaining': endpoints_remaining,
+        'registrant_info_json': registrant_info_json,
     }
     return render(request, 'findings/view_asset.html', context)
 

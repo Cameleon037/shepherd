@@ -106,6 +106,7 @@
         <div class="panel-body">
           <button type="button" name="btnignore" id="ignore-selected" class="btn btn-primary btn-xs">Ignore selected</button>&nbsp;
           <button type="button" name="btnmove" id="move-selected" class="btn btn-primary btn-xs">Move back to suggestions</button>&nbsp;
+          <button type="button" name="btndelete" id="delete-selected" class="btn btn-primary btn-xs">Delete selected</button>&nbsp;
           <button type="button" id="scan-selected-assets-btn" class="btn btn-primary btn-xs">Scan selected assets</button>&nbsp;
         </div>
       </div>
@@ -382,7 +383,8 @@ $(document).ready(function () {
       tableInstances: [monitoredTable],
       buttons: [
         { name: 'btnignore', action: 'ignore', confirm: false },
-        { name: 'btnmove', action: 'move', confirm: false }
+        { name: 'btnmove', action: 'move', confirm: false },
+        { name: 'btndelete', action: 'delete', confirm: true }
       ]
     });
 

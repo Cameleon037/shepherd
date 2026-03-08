@@ -30,6 +30,14 @@
                 </ul>
             </div>
         </div>
+        {% if registrant_info_json %}
+        <div class="panel panel-default" style="margin-top: 15px;">
+            <div class="panel-heading">// Registrant info</div>
+            <div class="panel-body">
+                <pre class="registrant-info-raw" style="margin: 0; white-space: pre-wrap; word-break: break-all; font-size: 0.85em;">{{ registrant_info_json }}</pre>
+            </div>
+        </div>
+        {% endif %}
     </div>
     <div class="col-md-6">
         <div class="panel panel-default">
