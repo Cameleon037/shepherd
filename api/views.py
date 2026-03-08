@@ -198,10 +198,15 @@ def list_suggestions(request, projectid, selection, vtype, format=None):
 
     # Registrant info filter: match if search text appears anywhere in the JSON values
     if search_registrant_info and search_registrant_info.strip():
-        term = search_registrant_info.strip()
-        queryset = queryset.filter(registrant_info__isnull=False).annotate(
-            ri_text=Cast('registrant_info', TextField())
-        ).filter(ri_text__icontains=term)
+        is_negative = search_registrant_info.startswith('!')
+        term = search_registrant_info.lstrip('!').strip()
+        if term:
+            queryset = queryset.annotate(ri_text=Cast('registrant_info', TextField()))
+            if is_negative:
+                # Include NULLs (no registrant info) and rows that don't contain the term
+                queryset = queryset.filter(Q(registrant_info__isnull=True) | ~Q(ri_text__icontains=term))
+            else:
+                queryset = queryset.filter(ri_text__icontains=term)
 
     ### get variables
     order_by_column, order_direction = get_ordering_vars(request.query_params,
@@ -451,10 +456,15 @@ def list_assets(request, projectid, selection, format=None):
 
     # Registrant info filter: match if search text appears anywhere in the JSON values
     if search_columns['registrant_info'] and search_columns['registrant_info'].strip():
-        term = search_columns['registrant_info'].strip()
-        queryset = queryset.filter(registrant_info__isnull=False).annotate(
-            ri_text=Cast('registrant_info', TextField())
-        ).filter(ri_text__icontains=term)
+        is_negative = search_columns['registrant_info'].startswith('!')
+        term = search_columns['registrant_info'].lstrip('!').strip()
+        if term:
+            queryset = queryset.annotate(ri_text=Cast('registrant_info', TextField()))
+            if is_negative:
+                # Include NULLs (no registrant info) and rows that don't contain the term
+                queryset = queryset.filter(Q(registrant_info__isnull=True) | ~Q(ri_text__icontains=term))
+            else:
+                queryset = queryset.filter(ri_text__icontains=term)
 
     ### get variables
     order_by_column, order_direction = get_ordering_vars(
