@@ -62,6 +62,23 @@ function initTruncatedCellTooltips(nTd) {
 }
 
 /**
+ * Render comma-separated tag string as purple label badges (asset/suggestion Tag column).
+ * Use in DataTable column: render: function(data, type, row) { return renderTagBadges(data, type); }
+ */
+function renderTagBadges(data, type) {
+    if (!data || type !== 'display') return data || '';
+    var tags = (typeof data === 'string' ? data.split(',') : []).map(function(tag) {
+        return tag.trim();
+    }).filter(function(tag) {
+        return tag.length > 0;
+    });
+    return tags.map(function(tag) {
+        return '<span class="label label-purple" style="margin-right: 4px;">' + $('<div/>').text(tag).html() + '</span>';
+    }).join('');
+}
+if (typeof window !== 'undefined') { window.renderTagBadges = renderTagBadges; }
+
+/**
  * Initialize hover expansion for truncated cells with maxLength
  * Call this in fnCreatedCell for cells that use maxLength truncation
  */

@@ -150,7 +150,7 @@
             </select>
           </th>
           <th><input type="text" placeholder="Search Tag" class="column-search-input form-control input-sm"></th>
-          <th><input type="text" placeholder="Search Source (! = exclude, comma for multiple)" class="column-search-input form-control input-sm" title="e.g. !a,!b to exclude sources containing a and b"></th>
+          <th><input type="text" placeholder="Search Source" class="column-search-input form-control input-sm"></th>
           <th><input type="text" placeholder="Search Description" class="column-search-input form-control input-sm"></th>
           <th><input type="text" placeholder="Search Last Scan" class="column-search-input form-control input-sm"></th>
           <th><input type="text" placeholder="Search Created" class="column-search-input form-control input-sm"></th>
@@ -233,11 +233,7 @@ $(document).ready(function () {
         {'data': 'vulns', 'sName': 'Vulnerabilities'},
         {'data': 'tag', 'sName': 'Tag',
           'render': function(data, type, row) {
-            if (!data || type !== 'display') return data || '';
-            var tags = data.split(',').map(function(tag) { return tag.trim(); }).filter(function(tag) { return tag.length > 0; });
-            return tags.map(function(tag) {
-              return '<span class="label label-purple" style="margin-right: 4px;">' + $('<div/>').text(tag).html() + '</span>';
-            }).join('');
+            return typeof window.renderTagBadges === 'function' ? window.renderTagBadges(data, type) : (data || '');
           }
         },
         {'data': 'source', 'sName': 'Source'},
@@ -334,13 +330,7 @@ $(document).ready(function () {
           }
         },
         {'data': 'tag', 'sName': 'Tag',
-          'render': function(data, type, row) {
-            if (!data || type !== 'display') return data || '';
-            var tags = data.split(',').map(function(tag) { return tag.trim(); }).filter(function(tag) { return tag.length > 0; });
-            return tags.map(function(tag) {
-              return '<span class="label label-purple" style="margin-right: 4px;">' + $('<div/>').text(tag).html() + '</span>';
-            }).join('');
-          }
+          'render': function(data, type, row) { return (window.renderTagBadges || renderTagBadges)(data, type); }
         },
         {'data': 'registrant_info', 'sName': 'Registrant info',
           'render': function(data, type, row) { return renderRegistrantInfo(data, type); },

@@ -132,14 +132,14 @@ def list_suggestions(request, projectid, selection, vtype, format=None):
         queryset = queryset.filter(type='ip')
     
     ### filter by search value
-    queryset = apply_column_search(queryset, search_value, 'value__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_source, 'source__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_tag, 'tag__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_description, 'description__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_value, 'value__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_source, 'source__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_tag, 'tag__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_description, 'description__icontains', min_length=1)
     
     ### Don't use select_related as it causes performance issues with self-referencing FK
-    queryset = apply_column_search(queryset, search_redirect_to, 'redirects_to__value__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_creation_date, 'creation_time__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_redirect_to, 'redirects_to__value__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_creation_date, 'creation_time__icontains', min_length=1)
     
     if search_monitor is not None and search_monitor != '':
         is_negative = search_monitor.startswith('!')
@@ -419,7 +419,7 @@ def list_assets(request, projectid, selection, format=None):
     )
 
     ### filter by column-specific search values
-    queryset = apply_column_search(queryset, search_columns['value'], 'value__icontains')
+    queryset = apply_column_search_multi(queryset, search_columns['value'], 'value__icontains')
     
     if search_columns['vulns']:
         # Map severity keywords to annotated fields
@@ -438,11 +438,11 @@ def list_assets(request, projectid, selection, format=None):
             else:
                 queryset = queryset.filter(**{f"{severity_map[severity_filter]}__gt": 0})
 
-    queryset = apply_column_search(queryset, search_columns['tag'], 'tag__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_columns['tag'], 'tag__icontains', min_length=1)
     queryset = apply_column_search_multi(queryset, search_columns['source'], 'source__icontains')
-    queryset = apply_column_search(queryset, search_columns['description'], 'description__icontains')
-    queryset = apply_column_search(queryset, search_columns['last_scan_time'], 'last_scan_time__icontains')
-    queryset = apply_column_search(queryset, search_columns['creation_time'], 'creation_time__icontains')
+    queryset = apply_column_search_multi(queryset, search_columns['description'], 'description__icontains')
+    queryset = apply_column_search_multi(queryset, search_columns['last_scan_time'], 'last_scan_time__icontains')
+    queryset = apply_column_search_multi(queryset, search_columns['creation_time'], 'creation_time__icontains')
     
     # IP search (can be IPv4 or IPv6)
     if search_columns['ip']:
@@ -452,7 +452,7 @@ def list_assets(request, projectid, selection, format=None):
             min_length=1
         )
     
-    queryset = apply_column_search(queryset, search_columns['owner'], 'owner__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_columns['owner'], 'owner__icontains', min_length=1)
 
     # Registrant info filter: match if search text appears anywhere in the JSON values
     if search_columns['registrant_info'] and search_columns['registrant_info'].strip():
@@ -574,7 +574,7 @@ def list_dns_records(request, projectid, format=None):
     ).select_related('related_asset')
 
     ### filter by search parameters
-    queryset = apply_column_search(queryset, search_asset, 'related_asset__value__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_asset, 'related_asset__value__icontains', min_length=1)
     
     # Record type uses exact match (case-insensitive)
     if search_record_type:
@@ -586,9 +586,9 @@ def list_dns_records(request, projectid, format=None):
             else:
                 queryset = queryset.filter(record_type__iexact=record_type_value)
     
-    queryset = apply_column_search(queryset, search_record_value, 'record_value__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_ttl, 'ttl__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_last_checked, 'last_checked__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_record_value, 'record_value__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_ttl, 'ttl__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_last_checked, 'last_checked__icontains', min_length=1)
 
     ### get ordering variables
     order_by_column, order_direction = get_ordering_vars(
@@ -652,10 +652,10 @@ def list_endpoints(request, projectid, format=None):
     ).select_related('asset')
 
     ### filter by search parameters
-    queryset = apply_column_search(queryset, search_asset, 'asset__value__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_url, 'url__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_technologies, 'technologies__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_date, 'date__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_asset, 'asset__value__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_url, 'url__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_technologies, 'technologies__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_date, 'date__icontains', min_length=1)
 
     ### get ordering variables
     order_by_column, order_direction = get_ordering_vars(
@@ -803,11 +803,11 @@ def list_ports(request, projectid, format=None):
     search_last_scan = request.query_params.get('columns[5][search][value]', None)
 
     ### filter by column-specific search values
-    queryset = apply_column_search(queryset, search_domain_name, 'asset_name__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_port, 'port__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_banner, 'banner__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_cpe, 'cpe__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_last_scan, 'scan_date__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_domain_name, 'asset_name__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_port, 'port__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_banner, 'banner__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_cpe, 'cpe__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_last_scan, 'scan_date__icontains', min_length=1)
 
     # Get ordering variables
     order_by_column, order_direction = get_ordering_vars(request.query_params, default_column='scan_date', default_direction='-')
@@ -980,15 +980,15 @@ def list_all_findings(request, projectid, format=None):
     search_comment = request.query_params.get('columns[9][search][value]', None)
 
     ### filter by column-specific search values
-    queryset = apply_column_search(queryset, search_domain_name, 'asset_name__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_name, 'name__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_type, 'type__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_description, 'description__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_source, 'source__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_severity, 'severity__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_scan_date, 'scan_date__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_last_reported, 'last_reported__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_comment, 'comment__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_domain_name, 'asset_name__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_name, 'name__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_type, 'type__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_description, 'description__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_source, 'source__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_severity, 'severity__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_scan_date, 'scan_date__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_last_reported, 'last_reported__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_comment, 'comment__icontains', min_length=1)
 
     ### get variables
     order_by_column, order_direction = get_ordering_vars(request.query_params,
@@ -1068,13 +1068,13 @@ def list_data_leaks(request, projectid, format=None):
     search_scan_date = request.query_params.get('columns[6][search][value]', None)
     search_comment = request.query_params.get('columns[7][search][value]', None)
 
-    queryset = apply_column_search(queryset, search_keyword, 'keyword__keyword__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_source, 'source__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_name, 'name__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_description, 'description__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_url, 'url__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_scan_date, 'scan_date__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_comment, 'comment__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_keyword, 'keyword__keyword__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_source, 'source__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_name, 'name__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_description, 'description__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_url, 'url__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_scan_date, 'scan_date__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_comment, 'comment__icontains', min_length=1)
 
     # Handle sorting
     order_column = request.query_params.get('order[0][column]', None)
@@ -1303,8 +1303,8 @@ def list_screenshots(request, projectid, format=None):
             "data": []
         })
 
-    # Filtering and search
-    domains = prj.asset_set.all().filter(monitor=True)
+    # Filtering and search: only monitored assets that are not ignored
+    domains = prj.asset_set.all().filter(monitor=True, ignore=False)
     queryset = Screenshot.objects.filter(asset__in=domains).order_by('-date')
 
     # DataTables search on columns
@@ -1316,13 +1316,13 @@ def list_screenshots(request, projectid, format=None):
     search_date = request.GET.get('columns[6][search][value]', '')
     search_asset_source = request.GET.get('columns[7][search][value]', '')
     
-    queryset = apply_column_search(queryset, search_url, 'url__icontains')
-    queryset = apply_column_search(queryset, search_technologies, 'technologies__icontains')
-    queryset = apply_column_search(queryset, search_title, 'title__icontains')
-    queryset = apply_column_search(queryset, search_status_code, 'status_code__icontains')
-    queryset = apply_column_search(queryset, search_webserver, 'webserver__icontains')
-    queryset = apply_column_search(queryset, search_date, 'date__icontains')
-    queryset = apply_column_search(queryset, search_asset_source, 'asset__source__icontains')
+    queryset = apply_column_search_multi(queryset, search_url, 'url__icontains')
+    queryset = apply_column_search_multi(queryset, search_technologies, 'technologies__icontains')
+    queryset = apply_column_search_multi(queryset, search_title, 'title__icontains')
+    queryset = apply_column_search_multi(queryset, search_status_code, 'status_code__icontains')
+    queryset = apply_column_search_multi(queryset, search_webserver, 'webserver__icontains')
+    queryset = apply_column_search_multi(queryset, search_date, 'date__icontains')
+    queryset = apply_column_search_multi(queryset, search_asset_source, 'asset__source__icontains')
 
     # Global search
     search_value = request.GET.get('search[value]', '')
@@ -1394,8 +1394,8 @@ def list_scheduled_jobs(request):
     search_last_run_at = request.query_params.get('columns[4][search][value]', None)
     search_description = request.query_params.get('columns[5][search][value]', None)
 
-    queryset = apply_column_search(queryset, search_name, 'name__icontains', min_length=1)
-    queryset = apply_column_search(queryset, search_task, 'task__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_name, 'name__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_task, 'task__icontains', min_length=1)
 
     # Schedule is computed from interval/crontab/clocked; filter by interval period (e.g. "minutes") or crontab presence
     if search_schedule and len(search_schedule.strip()) >= 1:
@@ -1419,7 +1419,7 @@ def list_scheduled_jobs(request):
             queryset = queryset.filter(last_run_at__year=int(last_run_val))
 
     if hasattr(PeriodicTask, 'description'):
-        queryset = apply_column_search(queryset, search_description, 'description__icontains', min_length=1)
+        queryset = apply_column_search_multi(queryset, search_description, 'description__icontains', min_length=1)
 
     # Ordering: use get_ordering_vars (reads columns[order[0][column]][data])
     order_by_column, order_direction = get_ordering_vars(

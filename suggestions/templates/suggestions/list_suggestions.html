@@ -471,10 +471,7 @@
           { 'data': 'source', 'sName': 'Source', 'aTargets': [2] },
           { 'data': 'tag', 'sName': 'Tag', 'aTargets': [3],
             'render': function(data, type, row) {
-              return renderTruncatedCell(data, type, { separator: ', ', maxItems: 2, className: 'tag-cell' });
-            },
-            'fnCreatedCell': function(nTd, sData, oData, iRow, iCol) {
-              initTruncatedCellTooltips(nTd);
+              return typeof window.renderTagBadges === 'function' ? window.renderTagBadges(data, type) : (data || '');
             }
           },
           { 'data': 'description', 'sName': 'Description', 'aTargets': [4] },
@@ -560,10 +557,7 @@
           { 'data': 'source', 'sName': 'Source', 'aTargets': [2] },
           { 'data': 'tag', 'sName': 'Tag', 'aTargets': [3],
             'render': function(data, type, row) {
-              return renderTruncatedCell(data, type, { separator: ', ', maxItems: 2, className: 'tag-cell' });
-            },
-            'fnCreatedCell': function(nTd, sData, oData, iRow, iCol) {
-              initTruncatedCellTooltips(nTd);
+              return typeof window.renderTagBadges === 'function' ? window.renderTagBadges(data, type) : (data || '');
             }
           },
           { 'data': 'description', 'sName': 'Description', 'aTargets': [4] },
