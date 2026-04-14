@@ -134,28 +134,20 @@ class Command(BaseCommand):
                     # Determine severity based on secret type
                     severity = 'high' if ('api' in secret_type.lower() or 'key' in secret_type.lower()) else 'medium'
                     
-                    # Store the result as a Finding object
-                    defaults = {
-                        'keyword': kw,
-                        'source': 'git-hound',
-                        'name': finding_name,
-                        'type': 'data_leak',
-                        'severity': severity,
-                        'scan_date': make_aware(datetime.now()),
-                        'last_seen': make_aware(datetime.now()),
-                    }
-                    
-                    finding_obj, created = Finding.objects.get_or_create(
+                    # Store/update by URL to avoid duplicate leak entries.
+                    finding_obj, created = Finding.objects.update_or_create(
+                        source='git-hound',
                         url=file_url,
-                        description=description,
-                        defaults=defaults
+                        defaults={
+                            'keyword': kw,
+                            'name': finding_name,
+                            'type': 'data_leak',
+                            'severity': severity,
+                            'description': description,
+                            'scan_date': make_aware(datetime.now()),
+                            'last_seen': make_aware(datetime.now()),
+                        },
                     )
-                    
-                    # Update dates for existing findings
-                    if not created:
-                        finding_obj.scan_date = make_aware(datetime.now())
-                        finding_obj.last_seen = finding_obj.scan_date
-                        finding_obj.save()
                     findings_count += 1
                     
                     if created:

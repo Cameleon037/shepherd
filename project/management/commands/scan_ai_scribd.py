@@ -87,18 +87,18 @@ class Command(BaseCommand):
         self.stdout.write(f'[+] Findings identified: {len(findings["findings"])}')
         for finding in findings["findings"]:
             # Store the result as a Finding object
-            content = {
-                'keyword': kw,
-                'source': 'ai_scribd',
-                'url': finding["url"],
-            }
-            finding_obj, _ = Finding.objects.get_or_create(**content)
-            finding_obj.severity = finding["severity"]
-            finding_obj.name = finding["name"]
-            finding_obj.description = finding["reasoning"]
-            finding_obj.scan_date = make_aware(datetime.now())
-            finding_obj.last_seen = finding_obj.scan_date
-            finding_obj.save()
+            Finding.objects.update_or_create(
+                source='ai_scribd',
+                url=finding["url"],
+                defaults={
+                    'keyword': kw,
+                    'severity': finding["severity"],
+                    'name': finding["name"],
+                    'description': finding["reasoning"],
+                    'scan_date': make_aware(datetime.now()),
+                    'last_seen': make_aware(datetime.now()),
+                },
+            )
 
 
     def handle(self, *args, **options):

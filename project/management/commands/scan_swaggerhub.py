@@ -86,19 +86,18 @@ class Command(BaseCommand):
                     self.stdout.write(f'    [+] API name: {api_name}')
                     # self.stdout.write(f'    [+] API owner: {api_owner}')
                     self.stdout.write(f'    [+] API URL: {api_url}')
-                    content = {
-                        'keyword': kw,
-                        'source': 'swaggerhub',
-                        'name': api_name,
-                        'type': 'api',
-                        'url': api_url,
-                        'description': api_description,
-                    }
-                    # print(content)
-                    finding_obj, _ = Finding.objects.get_or_create(**content)
-                    finding_obj.scan_date = make_aware(datetime.now())
-                    finding_obj.last_seen = finding_obj.scan_date
-                    finding_obj.save()
+                    Finding.objects.update_or_create(
+                        source='swaggerhub',
+                        url=api_url,
+                        defaults={
+                            'keyword': kw,
+                            'name': api_name,
+                            'type': 'api',
+                            'description': api_description,
+                            'scan_date': make_aware(datetime.now()),
+                            'last_seen': make_aware(datetime.now()),
+                        },
+                    )
             else:
                 self.stdout.write(f"[+] No APIs found for keyword: {keyword}")
 

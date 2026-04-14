@@ -103,21 +103,19 @@ class Command(BaseCommand):
                             public_handle = self.porchpirate_workspace_scan(workspace_id)
                             self.stdout.write(f'    [+] Public handle URL: {public_handle}')
 
-                            # Store the result as a Finding object
-                            content = {
-                                'keyword': kw,
-
-                                'source': 'porch-pirate',
-                                'name': workspace_name,
-                                'type': 'workspace',
-                                'url': public_handle,
-
-                                'description': 'Check if the public workspace contains sensitive data',
-                            }
-                            finding_obj, _ = Finding.objects.get_or_create(**content)
-                            finding_obj.scan_date = make_aware(datetime.now())
-                            finding_obj.last_seen = finding_obj.scan_date
-                            finding_obj.save()
+                            # Store/update by URL to avoid duplicate leak entries.
+                            Finding.objects.update_or_create(
+                                source='porch-pirate',
+                                url=public_handle,
+                                defaults={
+                                    'keyword': kw,
+                                    'name': workspace_name,
+                                    'type': 'workspace',
+                                    'description': 'Check if the public workspace contains sensitive data',
+                                    'scan_date': make_aware(datetime.now()),
+                                    'last_seen': make_aware(datetime.now()),
+                                },
+                            )
                                             
             except Exception as error:
                 self.stderr.write(f'[+] Error no valid JSON found in the output: {error}')
