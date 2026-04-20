@@ -637,3 +637,49 @@ table tbody tr.selected td {
 table tbody tr.odd.selected td {
     background-color: var(--bg-selected-alt);
 }
+
+/* ======================================================================
+   Upload drop zone (Assets / Suggestions / Keywords "Upload" modals).
+   The `upload-dropzone` class is added via JS (initializeUploadModal); the
+   templates set a few inline styles (layout + initial border/background)
+   which are intentionally overridden here with !important so the zone
+   follows the active theme in both light and dark mode.
+   ====================================================================== */
+.upload-dropzone {
+    background: var(--bg-secondary) !important;
+    border-color: var(--border-primary) !important;
+    color: var(--text-secondary) !important;
+}
+
+.upload-dropzone .glyphicon-cloud-upload {
+    color: var(--text-placeholder) !important;
+}
+
+.upload-dropzone [id$="-drop-text"],
+.upload-dropzone [id$="-drop-text"] small {
+    color: var(--text-tertiary) !important;
+}
+
+.upload-dropzone.is-hover {
+    background: var(--bg-pill) !important;
+    border-color: #2196f3 !important;
+}
+
+.upload-dropzone.is-filled {
+    background: var(--bg-success) !important;
+    border-color: #4caf50 !important;
+}
+
+.upload-dropzone-filled-text {
+    color: #4caf50;
+    font-weight: 500;
+}
+
+.upload-file-info {
+    background: var(--bg-success) !important;
+    color: var(--text-primary) !important;
+}
+
+.upload-file-info [id$="-file-name"] {
+    color: var(--text-primary);
+}

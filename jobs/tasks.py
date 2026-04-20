@@ -113,6 +113,13 @@ def scan_git_hound_task():
     return "scan_git-hound completed"
 
 @shared_task
+def scan_ghleaks_task():
+    command = 'scan_ghleaks'
+    args = f'--projectid {project_id}'
+    run_job(command, args, project_id, user=scheduler_user)
+    return "scan_ghleaks completed"
+
+@shared_task
 def scan_ransomlook_task():
     command = 'scan_ransomlook'
     args = f'--projectid {project_id}'

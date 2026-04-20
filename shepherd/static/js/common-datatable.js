@@ -604,24 +604,34 @@ function initializeUploadModal(config) {
     var $submitBtn = $(submitBtnId);
     var $dropText = $(dropTextId);
     
+    // Tag the drop zone so theme-aware CSS can style it (light & dark mode).
+    $dropZone.addClass('upload-dropzone');
+    
     function updateFileDisplay(file) {
         if (file) {
             $fileName.text(file.name);
-            $fileInfo.show();
-            $dropZone.css({ 'border-color': '#4caf50', 'background': '#f1f8e9' });
-            $dropText.html('<span style="color: #4caf50;">File selected</span>');
+            $fileInfo.addClass('upload-file-info').show();
+            $dropZone.removeClass('is-hover').addClass('is-filled');
+            $dropText.html('<span class="upload-dropzone-filled-text">File selected</span>');
             $submitBtn.prop('disabled', false);
         } else {
             $fileInfo.hide();
-            $dropZone.css({ 'border-color': '#ccc', 'background': '#fafafa' });
-            $dropText.html('Drag & drop a .txt file here<br><small>or click to browse</small>');
+            $dropZone.removeClass('is-hover is-filled');
+            $dropText.html('Drag &amp; drop a ' + acceptedExtension + ' file here<br><small>or click to browse</small>');
             $submitBtn.prop('disabled', true);
         }
     }
     
-    // Click to browse
-    $dropZone.on('click', function() {
-        $fileInput.click();
+    // Click to browse. Use the native DOM click() so the browser opens the file
+    // picker. jQuery's .click() shortcut only fires synthetic handlers and does
+    // not invoke the native file dialog on <input type="file"> in jQuery 3+.
+    $dropZone.on('click', function(e) {
+        if (e.target === $fileInput[0]) {
+            return;
+        }
+        if ($fileInput[0]) {
+            $fileInput[0].click();
+        }
     });
     
     $fileInput.on('change', function() {
@@ -632,29 +642,25 @@ function initializeUploadModal(config) {
     $dropZone.on('dragover', function(e) {
         e.preventDefault();
         e.stopPropagation();
-        $(this).css({ 'border-color': '#2196f3', 'background': '#e3f2fd' });
+        $(this).addClass('is-hover');
     });
     
     $dropZone.on('dragleave', function(e) {
         e.preventDefault();
         e.stopPropagation();
-        if ($fileInput[0].files.length) {
-            $(this).css({ 'border-color': '#4caf50', 'background': '#f1f8e9' });
-        } else {
-            $(this).css({ 'border-color': '#ccc', 'background': '#fafafa' });
-        }
+        $(this).removeClass('is-hover');
     });
     
     $dropZone.on('drop', function(e) {
         e.preventDefault();
         e.stopPropagation();
+        $(this).removeClass('is-hover');
         var files = e.originalEvent.dataTransfer.files;
         if (files.length && files[0].name.endsWith(acceptedExtension)) {
             $fileInput[0].files = files;
             updateFileDisplay(files[0]);
         } else {
             bootbox.alert('Please upload a ' + acceptedExtension + ' file.');
-            $(this).css({ 'border-color': '#ccc', 'background': '#fafafa' });
         }
     });
     

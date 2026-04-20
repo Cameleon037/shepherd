@@ -468,6 +468,10 @@ def discovery_control_center_launch(request):
         threads.append(threading.Thread(target=lambda: launch('scan_git-hound', keyword_args)))
         triggered_messages.append('GitHound scan triggered.')
 
+    if scans.get('scan_ghleaks'):
+        threads.append(threading.Thread(target=lambda: launch('scan_ghleaks', keyword_args)))
+        triggered_messages.append('ghleaks scan triggered.')
+
     if scans.get('scan_ransomlook'):
         threads.append(threading.Thread(target=lambda: launch('scan_ransomlook', keyword_args)))
         triggered_messages.append('RansomLook scan triggered.')

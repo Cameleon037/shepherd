@@ -1037,7 +1037,7 @@ def list_data_leaks(request, projectid, format=None):
 
 
     # create queryset
-    data_leak_sources = ["porch-pirate", "swaggerhub", "ai_scribd", "git-hound", "ransomlook"]
+    data_leak_sources = ["porch-pirate", "swaggerhub", "ai_scribd", "git-hound", "ghleaks", "ransomlook"]
     keywords = prj.keyword_set.all()#.filter(enabled=True)
     queryset = Finding.objects.filter(source__in=data_leak_sources)
 
