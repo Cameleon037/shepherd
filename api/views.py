@@ -1038,8 +1038,11 @@ def list_data_leaks(request, projectid, format=None):
 
     # create queryset
     data_leak_sources = ["porch-pirate", "swaggerhub", "ai_scribd", "git-hound", "ghleaks", "ransomlook"]
-    keywords = prj.keyword_set.all()#.filter(enabled=True)
-    queryset = Finding.objects.filter(source__in=data_leak_sources)
+    # Only include findings whose keyword belongs to the currently selected project
+    queryset = Finding.objects.filter(
+        source__in=data_leak_sources,
+        keyword__related_project_id=projectid,
+    )
 
     # Filter by selection (monitored/ignored/all)
     selection_param = request.query_params.get('selection', 'monitored')
@@ -1203,8 +1206,10 @@ def bulk_findings_data_leaks(request, projectid, format=None):
     errors = []
     for findingid in id_lst:
         try:
+            # Only act on findings whose keyword belongs to the current project
+            finding = Finding.objects.get(id=findingid, keyword__related_project_id=projectid)
             if action == 'delete':
-                Finding.objects.get(id=findingid).delete()
+                finding.delete()
             elif action == 'ignore':
                 ignore_finding(findingid)
         except Finding.DoesNotExist:
