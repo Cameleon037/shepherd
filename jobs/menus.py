@@ -2,7 +2,7 @@
 
 from django.urls import reverse
 from menu import Menu, MenuItem
-from project.models import Job  # Add this import
+from jobs.models import Job
 
 def top_jobs(request):
     running_count = Job.objects.filter(status="running").count()

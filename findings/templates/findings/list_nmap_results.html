@@ -122,7 +122,7 @@ $(document).ready(function () {
                         return '';
                     }
                     if (row.asset_uuid) {
-                        var url = "{% url 'findings:view_asset' uuid='__UUID__' %}".replace('__UUID__', row.asset_uuid);
+                        var url = "{% url 'assets:view_asset' uuid='__UUID__' %}".replace('__UUID__', row.asset_uuid);
                         return '<a href="' + url + '">' + $('<div/>').text(data).html() + '</a>';
                     }
                     return $('<div/>').text(data).html();

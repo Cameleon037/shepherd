@@ -3,13 +3,15 @@ from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.http import HttpResponseForbidden
 from django.shortcuts import render
 
-from project.models import Asset, Project, Keyword
+from assets.models import Asset
+from project.models import Project
+from keywords.models import Keyword
 from findings.models import Finding, Port, Screenshot
 
 
 @login_required
 def dashboard(request):
-    if not request.user.has_perm('project.view_asset'):
+    if not request.user.has_perm('assets.view_asset'):
         return HttpResponseForbidden("You do not have permission.")
 
     project_id = request.session.get('current_project', {}).get('prj_id')

@@ -61,7 +61,7 @@
             {% with menu=menus.main %}{% include "menu_main.html" %}{% endwith %}
             {% if request.session.current_project is not None %}
               {% with menu=menus.keywords %}{% include "menu_main.html" %}{% endwith %}
-              {% with menu=menus.suggestions %}{% include "menu_main.html" %}{% endwith %}
+              {% with menu=menus.assets %}{% include "menu_main.html" %}{% endwith %}
               {% with menu=menus.findings %}{% include "menu_main.html" %}{% endwith %}
             {% endif %}
           </ul>

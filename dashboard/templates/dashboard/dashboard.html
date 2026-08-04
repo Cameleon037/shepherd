@@ -253,7 +253,7 @@
                     <tbody>
                         {% for f in most_critical_findings %}
                         <tr>
-                            <td><a href="{% url 'findings:view_asset' f.asset.uuid %}">{{ f.name|truncatechars:35 }}</a></td>
+                            <td><a href="{% url 'assets:view_asset' f.asset.uuid %}">{{ f.name|truncatechars:35 }}</a></td>
                             <td><span class="label severity-badge severity-{{ f.severity|default:'info'|lower }}">{{ f.severity|default:"—" }}</span></td>
                             <td>{{ f.asset.value|truncatechars:25 }}</td>
                             <td>{{ f.first_seen|date:"Y-m-d" }}</td>
@@ -282,7 +282,7 @@
                     <tbody>
                         {% for asset in most_vulnerable_assets %}
                         <tr>
-                            <td><a href="{% url 'findings:view_asset' asset.uuid %}">{{ asset.value|truncatechars:50 }}</a></td>
+                            <td><a href="{% url 'assets:view_asset' asset.uuid %}">{{ asset.value|truncatechars:50 }}</a></td>
                             <td><span class="badge">{{ asset.finding_count }}</span></td>
                         </tr>
                         {% endfor %}
@@ -301,7 +301,7 @@
 <div class="row">
     <div class="col-md-6">
         <div class="panel panel-default">
-            <div class="panel-heading">Recent assets <a href="{% url 'findings:assets' %}" class="btn btn-xs btn-default pull-right">View all</a></div>
+            <div class="panel-heading">Recent assets <a href="{% url 'assets:assets' %}" class="btn btn-xs btn-default pull-right">View all</a></div>
             <div class="panel-body" style="padding: 0;">
                 {% if recent_assets %}
                 <table class="table table-condensed table-striped table-bordered" style="font-size: 0.85em; margin: 0;">
@@ -315,7 +315,7 @@
                     <tbody>
                         {% for asset in recent_assets %}
                         <tr>
-                            <td><a href="{% url 'findings:view_asset' asset.uuid %}">{{ asset.value|truncatechars:45 }}</a></td>
+                            <td><a href="{% url 'assets:view_asset' asset.uuid %}">{{ asset.value|truncatechars:45 }}</a></td>
                             <td>{{ asset.type|default:"—" }}</td>
                             <td>{{ asset.creation_time|date:"Y-m-d H:i" }}</td>
                         </tr>
@@ -361,7 +361,7 @@
                     <tbody>
                         {% for f in recent_findings %}
                         <tr>
-                            <td><a href="{% url 'findings:view_asset' f.asset.uuid %}">{{ f.name|truncatechars:40 }}</a></td>
+                            <td><a href="{% url 'assets:view_asset' f.asset.uuid %}">{{ f.name|truncatechars:40 }}</a></td>
                             <td><span class="label severity-badge severity-{{ f.severity|default:'info'|lower }}">{{ f.severity|default:"—" }}</span></td>
                             <td>{{ f.asset.value|truncatechars:30 }}</td>
                             <td>{{ f.first_seen|date:"Y-m-d H:i" }}</td>

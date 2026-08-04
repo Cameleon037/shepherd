@@ -1,4 +1,3 @@
-from project.models import Project, Asset
 from findings.models import Finding
 import requests
 import json
@@ -84,16 +83,6 @@ def asset_get_or_create(asset_name, url, nucleus_project, request_header):
             print(json.dumps(rsp.json(), indent=4))
             return None, None
     return entry_name, entry_id
-
-def ignore_asset(uuid, prj):
-    """move asset to ignore list
-    """
-    a_obj = Asset.objects.get(uuid=uuid, related_project=prj)
-    a_obj.monitor = False
-    a_obj.ignore = True
-    a_obj.save()
-
-    return
 
 def ignore_finding(findingid):
     """move finding to ignore list

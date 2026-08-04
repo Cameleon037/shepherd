@@ -9,18 +9,20 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.views.decorators.http import require_POST
 
-from project.models import Project, Keyword, Asset
+from project.models import Project
+from keywords.models import Keyword
+from assets.models import Asset
 from keywords.forms import AddKeywordForm
 from django.core.management import call_command
 import threading
 
 from django.utils.html import escape
-from suggestions.utils import auto_monitor_trusted_assets
+from assets.utils import auto_monitor_trusted_assets
 from jobs.utils import run_job
 
 @login_required
 def keywords(request):
-    if not request.user.has_perm('project.view_keyword'):
+    if not request.user.has_perm('keywords.view_keyword'):
         return HttpResponseForbidden("You do not have permission.")
     
     project_id = request.session['current_project']['prj_id']
@@ -43,7 +45,7 @@ def keywords(request):
 
 @login_required
 def toggle_keyword(request, keywordid):
-    if not request.user.has_perm('project.change_keyword'):
+    if not request.user.has_perm('keywords.change_keyword'):
         return HttpResponseForbidden("You do not have permission.")
     
     try:
@@ -57,7 +59,7 @@ def toggle_keyword(request, keywordid):
 
 @login_required
 def delete_keyword(request, keywordid):
-    if not request.user.has_perm('project.delete_keyword'):
+    if not request.user.has_perm('keywords.delete_keyword'):
         return HttpResponseForbidden("You do not have permission.")
     
     try:
@@ -68,7 +70,7 @@ def delete_keyword(request, keywordid):
 
 @login_required
 def add_keyword(request):
-    if not request.user.has_perm('project.add_keyword'):
+    if not request.user.has_perm('keywords.add_keyword'):
         return HttpResponseForbidden("You do not have permission.")
     
     prjid = request.session['current_project']['prj_id']
@@ -94,7 +96,7 @@ def add_keyword(request):
 @require_POST
 def upload_ransomlook_suppliers(request):
     """Upload RansomLook suppliers from a text file"""
-    if not request.user.has_perm('project.add_keyword'):
+    if not request.user.has_perm('keywords.add_keyword'):
         return HttpResponseForbidden("You do not have permission.")
     
     project_id = request.session.get('current_project', {}).get('prj_id')
@@ -156,7 +158,7 @@ def upload_ransomlook_suppliers(request):
 
 @login_required
 def scan_keywords(request):
-    if not request.user.has_perm('project.add_suggestion'):
+    if not request.user.has_perm('assets.add_asset'):
         return HttpResponseForbidden("You do not have permission.")
     
     if request.method == 'POST':
@@ -296,7 +298,7 @@ def scan_keywords(request):
 @require_POST
 def bulk_update_keywords(request):
     """Bulk update keywords - add, update, or delete"""
-    if not request.user.has_perm('project.add_keyword'):
+    if not request.user.has_perm('keywords.add_keyword'):
         return HttpResponseForbidden("You do not have permission.")
     
     project_id = request.session.get('current_project', {}).get('prj_id')
@@ -376,7 +378,7 @@ def bulk_update_keywords(request):
 @login_required
 def discovery_control_center(request):
     """Discovery Control Center - manage keyword-based discovery scans"""
-    if not request.user.has_perm('project.view_keyword'):
+    if not request.user.has_perm('keywords.view_keyword'):
         return HttpResponseForbidden("You do not have permission.")
     
     project_id = request.session.get('current_project', {}).get('prj_id', None)
@@ -398,7 +400,7 @@ def discovery_control_center(request):
 @require_POST
 def discovery_control_center_launch(request):
     """Launch discovery scans from Discovery Control Center"""
-    if not request.user.has_perm('project.add_asset'):
+    if not request.user.has_perm('assets.add_asset'):
         return HttpResponseForbidden("You do not have permission.")
     
     project_id = request.session.get('current_project', {}).get('prj_id')

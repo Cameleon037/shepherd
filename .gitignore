@@ -6,7 +6,7 @@ custom-logo-standalone.svg
 jobs/custom_tasks/
 
 # Test files
-project/management/commands/test_custom.py
+scanners/management/commands/test_custom.py
 
 # SSL keys
 cert.pem

@@ -1,7 +1,11 @@
 
 from rest_framework import serializers
 
-from project.models import Job, Project, Keyword, Asset, DNSRecord
+from jobs.models import Job
+from project.models import Project
+from keywords.models import Keyword
+from assets.models import Asset
+from findings.models import DNSRecord
 from findings.models import Finding, Port, Screenshot, Endpoint
 
 class ProjectSerializer(serializers.ModelSerializer):

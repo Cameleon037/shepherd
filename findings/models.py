@@ -1,7 +1,6 @@
 from django.db import models
-from project.models import Asset, Keyword
-
-# Create your models here.
+from assets.models import Asset
+from keywords.models import Keyword
 
 class Port(models.Model):
     """class to describe open ports
@@ -87,3 +86,21 @@ class Endpoint(models.Model):
     asset = models.ForeignKey(Asset, on_delete=models.CASCADE, null=True, default=None)
     technologies = models.CharField(max_length=2048, blank=True, default='')
     date = models.DateTimeField(auto_now_add=True)
+
+class DNSRecord(models.Model):
+    """DNS records for assets
+    """
+    related_asset = models.ForeignKey(Asset, on_delete=models.CASCADE)
+    related_project = models.ForeignKey("project.Project", on_delete=models.CASCADE)
+    record_type = models.CharField(max_length=10)  # A, AAAA, CNAME, MX, TXT, NS, SOA, PTR
+    record_value = models.TextField()  # The actual DNS record value
+    ttl = models.IntegerField(null=True, blank=True)  # Time to live
+    creation_time = models.DateTimeField(auto_now_add=True)
+    last_checked = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'project_dnsrecord'
+        unique_together = ['related_asset', 'record_type', 'record_value']
+
+    def __str__(self):
+        return f"{self.related_asset.value} - {self.record_type}: {self.record_value[:50]}"

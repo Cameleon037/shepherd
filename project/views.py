@@ -25,7 +25,7 @@ def projects(request):
         context['num_total_total'] = context['num_total_domains']+context['num_total_subdomains']+context['num_total_ipaddresses']
         context['num_ignored_total'] = context['num_ignored_domains']+context['num_ignored_subdomains']+context['num_ignored_ipaddresses']
 
-    return render(request, 'projects/list_projects.html', context)
+    return render(request, 'project/list_projects.html', context)
 
 @login_required
 def select_project(request, projectid):
@@ -46,7 +46,7 @@ def select_project(request, projectid):
         request.session['current_project'] = {'prj_id': prj_id, 'prj_name': prj_name}
     else:
         request.session['current_project'] = None
-    #return render(request, 'projects/list_projects.html', context)
+    #return render(request, 'project/list_projects.html', context)
     return redirect(reverse('projects:projects'))
 
 @login_required

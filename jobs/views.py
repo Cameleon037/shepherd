@@ -3,12 +3,12 @@ from django.urls import reverse
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseForbidden
-from project.models import Job
+from jobs.models import Job
 from django.views.decorators.csrf import csrf_exempt
 
 @login_required
 def jobs(request):
-    if not request.user.has_perm('project.view_job'):
+    if not request.user.has_perm('jobs.view_job'):
         return HttpResponseForbidden("You do not have permission.")
     
     context = {'projectid': request.session['current_project']['prj_id']}
@@ -19,7 +19,7 @@ def jobs(request):
 def view_job(request, job_id):
     """view job details
     """
-    if not request.user.has_perm('project.view_job'):
+    if not request.user.has_perm('jobs.view_job'):
         return HttpResponseForbidden("You do not have permission.")
     
     try:
@@ -37,7 +37,7 @@ def view_job(request, job_id):
 
 @login_required
 def scheduled_jobs(request):
-    if not request.user.has_perm('project.view_job'):
+    if not request.user.has_perm('jobs.view_job'):
         return HttpResponseForbidden("You do not have permission.")
     
     context = {'projectid': request.session['current_project']['prj_id']}

@@ -9,8 +9,8 @@ def top_discovery(request):
 discovery_children = (
     MenuItem("Discovery Keywords", reverse("keywords:keywords"), weight=5),
     MenuItem("Control Center", reverse("keywords:discovery_control_center"), weight=10),
-    MenuItem("Asset Suggestions", reverse("suggestions:suggestions"), weight=20),
-    MenuItem("Assets Ignored ", reverse("suggestions:ignored_suggestions"), weight=30),
+    MenuItem("Asset Suggestions", reverse("assets:suggestions"), weight=20),
+    MenuItem("Assets Ignored ", reverse("assets:ignored_suggestions"), weight=30),
 )
 
 Menu.add_item("keywords", MenuItem(top_discovery,

@@ -17,9 +17,14 @@ from api.pagination import CustomPaginator
 from api.serializer import JobSerializer, ProjectSerializer, KeywordSerializer, SuggestionSerializer, AssetSerializer, FindingSerializer, PortSerializer, ScreenshotSerializer, DNSRecordSerializer, EndpointSerializer
 from api.utils import get_ordering_vars, apply_search_filter, apply_column_search, apply_column_search_multi
 
-from project.models import Project, Keyword, Asset, Job, DNSRecord
+from project.models import Project
+from keywords.models import Keyword
+from assets.models import Asset
+from jobs.models import Job
+from findings.models import DNSRecord
 from findings.models import Finding, Port, Screenshot, Endpoint
-from findings.utils import ignore_asset, ignore_finding
+from assets.utils import ignore_asset
+from findings.utils import ignore_finding
 from findings.views import send_nucleus
 from django_celery_beat.models import PeriodicTask, IntervalSchedule, CrontabSchedule, ClockedSchedule
 
@@ -89,7 +94,7 @@ def create_project(request, format=None):
 @authentication_classes((SessionAuthentication, ))
 @permission_classes((IsAuthenticated,))
 def list_suggestions(request, projectid, selection, vtype, format=None):
-    if not request.user.has_perm('project.view_asset'):
+    if not request.user.has_perm('assets.view_asset'):
         return HttpResponseForbidden("You do not have permission to view this project.")
     
     paginator = CustomPaginator()
@@ -240,7 +245,7 @@ def list_suggestions(request, projectid, selection, vtype, format=None):
 @permission_classes((IsAuthenticated,))
 def bulk_suggestions(request, projectid, format=None):
     """Bulk actions on suggestions: monitor, ignore, delete. POST body: action=monitor|ignore|delete, id[]=uuid..."""
-    if not request.user.has_perm('project.view_asset'):
+    if not request.user.has_perm('assets.view_asset'):
         return HttpResponseForbidden("You do not have permission.")
     try:
         prj = Project.objects.get(id=projectid)
@@ -256,9 +261,9 @@ def bulk_suggestions(request, projectid, format=None):
             action = 'delete'
     if action not in ('monitor', 'ignore', 'delete'):
         return JsonResponse({'success': False, 'error': 'Unknown action'}, status=400)
-    if action in ('monitor', 'ignore') and not request.user.has_perm('project.change_asset'):
+    if action in ('monitor', 'ignore') and not request.user.has_perm('assets.change_asset'):
         return HttpResponseForbidden("You do not have permission.")
-    if action == 'delete' and not request.user.has_perm('project.delete_asset'):
+    if action == 'delete' and not request.user.has_perm('assets.delete_asset'):
         return HttpResponseForbidden("You do not have permission.")
     id_lst = request.POST.getlist('id[]')
     if not id_lst:
@@ -305,7 +310,7 @@ def bulk_suggestions(request, projectid, format=None):
 @permission_classes((IsAuthenticated,))
 def bulk_suggestions_ignored(request, projectid, format=None):
     """Bulk actions on ignored suggestions: move (reactivate), delete. POST body: action=move|delete, id[]=uuid..."""
-    if not request.user.has_perm('project.view_asset'):
+    if not request.user.has_perm('assets.view_asset'):
         return HttpResponseForbidden("You do not have permission.")
     try:
         Project.objects.get(id=projectid)
@@ -319,9 +324,9 @@ def bulk_suggestions_ignored(request, projectid, format=None):
             action = 'delete'
     if action not in ('move', 'delete'):
         return JsonResponse({'success': False, 'error': 'Unknown action'}, status=400)
-    if action == 'move' and not request.user.has_perm('project.change_asset'):
+    if action == 'move' and not request.user.has_perm('assets.change_asset'):
         return HttpResponseForbidden("You do not have permission.")
-    if action == 'delete' and not request.user.has_perm('project.delete_asset'):
+    if action == 'delete' and not request.user.has_perm('assets.delete_asset'):
         return HttpResponseForbidden("You do not have permission.")
     id_lst = request.POST.getlist('id[]')
     if not id_lst:
@@ -352,7 +357,7 @@ def bulk_suggestions_ignored(request, projectid, format=None):
 @authentication_classes((SessionAuthentication,))
 @permission_classes((IsAuthenticated,))
 def list_assets(request, projectid, selection, format=None):
-    if not request.user.has_perm('project.view_asset'):
+    if not request.user.has_perm('assets.view_asset'):
         return HttpResponseForbidden("You do not have permission to view this project.")
     
     paginator = CustomPaginator()
@@ -488,9 +493,9 @@ def list_assets(request, projectid, selection, format=None):
 @permission_classes((IsAuthenticated,))
 def bulk_assets(request, projectid, format=None):
     """Bulk actions on assets: ignore, move, delete. POST body: action=ignore|move|delete, id[]=uuid..."""
-    if not request.user.has_perm('project.view_asset'):
+    if not request.user.has_perm('assets.view_asset'):
         return HttpResponseForbidden("You do not have permission.")
-    if not request.user.has_perm('project.change_asset'):
+    if not request.user.has_perm('assets.change_asset'):
         return HttpResponseForbidden("You do not have permission.")
     try:
         prj = Project.objects.get(id=projectid)
@@ -506,7 +511,7 @@ def bulk_assets(request, projectid, format=None):
             action = 'delete'
     if action not in ('ignore', 'move', 'delete'):
         return JsonResponse({'success': False, 'error': 'Unknown action'}, status=400)
-    if action == 'delete' and not request.user.has_perm('project.delete_asset'):
+    if action == 'delete' and not request.user.has_perm('assets.delete_asset'):
         return HttpResponseForbidden("You do not have permission.")
     id_lst = request.POST.getlist('id[]')
     if not id_lst:
@@ -540,7 +545,7 @@ def bulk_assets(request, projectid, format=None):
 @authentication_classes((SessionAuthentication,))
 @permission_classes((IsAuthenticated,))
 def list_dns_records(request, projectid, format=None):
-    if not request.user.has_perm('project.view_asset'):
+    if not request.user.has_perm('assets.view_asset'):
         return HttpResponseForbidden("You do not have permission to view this project.")
     
     paginator = CustomPaginator()
@@ -619,7 +624,7 @@ def list_dns_records(request, projectid, format=None):
 @authentication_classes((SessionAuthentication,))
 @permission_classes((IsAuthenticated,))
 def list_endpoints(request, projectid, format=None):
-    if not request.user.has_perm('project.view_asset'):
+    if not request.user.has_perm('assets.view_asset'):
         return HttpResponseForbidden("You do not have permission to view this project.")
     
     paginator = CustomPaginator()
@@ -686,7 +691,7 @@ def list_endpoints(request, projectid, format=None):
 @authentication_classes((SessionAuthentication, ))
 @permission_classes((IsAuthenticated,))
 def list_keywords(request, projectid, selection, format=None):
-    if not request.user.has_perm('project.view_keyword'):
+    if not request.user.has_perm('keywords.view_keyword'):
         return HttpResponseForbidden("You do not have permission to view this project.")
     
     paginator = CustomPaginator()
@@ -736,7 +741,7 @@ def list_keywords(request, projectid, selection, format=None):
 def add_keyword(request, format=None):
     """Add keywords to a project
     """
-    if not request.user.has_perm('project.add_keyword'):
+    if not request.user.has_perm('keywords.add_keyword'):
         return HttpResponseForbidden("You do not have permission to view this project.")
     
     prjname = request.data.get('projectname', None)
@@ -1255,7 +1260,7 @@ def update_finding_comment(request, projectid, findingid):
 @authentication_classes((SessionAuthentication, ))
 @permission_classes((IsAuthenticated,))
 def list_jobs(request, projectid):
-    if not request.user.has_perm('project.view_job'):
+    if not request.user.has_perm('jobs.view_job'):
         return HttpResponseForbidden("You do not have permission to view this.")
 
     # check if project exists
@@ -1385,7 +1390,7 @@ def list_screenshots(request, projectid, format=None):
 @authentication_classes((SessionAuthentication,))
 @permission_classes((IsAuthenticated,))
 def list_scheduled_jobs(request):
-    if not request.user.has_perm('project.view_job'):
+    if not request.user.has_perm('jobs.view_job'):
         return HttpResponseForbidden("You do not have permission.")
 
     # Fetch all periodic tasks (scheduled jobs)

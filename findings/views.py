@@ -1,5 +1,3 @@
-import tld
-import uuid as imported_uuid
 from datetime import datetime, timedelta
 from django.shortcuts import render, redirect
 from django.urls import reverse
@@ -12,17 +10,16 @@ from django.utils.html import escape
 from django.http import HttpResponseForbidden, JsonResponse, StreamingHttpResponse
 from django.db.models import Q
 from django.views.decorators.http import require_POST
-from project.models import Project, Asset, DNSRecord
-from findings.models import Finding, Port, Screenshot, Endpoint
-from findings.utils import asset_get_or_create, asset_finding_get_or_create, ignore_asset, ignore_finding
-from suggestions.utils import export_assets_csv, upload_domains_from_file
-from findings.forms import AddAssetForm
+from project.models import Project
+from assets.models import Asset
+from findings.models import Finding, Port, Screenshot, Endpoint, DNSRecord
+from findings.utils import asset_get_or_create, asset_finding_get_or_create, ignore_finding
 import threading
 from jobs.utils import run_job
 import csv
 import json
 import tempfile, os
-from project.scan_utils import write_uuids_file
+from scanners.scan_utils import write_uuids_file
 
 
 def _filter_assets_for_project(project_id, filters):
@@ -208,83 +205,6 @@ def _run_scan_jobs(project_id, user, selected_uuids, scan_new_assets, scans):
     return triggered_messages
 
 
-#### Asset stuffs
-@login_required
-def assets(request):
-    # Check if the user has the "view_project" permission or is in the read-only users
-    if not request.user.has_perm('project.view_asset'):
-        return HttpResponseForbidden("You do not have permission.")
-    
-    context = {'projectid': request.session['current_project']['prj_id']}
-    prj = Project.objects.get(id=context['projectid'])
-    
-    # Add form for manual asset addition
-    context['assetform'] = AddAssetForm()
-    return render(request, 'findings/list_assets.html', context)
-
-@login_required
-def move_asset(request, uuid):
-    """disable monitoring for asset (equivalent to moving back to suggestions)
-    """
-    if not request.user.has_perm('project.change_asset'):
-        return HttpResponseForbidden("You do not have permission.")
-    
-    try:
-        a_obj = Asset.objects.get(uuid=uuid)
-    except Exception as error:
-        messages.error(request, 'Unknown: %s' % error)
-        return redirect(reverse('findings:assets'))
-    # disable monitoring
-    a_obj.monitor = False
-    a_obj.save()
-    messages.info(request, f'Disabled monitoring for Asset: {a_obj.value}')
-    return redirect(reverse('findings:assets'))
-
-@login_required
-def move_all_assets(request):
-    """disable monitoring for all assets (equivalent to moving back to suggestions)
-    """
-    if not request.user.has_perm('project.change_asset'):
-        return HttpResponseForbidden("You do not have permission.")
-    
-    context = {'projectid': request.session['current_project']['prj_id']}
-    try:
-        prj_obj = Project.objects.get(id=context['projectid'])
-    except Exception as error:
-        messages.error(request, 'Unknown Project: %s' % error)
-        return redirect(reverse('findings:assets'))
-
-    def move_all_assets_task(prj_obj):
-        # disable monitoring for all assets
-        a_objs = prj_obj.asset_set.filter(monitor=True)
-        for a_obj in a_objs:
-            a_obj.monitor = False
-            a_obj.save()
-
-    # Start processing in a background thread
-    thread = threading.Thread(target=move_all_assets_task, args=(prj_obj,))
-    thread.start()
-    messages.success(request, f"All monitored assets are being disabled in the background. Please refresh the page after a while to see the results.")
-
-    return redirect(reverse('findings:assets'))
-
-@login_required
-def ignore_asset_glyphicon(request, uuid):
-    """move asset to ignore list
-    """
-    if not request.user.has_perm('project.change_asset'):
-        return HttpResponseForbidden("You do not have permission.")
-
-    context = {'projectid': request.session['current_project']['prj_id']}
-    prj = Project.objects.get(id=context['projectid'])
-    
-    try:
-        ignore_asset(uuid, prj)
-    except Asset.DoesNotExist:
-        messages.error(request, 'Unknown Asset: %s' % uuid)
-
-    return redirect(reverse('findings:assets'))
-
 @login_required
 def ignore_finding_glyphicon(request, findingid):
     """Toggle finding ignore status (AJAX endpoint)
@@ -300,99 +220,6 @@ def ignore_finding_glyphicon(request, findingid):
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
-@login_required
-def delete_asset(request, uuid):
-    """delete asset completely
-    """
-    if not request.user.has_perm('project.delete_asset'):
-        return HttpResponseForbidden("You do not have permission.")
-    
-    try:
-        a_obj = Asset.objects.get(uuid=uuid)
-    except Exception as error:
-        messages.error(request, 'Unknown: %s' % error)
-        return redirect(reverse('findings:assets'))
-    # delete the asset completely
-    asset_value = a_obj.value
-    a_obj.delete()
-    messages.info(request, f'Deleted Asset: {asset_value}')
-    return redirect(reverse('findings:assets'))
-
-@login_required
-def activate_asset(request, uuid):
-    """move asset from ignore list back to active asset list
-    """
-    if not request.user.has_perm('project.change_asset'):
-        return HttpResponseForbidden("You do not have permission.")
-    
-    try:
-        a_obj = Asset.objects.get(uuid=uuid)
-    except Asset.DoesNotExist:
-        messages.error(request, 'Unknown Asset: %s' % uuid)
-        return redirect(reverse('findings:assets'))
-    a_obj.monitor = True
-    a_obj.save()
-    return redirect(reverse('findings:assets'))
-
-@login_required
-def activate_all_assets(request):
-    """Move all ignored assets back to active monitoring"""
-    if not request.user.has_perm('project.change_asset'):
-        return HttpResponseForbidden("You do not have permission.")
-
-    context = {'projectid': request.session['current_project']['prj_id']}
-    try:
-        # Get the current project
-        prj_obj = Project.objects.get(id=context['projectid'])
-    except Project.DoesNotExist:
-        messages.error(request, 'Unknown Project')
-        return redirect(reverse('findings:ignored_assets'))
-
-    # Update all ignored assets for the project to set monitor=True
-    prj_obj.asset_set.filter(monitor=False).update(monitor=True)
-
-    messages.info(request, 'All ignored assets have been reactivated.')
-    return redirect(reverse('findings:assets'))
-
-@login_required
-def view_asset(request, uuid):
-    """view asset details
-    """
-    if not request.user.has_perm('project.view_asset'):
-        return HttpResponseForbidden("You do not have permission.")
-    
-    try:
-        a_obj = Asset.objects.get(uuid=uuid)
-    except Asset.DoesNotExist:
-        messages.error(request, 'Unknown Asset: %s' % uuid)
-        return redirect(reverse('findings:assets'))
-    dns_records = []
-    if a_obj.type == 'domain':
-        dns_records = DNSRecord.objects.filter(related_asset=a_obj).order_by('record_type', 'record_value')
-
-    endpoints_all = Endpoint.objects.filter(asset=a_obj).order_by('-date')
-    endpoints_total = endpoints_all.count()
-    endpoints = list(endpoints_all[:20])
-    endpoints_remaining = list(endpoints_all[20:])
-
-    registrant_info_json = ''
-    if a_obj.registrant_info:
-        registrant_info_json = json.dumps(a_obj.registrant_info, indent=2)
-
-    context = {
-        'asset': a_obj,
-        'ports': a_obj.port_set.all().order_by('port'),
-        'screenshots': Screenshot.objects.filter(asset=a_obj).order_by('-date'),
-        'findings': a_obj.finding_set.filter(ignore=False).order_by('-severity', '-scan_date', '-id'),
-        'ignored_findings': a_obj.finding_set.filter(ignore=True).order_by('-severity', '-scan_date', '-id'),
-        'dns_records': dns_records,
-        'endpoints': endpoints,
-        'endpoints_total': endpoints_total,
-        'endpoints_remaining': endpoints_remaining,
-        'registrant_info_json': registrant_info_json,
-    }
-    return render(request, 'findings/view_asset.html', context)
-
 ### Nucleus stuffs
 @login_required
 def send_nucleus(request, findingid):
@@ -405,7 +232,7 @@ def send_nucleus(request, findingid):
         f_obj = Finding.objects.get(id=findingid)
     except Finding.DoesNotExist:
         messages.error(request, 'Unknown Finding: %s' % findingid)
-        return redirect(reverse('findings:assets'))
+        return redirect(reverse('assets:assets'))
 
     # prepare header
     rheader = {'x-apikey': settings.NUCLEUS_KEY, 'Content-Type': 'application/json'}
@@ -434,35 +261,6 @@ def nmap_results(request):
 
 ### Scanners stuffs
 @login_required
-def recent_findings(request):
-    if not request.user.has_perm('findings.view_finding'):
-        return HttpResponseForbidden("You do not have permission.")
-
-    context = {'projectid': request.session['current_project']['prj_id']}
-    try:
-        prj_obj = Project.objects.get(id=context['projectid'])
-    except Exception as error:
-        messages.error(request, 'Unknown Project: %s' % error)
-        return redirect(reverse('projects:projects'))
-    # count 
-    # severity findings
-    five_days = datetime.now() - timedelta(days=settings.RECENT_DAYS) # X days ago
-    recent_active_domains = prj_obj.asset_set.all().filter(monitor=True, last_scan_time__gte=make_aware(five_days))
-    context['num_info'] = Finding.objects.filter(last_seen__gte=make_aware(five_days), asset__in=recent_active_domains, 
-    severity='info').count()
-    context['num_low'] = Finding.objects.filter(last_seen__gte=make_aware(five_days), asset__in=recent_active_domains, 
-    severity='low').count()
-    context['num_medium'] = Finding.objects.filter(last_seen__gte=make_aware(five_days), asset__in=recent_active_domains, 
-    severity='medium').count()
-    context['num_high'] = Finding.objects.filter(last_seen__gte=make_aware(five_days), asset__in=recent_active_domains, 
-    severity='high').count()
-    context['num_critical'] = Finding.objects.filter(last_seen__gte=make_aware(five_days), asset__in=recent_active_domains, 
-    severity='critical').count()
-    context['past_days'] = settings.RECENT_DAYS
-    context['activetab'] = 'critical'
-    return render(request, 'findings/list_recent_findings.html', context)
-
-@login_required
 def all_findings(request):
     if not request.user.has_perm('findings.view_finding'):
         return HttpResponseForbidden("You do not have permission.")
@@ -480,10 +278,10 @@ def delete_finding(request, uuid, findingid):
         a_obj = Asset.objects.get(uuid=uuid)
     except Asset.DoesNotExist:
         messages.error(request, 'Unknown Asset: %s' % uuid)
-        return redirect(reverse('findings:assets'))
+        return redirect(reverse('assets:assets'))
     a_obj.finding_set.filter(id=findingid).delete() 
     messages.info(request, 'finding deleted!')
-    return redirect(reverse('findings:view_asset', args=(uuid,)))
+    return redirect(reverse('assets:view_asset', args=(uuid,)))
 
 @require_POST
 @login_required
@@ -516,7 +314,7 @@ def httpx_results(request):
 
 @login_required
 def control_center(request):
-    if not request.user.has_perm('project.view_asset'):
+    if not request.user.has_perm('assets.view_asset'):
         return HttpResponseForbidden("You do not have permission.")
     project_id = request.session.get('current_project', {}).get('prj_id', None)
     source_options = []
@@ -548,7 +346,7 @@ def control_center(request):
 
 @login_required
 def control_center_preview(request):
-    if not request.user.has_perm('project.view_asset'):
+    if not request.user.has_perm('assets.view_asset'):
         return HttpResponseForbidden("You do not have permission.")
     project_id = request.session.get('current_project', {}).get('prj_id')
     if not project_id:
@@ -766,18 +564,6 @@ def export_web_endpoints_csv(request):
     return response
 
 @login_required
-def export_monitored_assets_csv(request):
-    """Export all monitored assets for the current project as a CSV file for download."""
-    if not request.user.has_perm('project.view_asset'):
-        return HttpResponseForbidden("You do not have permission.")
-
-    project_id = request.session.get('current_project', {}).get('prj_id')
-    if not project_id:
-        return HttpResponseForbidden("No project selected.")
-    
-    return export_assets_csv(project_id, monitored_only=True, scope='external')
-
-@login_required
 def data_leaks(request):
     if not request.user.has_perm('findings.view_finding'):
         return HttpResponseForbidden("You do not have permission.")
@@ -786,70 +572,9 @@ def data_leaks(request):
 
 
 @login_required
-def manual_add_asset(request):
-    """Manually add an asset with XSS prevention"""
-    if not request.user.has_perm('project.add_asset'):
-        return HttpResponseForbidden("You do not have permission.")
-    
-    if request.method == 'POST':
-        form = AddAssetForm(request.POST)
-        if form.is_valid():
-            record = form.save(commit=False)
-
-            # Sanitize all fields to prevent XSS
-            record.value = escape(record.value)
-            record.description = escape(record.description) if record.description else None
-            record.source = escape(record.source) if record.source else None
-            record.link = escape(record.link) if record.link else None
-
-            # Set related_project to currently selected project
-            project_id = request.session['current_project']['prj_id']
-            record.related_project_id = project_id
-
-            # Set scope to external for assets created from suggestions
-            record.scope = 'external'
-            
-            # Set monitor to True for assets (unlike suggestions which are False by default)
-            record.monitor = True
-
-            # Generate UUID and save the record
-            record.uuid = str(imported_uuid.uuid5(imported_uuid.NAMESPACE_DNS, f"{record.value}:{project_id}"))
-            print(record.uuid)
-            record.creation_time = timezone.now()
-            
-            # Ensure redirects_to is explicitly None to avoid foreign key issues
-            record.redirects_to = None
-            
-            # Use force_insert to avoid potential update conflicts
-            record.save(force_insert=True)
-
-            messages.info(request, "Asset successfully added")
-        else:
-            # Print form errors to the console for debugging
-            print(form.errors)
-            messages.error(request, "Asset failed: %s" % form.errors.as_json(escape_html=False))
-    return redirect(reverse('findings:assets'))
-
-
-@login_required
-def upload_assets(request):
-    if not request.user.has_perm('project.add_asset'):
-        return HttpResponseForbidden("You do not have permission.")
-        
-    context = {'projectid': request.session['current_project']['prj_id']}
-    try:
-        prj_obj = Project.objects.get(id=context['projectid'])
-    except Exception as error:
-        messages.error(request, 'Unknown Project: %s' % error)
-        return redirect(reverse('findings:assets'))
-    
-    return upload_domains_from_file(request, prj_obj, 'findings:assets', monitor_new=True)
-
-
-@login_required
 def dns_records(request):
     """View DNS records for assets"""
-    if not request.user.has_perm('project.view_asset'):
+    if not request.user.has_perm('assets.view_asset'):
         return HttpResponseForbidden("You do not have permission.")
     
     context = {'projectid': request.session['current_project']['prj_id']}
@@ -869,7 +594,7 @@ def dns_records(request):
 @login_required
 def web_endpoints(request):
     """View web endpoints for assets"""
-    if not request.user.has_perm('project.view_asset'):
+    if not request.user.has_perm('assets.view_asset'):
         return HttpResponseForbidden("You do not have permission.")
     
     context = {'projectid': request.session['current_project']['prj_id']}

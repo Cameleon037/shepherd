@@ -56,12 +56,13 @@ INSTALLED_APPS = [
     'shepherd',
     'project',
     'keywords',
-    'suggestions',
+    'assets',
     'findings',
     'dashboard',
     'accounts',
     'jobs',
     'api',
+    'scanners',
 ]
 
 MIDDLEWARE = [

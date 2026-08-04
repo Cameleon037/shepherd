@@ -3,7 +3,8 @@ import threading
 import time
 import gc
 from django.utils.timezone import now
-from project.models import Job, Project
+from jobs.models import Job
+from project.models import Project
 
 def run_job(command, args, projectid, user=None):
     job = Job()

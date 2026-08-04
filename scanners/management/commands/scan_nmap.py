@@ -1,0 +1,239 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import nmap
+import csv
+from io import StringIO
+from datetime import datetime
+import socket
+import dns.resolver
+from collections import defaultdict
+
+from project.models import Project
+from scanners.scan_utils import resolve_uuids, add_common_scan_arguments
+from findings.models import Port
+
+from django.core.management.base import BaseCommand, CommandError
+from django.utils.timezone import make_aware
+
+
+"""
+['host', 'hostname', 'hostname_type', 'protocol', 'port', 'name', 'state', 'product', 'extrainfo', 'reason', 'version', 'conf', 'cpe']
+['3.111.7.95', 'www.tryloctite.in', 'user', 'tcp', '22', 'ssh', 'open', 'OpenSSH', 'Ubuntu Linux; protocol 2.0', 'syn-ack', '8.9p1 Ubuntu 3ubuntu0.7', '10', 'cpe:/o:linux:linux_kernel']
+['3.111.7.95', 'ec2-3-111-7-95.ap-south-1.compute.amazonaws.com', 'PTR', 'tcp', '22', 'ssh', 'open', 'OpenSSH', 'Ubuntu Linux; protocol 2.0', 'syn-ack', '8.9p1 Ubuntu 3ubuntu0.7', '10', 'cpe:/o:linux:linux_kernel']
+['3.111.7.95', 'www.tryloctite.in', 'user', 'tcp', '80', 'http', 'open', 'nginx', '', 'syn-ack', '', '10', 'cpe:/a:igor_sysoev:nginx']
+['3.111.7.95', 'ec2-3-111-7-95.ap-south-1.compute.amazonaws.com', 'PTR', 'tcp', '80', 'http', 'open', 'nginx', '', 'syn-ack', '', '10', 'cpe:/a:igor_sysoev:nginx']
+['3.111.7.95', 'www.tryloctite.in', 'user', 'tcp', '443', 'http', 'open', 'nginx', '', 'syn-ack', '', '10', 'cpe:/a:igor_sysoev:nginx']
+['3.111.7.95', 'ec2-3-111-7-95.ap-south-1.compute.amazonaws.com', 'PTR', 'tcp', '443', 'http', 'open', 'nginx', '', 'syn-ack', '', '10', 'cpe:/a:igor_sysoev:nginx']
+"""
+
+class Command(BaseCommand):
+    help = 'Run Nmap scan for active domains in a specific project'
+
+    def add_arguments(self, parser):
+        parser.add_argument('--projectid', type=int, help='ID of the project to scan')
+        add_common_scan_arguments(parser)
+        parser.add_argument('--scope', type=str, help='Filter by scope (e.g., external, internal)', required=False)
+        parser.add_argument('--new-assets', action='store_true', help='Only scan assets with empty last_scan_time')
+
+    def resolve_domain_to_ip(self, domain):
+        """Resolve domain name to IP address using DNS A record"""
+        try:
+            # Try A record first (IPv4)
+            answers = dns.resolver.resolve(domain, 'A')
+            return str(answers[0])
+        except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.resolver.Timeout):
+            try:
+                # Fallback to socket.gethostbyname
+                return socket.gethostbyname(domain)
+            except socket.gaierror:
+                self.stderr.write(f"Could not resolve domain {domain}")
+                return None
+        except Exception as e:
+            self.stderr.write(f"Error resolving domain {domain}: {e}")
+            return None
+
+    def handle(self, *args, **options):
+        projectid = options.get('projectid')
+        uuid_list = resolve_uuids(options)
+        scope_filter = options.get('scope')
+        new_assets_only = options.get('new_assets')
+
+        if projectid:
+            try:
+                projects = [Project.objects.get(id=projectid)]
+            except Project.DoesNotExist:
+                raise CommandError(f"Project with ID {projectid} does not exist.")
+        else:
+            projects = Project.objects.all()
+
+        for prj in projects:
+            domains_qs = prj.asset_set.filter(monitor=True)
+            if scope_filter:
+                domains_qs = domains_qs.filter(scope=scope_filter)
+            if uuid_list:
+                domains_qs = domains_qs.filter(uuid__in=uuid_list)
+            if new_assets_only:
+                domains_qs = domains_qs.filter(last_scan_time__isnull=True)
+
+            if not domains_qs.exists():
+                self.stdout.write(f"No domains found to scan for project {prj.projectname}")
+                continue
+
+            # Group domains by their resolved IP addresses
+            ip_to_domains = defaultdict(list)
+            unresolved_domains = []
+            
+            self.stdout.write(f"Resolving {domains_qs.count()} domains to IP addresses...")
+            
+            for domain in domains_qs:
+                ip = self.resolve_domain_to_ip(domain.value)
+                if ip:
+                    ip_to_domains[ip].append(domain)
+                    self.stdout.write(f"Resolved {domain.value} -> {ip}")
+                else:
+                    unresolved_domains.append(domain)
+                    self.stdout.write(f"Could not resolve {domain.value}")
+
+            # Scan each unique IP address only once
+            self.stdout.write(f"Scanning {len(ip_to_domains)} unique IP addresses...")
+            
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                futures = []
+                for ip, domains_for_ip in ip_to_domains.items():
+                    future = executor.submit(self.nmap_scan_ip, ip, domains_for_ip)
+                    futures.append(future)
+                
+                for future in as_completed(futures):
+                    future.result()  # This will raise any exceptions caught during the scan
+
+            # Handle unresolved domains separately (scan them directly)
+            if unresolved_domains:
+                self.stdout.write(f"Scanning {len(unresolved_domains)} unresolved domains directly...")
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    futures = [executor.submit(self.nmap_scan_domain, domain.value, domain) for domain in unresolved_domains]
+                    for future in as_completed(futures):
+                        future.result()  # This will raise any exceptions caught during the scan
+
+    # nmap top-100 TCP ports (equivalent to -F) plus custom additions
+    SCAN_PORTS = (
+        '7,9,13,21-23,25-26,37,53,79-81,88,106,110-111,113,119,135,139,143-144,'
+        '179,199,389,427,443-445,465,513-515,543-544,548,554,587,631,646,873,'
+        '990,993,995,1025-1029,1110,1433,1720,1723,1755,1900,2000-2001,2049,'
+        '2087,2121,2717,3000,3128,3306,3389,3986,4899,5000,5009,5051,5060,'
+        '5101,5190,5357,5432,5631,5666,5800,5900,6000-6001,6646,7070,8000,'
+        '8008-8009,8080-8081,8443,8888,9100,9999-10000,32768,49152-49157'
+    )
+    NMAP_ARGS = '-Pn -sC -sV -T4 --version-light'
+
+    def nmap_scan_ip(self, ip_address, domains_for_ip):
+        """Scan a single IP address and distribute results to all domains that point to it"""
+        self.stdout.write(f"Nmap scan starting for IP {ip_address} (affects {len(domains_for_ip)} domains)")
+        try:
+            port_list = []
+            nm = nmap.PortScanner()
+            nm.scan(ip_address, ports=self.SCAN_PORTS, arguments=self.NMAP_ARGS)
+
+            f = StringIO(nm.csv())
+            r = csv.reader(f, delimiter=';')
+            firstRow = None
+            for row in r:
+                if row[0] == 'host':
+                    firstRow = row
+                    continue
+                new_row = dict(zip(firstRow, row))
+                pdict = {
+                    'port': int(new_row['port']),
+                    'banner': new_row['name'] + '::' + new_row['extrainfo'] + '::' + new_row['version'],
+                    'status': new_row['state'],
+                    'product': new_row['product'],
+                    'cpe': new_row['cpe']
+                }
+                if pdict not in port_list:
+                    port_list.append(pdict)
+
+            # Flush old port entries for all domains that point to this IP
+            for ad_obj in domains_for_ip:
+                old_ports_count = Port.objects.filter(asset=ad_obj).count()
+                if old_ports_count > 0:
+                    Port.objects.filter(asset=ad_obj).delete()
+                    self.stdout.write(f"Flushed {old_ports_count} old port entries for {ad_obj.value}")
+
+            # Process the results and save to database for each domain
+            open_ports_cnt = 0
+            for port_entry in port_list:
+                if port_entry["status"] == "open":
+                    open_ports_cnt += 1
+                    
+                    # Create port entries for all domains that point to this IP
+                    for ad_obj in domains_for_ip:
+                        port_obj = Port.objects.create(
+                            asset=ad_obj,
+                            asset_name=ad_obj.value,
+                            port=port_entry['port'],
+                            scan_date=make_aware(datetime.now()),
+                            banner=port_entry['banner'],
+                            status=port_entry['status'],
+                            product=port_entry['product'],
+                            cpe=port_entry['cpe'],
+                            raw=port_entry
+                        )
+            
+            domain_names = [d.value for d in domains_for_ip]
+            self.stdout.write(f"[+] {open_ports_cnt} ports found for IP {ip_address} (domains: {', '.join(domain_names)})")
+            
+        except Exception as error:
+            domain_names = [d.value for d in domains_for_ip]
+            self.stderr.write(f"Exception scanning IP {ip_address} (domains: {', '.join(domain_names)}): {str(error)}")
+
+    def nmap_scan_domain(self, webaddress, ad_obj):
+        self.stdout.write(f"Nmap scan starting for {webaddress}")
+        try:
+            port_list = []
+            nm = nmap.PortScanner()
+            nm.scan(webaddress, ports=self.SCAN_PORTS, arguments=self.NMAP_ARGS)
+
+            f = StringIO(nm.csv())
+            r = csv.reader(f, delimiter=';')
+            firstRow = None
+            for row in r:
+                if row[0] == 'host':
+                    firstRow = row
+                    continue
+                new_row = dict(zip(firstRow, row))
+                pdict = {
+                    'port': int(new_row['port']),
+                    'banner': new_row['name'] + '::' + new_row['extrainfo'] + '::' + new_row['version'],
+                    'status': new_row['state'],
+                    'product': new_row['product'],
+                    'cpe': new_row['cpe']
+                }
+                if pdict not in port_list:
+                    port_list.append(pdict)
+            
+            # Flush old port entries for this domain
+            old_ports_count = Port.objects.filter(asset=ad_obj).count()
+            if old_ports_count > 0:
+                Port.objects.filter(asset=ad_obj).delete()
+                self.stdout.write(f"Flushed {old_ports_count} old port entries for {ad_obj.value}")
+
+            # Process the results and save to database
+            open_ports_cnt = 0
+            for port_entry in port_list:
+                if port_entry["status"] == "open":
+                    open_ports_cnt += 1
+                    port_obj = Port.objects.create(
+                        asset=ad_obj,
+                        asset_name=ad_obj.value,
+                        port=port_entry['port'],
+                        scan_date=make_aware(datetime.now()),
+                        banner=port_entry['banner'],
+                        status=port_entry['status'],
+                        product=port_entry['product'],
+                        cpe=port_entry['cpe'],
+                        raw=port_entry
+                    )
+            
+            self.stdout.write(f"[+] {open_ports_cnt} ports found for {ad_obj.value}")
+            
+        except Exception as error:
+            self.stderr.write(f"Exception scanning domain {webaddress}: {str(error)}")
+            

@@ -1,7 +1,7 @@
 import django.forms.fields
 from django import forms
 from django.forms import ModelForm
-from project.models import Keyword
+from keywords.models import Keyword
 
 class AddKeywordForm(ModelForm):
     KTYPE_CHOICES = [

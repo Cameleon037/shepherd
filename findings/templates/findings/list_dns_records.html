@@ -99,7 +99,7 @@ $(document).ready(function() {
                 {
                     'data': 'asset_value', 'sName': 'Asset', 'aTargets': [1],
                     "mRender": function (data, type, full) {
-                        var asset_url = "{% url 'findings:view_asset' uuid='PLACEHOLDER' %}".replace('PLACEHOLDER', full.asset_uuid);
+                        var asset_url = "{% url 'assets:view_asset' uuid='PLACEHOLDER' %}".replace('PLACEHOLDER', full.asset_uuid);
                         return '<a href="' + asset_url + '">' + data + '</a>';
                     }
                 },

@@ -1,7 +1,8 @@
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
 
-from project.models import Project, Keyword
+from project.models import Project
+from keywords.models import Keyword
 
 @login_required
 def home(request):
