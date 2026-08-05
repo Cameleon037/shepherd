@@ -192,7 +192,7 @@ function getSelectedIdsFromBulkConfig(config) {
 /**
  * Setup bulk actions: intercept form/buttons, collect selected IDs, POST to API, reload tables.
  * @param {object} config - apiUrl, formSelector, checkboxName ('id[]' or 'uuid[]'), tableInstances (DataTable APIs to reload), buttons [{ name, action, confirm }]
- *   Example: { apiUrl: '/api/v1/project/123/assets/bulk/', formSelector: '#form-selected', checkboxName: 'id[]', tableInstances: [assetsTable], buttons: [{ name: 'btnignore', action: 'ignore', confirm: false }, { name: 'btndelete', action: 'delete', confirm: true }] }
+ *   Example: { apiUrl: '{% url "api:bulk_assets" projectid=projectid %}', formSelector: '#form-selected', checkboxName: 'id[]', tableInstances: [assetsTable], buttons: [{ name: 'btnignore', action: 'ignore', confirm: false }, { name: 'btndelete', action: 'delete', confirm: true }] }
  */
 function setupBulkActions(config) {
     if (!config || !config.apiUrl || !config.buttons || !config.buttons.length) return;
@@ -408,8 +408,10 @@ function setupFormSubmission(table) {
     });
 }
 
-// Common edit comment modal functionality
-function setupEditCommentModal(table, projectId) {
+// Common edit comment modal functionality.
+// commentUrlTemplate must contain the literal placeholder __ID__ for the finding id
+// (e.g. from {% url 'api:update_finding_comment' projectid=projectid findingid='__ID__' %}).
+function setupEditCommentModal(table, commentUrlTemplate) {
     // Edit comment modal functionality
     $(document).on("click", ".edit-comment", function(e) {
         e.preventDefault();
@@ -433,10 +435,11 @@ function setupEditCommentModal(table, projectId) {
     $("#saveCommentButton").on("click", function() {
         var findingId = $('#editCommentModal').data('finding-id');
         var updatedComment = $("#commentText").val();
+        var url = commentUrlTemplate.replace('__ID__', findingId);
         
         // Send AJAX request to update comment
         $.ajax({
-            url: "/api/v1/project/" + projectId + "/findings/" + findingId + "/update_comment/",
+            url: url,
             type: "POST",
             headers: {
                 "X-CSRFToken": getCookie("csrftoken")
@@ -549,8 +552,8 @@ function initializeCommonDataTableFeatures(table, options) {
         setupSendToNucleus();
     }
     
-    if (options.hasCommentModal && options.projectId) {
-        setupEditCommentModal(table, options.projectId);
+    if (options.hasCommentModal && options.commentUrlTemplate) {
+        setupEditCommentModal(table, options.commentUrlTemplate);
     }
 }
 

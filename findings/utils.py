@@ -1,3 +1,6 @@
+from django.conf import settings
+from django.utils import timezone
+
 from findings.models import Finding
 import requests
 import json
@@ -92,3 +95,23 @@ def ignore_finding(findingid):
     finding.save()
 
     return
+
+
+def report_finding_to_nucleus(findingid):
+    """Send the details of the finding to Nucleus and mark it as reported.
+
+    Raises Finding.DoesNotExist if the finding is unknown.
+    """
+    f_obj = Finding.objects.get(id=findingid)
+
+    # prepare header
+    rheader = {'x-apikey': settings.NUCLEUS_KEY, 'Content-Type': 'application/json'}
+    asset_name, asset_id = asset_get_or_create(f_obj.asset.value, settings.NUCLEUS_URL, settings.NUCLEUS_PROJECT, rheader)
+    # add finding
+    result, msg = asset_finding_get_or_create(asset_name, asset_id, f_obj, settings.NUCLEUS_URL, settings.NUCLEUS_PROJECT, rheader)
+    # update reporting time
+    f_obj.last_reported = timezone.now()
+    f_obj.reported = True
+    f_obj.save()
+
+    return result, msg

@@ -142,7 +142,7 @@ $(document).ready(function() {
     }
 
     // Initialize the DNS records table
-    var dnsTable = initializeDataTable('#table_list_dns_records', "/api/v1/project/{{ projectid }}/dns_records/");
+    var dnsTable = initializeDataTable('#table_list_dns_records', "{% url 'api:list_dns_records' projectid=projectid %}");
 
     // Find the second header row (filter row) and bind to its inputs/selects
     var $filterRow = $('#table_list_dns_records thead tr:eq(1)');

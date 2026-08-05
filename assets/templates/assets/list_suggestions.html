@@ -429,7 +429,7 @@
 <script type="text/javascript" language="javascript" class="init">
 
   $(document).ready(function () {
-    function initializeDataTable(tableId, ajaxUrl) {
+    function initializeDataTable(tableId, ajaxUrl, ajaxData) {
       return $(tableId).DataTable({
         processing: true,
         serverSide: true,
@@ -441,7 +441,14 @@
           url: ajaxUrl,
           dataSrc: "results",
           type: "GET",
-          dataType: "json"
+          dataType: "json",
+          data: function (d) {
+            if (typeof ajaxData === 'function') {
+              ajaxData(d);
+            } else if (ajaxData) {
+              $.extend(d, ajaxData);
+            }
+          }
         },
         columns: [
           {
@@ -515,7 +522,7 @@
     }
 
     // IP table columns (no IP or redirect columns)
-    function initializeIPDataTable(tableId, ajaxUrl) {
+    function initializeIPDataTable(tableId, ajaxUrl, ajaxData) {
       return $(tableId).DataTable({
         processing: true,
         serverSide: true,
@@ -527,7 +534,14 @@
           url: ajaxUrl,
           dataSrc: "results",
           type: "GET",
-          dataType: "json"
+          dataType: "json",
+          data: function (d) {
+            if (typeof ajaxData === 'function') {
+              ajaxData(d);
+            } else if (ajaxData) {
+              $.extend(d, ajaxData);
+            }
+          }
         },
         columns: [
           {
@@ -585,10 +599,11 @@
       });
     }
 
-    var domTable = initializeDataTable('#table_list_domain_suggestions', "/api/v1/project/{{ projectid }}/suggestions/visible/all/");
-    var subTable = initializeDataTable('#table_list_second_level_domain_suggestions', "/api/v1/project/{{ projectid }}/suggestions/visible/second_level_domain/");
-    var starredTable = initializeDataTable('#table_list_starreddomain_suggestions', "/api/v1/project/{{ projectid }}/suggestions/visible/starred_domain/");
-    var ipTable = initializeIPDataTable('#table_list_ipaddress_suggestions', "/api/v1/project/{{ projectid }}/suggestions/visible/ip/");
+    var suggestionsListUrl = "{% url 'api:list_suggestions' projectid=projectid %}";
+    var domTable = initializeDataTable('#table_list_domain_suggestions', suggestionsListUrl, { selection: 'visible', vtype: 'all' });
+    var subTable = initializeDataTable('#table_list_second_level_domain_suggestions', suggestionsListUrl, { selection: 'visible', vtype: 'second_level_domain' });
+    var starredTable = initializeDataTable('#table_list_starreddomain_suggestions', suggestionsListUrl, { selection: 'visible', vtype: 'starred_domain' });
+    var ipTable = initializeIPDataTable('#table_list_ipaddress_suggestions', suggestionsListUrl, { selection: 'visible', vtype: 'ip' });
 
     function applySearch(table, tableId) {
       // Find the second header row (filter row) and bind to its inputs/selects
@@ -613,7 +628,7 @@
     // Bulk actions via API (no page refresh)
     setupBulkActions({
       formSelector: '#form-selected',
-      apiUrl: '/api/v1/project/{{ projectid }}/suggestions/bulk/',
+      apiUrl: "{% url 'api:bulk_suggestions' projectid=projectid %}",
       checkboxName: 'id[]',
       tableInstances: [domTable, subTable, starredTable, ipTable],
       buttons: [

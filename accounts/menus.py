@@ -34,10 +34,14 @@ sharing_children = (
             reverse("accounts:change_password"),
             weight=1
         ),
-    #MenuItem("Token",
-    #        reverse("accounts:list_token"),
-    #        weight=2
-    #    ),
+    MenuItem("API Key",
+            reverse("accounts:api_key"),
+            weight=2
+        ),
+    MenuItem("API Docs",
+            reverse("swagger-ui"),
+            weight=3
+        ),
     #MenuItem("Notes",
     #        reverse("accounts:list_notes"),
     #        weight=3

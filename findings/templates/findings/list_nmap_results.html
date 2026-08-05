@@ -88,7 +88,7 @@ $(document).ready(function () {
         oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>" },
         order: [[1, "asc"]],
         ajax: {
-            url: "/api/v1/project/{{ projectid }}/ports/",
+            url: "{% url 'api:list_ports' projectid=projectid %}",
             dataSrc: "results",
             type: "GET",
             dataType: "json"
@@ -162,7 +162,7 @@ $(document).ready(function () {
     // Bulk actions via API (no page refresh)
     setupBulkActions({
         formSelector: '#form-selected',
-        apiUrl: '/api/v1/project/{{ projectid }}/ports/bulk/',
+        apiUrl: "{% url 'api:bulk_ports' projectid=projectid %}",
         checkboxName: 'id[]',
         tableInstances: [portTable],
         buttons: [

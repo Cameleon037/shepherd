@@ -133,7 +133,7 @@ $(document).ready(function () {
 
     var httpxTable = initializeDataTable(
         '#table_list_httpx_results',
-        "/api/v1/project/{{ projectid }}/screenshots/",
+        "{% url 'api:list_screenshots' projectid=projectid %}",
         httpxColumns
     );
 

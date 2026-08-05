@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'django_celery_beat',
     'rest_framework',
     'rest_framework.authtoken',
+    'drf_spectacular',
     'menu',
     'shepherd',
     'project',
@@ -160,12 +161,43 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'api.pagination.CustomPaginator',
     'PAGE_SIZE': 25,
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework.authentication.BasicAuthentication',
         'rest_framework.authentication.SessionAuthentication',
-        'rest_framework.authentication.TokenAuthentication',
+        'api.authentication.ShepherdTokenAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': ( 'rest_framework.permissions.IsAuthenticated', ),
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Shepherd API',
+    'DESCRIPTION': (
+        'JSON API used by the Shepherd UI (DataTables AJAX, bulk actions, scans, and discovery). '
+        'Authenticate with a browser session (login first), or with an API key from '
+        'Preferences → API Key. In Swagger, click Authorize and paste the key only. '
+        'For curl/scripts use: Authorization: Token <your-key> (bare key also accepted).'
+    ),
+    'VERSION': 'v1',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SWAGGER_UI_SETTINGS': {
+        'persistAuthorization': True,
+    },
+    'PREPROCESSING_HOOKS': [
+        'drf_spectacular.hooks.preprocess_exclude_path_format',
+    ],
+    'TAGS': [
+        {'name': 'Projects', 'description': 'Global project collection'},
+        {'name': 'Keywords', 'description': 'Keyword list and management'},
+        {'name': 'Suggestions', 'description': 'Asset suggestions from discovery'},
+        {'name': 'Assets', 'description': 'Monitored assets and related inventory'},
+        {'name': 'Ports', 'description': 'Open ports on assets'},
+        {'name': 'Findings', 'description': 'Security findings'},
+        {'name': 'Data Leaks', 'description': 'Data-leak findings'},
+        {'name': 'Jobs', 'description': 'Background and scheduled jobs'},
+        {'name': 'Scans', 'description': 'Asset scan control center'},
+        {'name': 'Discovery', 'description': 'Keyword discovery control center'},
+    ],
 }
 
 # DomainTools API

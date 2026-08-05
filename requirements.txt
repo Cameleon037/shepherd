@@ -1,6 +1,7 @@
 django
 menu
 djangorestframework
+drf-spectacular
 dateparser
 tld
 django_ratelimit

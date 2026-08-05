@@ -183,7 +183,7 @@
 
 $(document).ready(function () {
     // Function to initialize a DataTable with search functionality
-    function initializeDataTable(tableId, ajaxUrl, columns) {
+    function initializeDataTable(tableId, ajaxUrl, columns, ajaxData) {
         return $(tableId).DataTable({
             processing: true,
             serverSide: true,
@@ -195,7 +195,14 @@ $(document).ready(function () {
                 url: ajaxUrl,
                 dataSrc: "results",
                 type: "GET",
-                dataType: "json"
+                dataType: "json",
+                data: function (d) {
+                    if (typeof ajaxData === 'function') {
+                        ajaxData(d);
+                    } else if (ajaxData) {
+                        $.extend(d, ajaxData);
+                    }
+                }
             },
             columns: columns
         });
@@ -339,8 +346,9 @@ $(document).ready(function () {
     ];
 
     // Initialize DataTables
-    var monitoredTable = initializeDataTable('#table_list_assets', "/api/v1/project/{{ projectid }}/assets/monitored/", monitoredColumns);
-    var ignoredTable = initializeDataTable('#table_list_ignored_assets', "/api/v1/project/{{ projectid }}/assets/ignored/", ignoredColumns);
+    var assetsListUrl = "{% url 'api:list_assets' projectid=projectid %}";
+    var monitoredTable = initializeDataTable('#table_list_assets', assetsListUrl, monitoredColumns, { selection: 'monitored' });
+    var ignoredTable = initializeDataTable('#table_list_ignored_assets', assetsListUrl, ignoredColumns, { selection: 'ignored' });
 
     // Find the second header row (filter row) and bind to its inputs/selects
     var $filterRowMonitored = $('#table_list_assets thead tr:eq(1)');
@@ -368,7 +376,7 @@ $(document).ready(function () {
     // Bulk actions via API (no page refresh)
     setupBulkActions({
       formSelector: '#form-selected',
-      apiUrl: '/api/v1/project/{{ projectid }}/assets/bulk/',
+      apiUrl: "{% url 'api:bulk_assets' projectid=projectid %}",
       checkboxName: 'id[]',
       tableInstances: [monitoredTable],
       buttons: [
@@ -395,7 +403,7 @@ $(document).ready(function () {
       btn.prop('disabled', true).text('Redirecting...');
 
       $.ajax({
-        url: "{% url 'findings:scan_assets' %}",
+        url: "{% url 'api:scans_preselect' projectid=projectid %}",
         method: 'POST',
         contentType: 'application/json',
         headers: { 'X-CSRFToken': getCookie('csrftoken') },

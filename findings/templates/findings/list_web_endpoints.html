@@ -122,7 +122,7 @@ $(document).ready(function() {
     }
 
     // Initialize the web endpoints table
-    var endpointsTable = initializeDataTable('#table_list_web_endpoints', "/api/v1/project/{{ projectid }}/endpoints/");
+    var endpointsTable = initializeDataTable('#table_list_web_endpoints', "{% url 'api:list_endpoints' projectid=projectid %}");
 
     // Find the second header row (filter row) and bind to its inputs/selects
     var $filterRow = $('#table_list_web_endpoints thead tr:eq(1)');
@@ -163,7 +163,7 @@ $(document).ready(function() {
         $status.text('');
 
         $.ajax({
-            url: "{% url 'findings:scan_burp_endpoints' %}",
+            url: "{% url 'api:scans_burp' projectid=projectid %}",
             type: 'POST',
             contentType: 'application/json',
             data: JSON.stringify({ urls: selectedUrls }),

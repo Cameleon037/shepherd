@@ -100,7 +100,7 @@ $(document).ready( function () {
         order: [[ 0, "asc" ]],
         ajax: {
             processing: true,
-            url: "/api/v1/projects/",
+            url: "{% url 'api:projects' %}",
             dataSrc: "results",
             type: "GET",
             dataType: "json"

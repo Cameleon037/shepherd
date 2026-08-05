@@ -122,7 +122,7 @@ $(document).ready( function () {
         order: [[ 1, "asc" ]],
         ajax: {
             processing: true,
-            url: "/api/v1/project/{{ projectid }}/findings/data_leaks/",
+            url: "{% url 'api:list_data_leaks' projectid=projectid %}",
             dataSrc: "results",
             type: "GET",
             dataType: "json",
@@ -137,11 +137,8 @@ $(document).ready( function () {
             {'data': 'id', 'sName': 'Operations', 'aTargets': [ 0 ],
                 'bSortable': false,
                 "mRender": function (data, type, full) {
-                    var ignore_url = "{% url 'findings:ignore_finding_glyphicon' findingid=0 %}"
-                        .replace('ignore/0', 'ignore/' + full.id);
-                    var delete_url = "{% url 'api:delete_finding' projectid=0 findingid=0 %}"
-                        .replace('project/0', 'project/{{ projectid }}')
-                        .replace('delete/0', 'delete/' + full.id);
+                    var ignore_url = "{% url 'api:toggle_finding_ignore' projectid=projectid findingid='__ID__' %}".replace('__ID__', full.id);
+                    var delete_url = "{% url 'api:delete_finding' projectid=projectid findingid='__ID__' %}".replace('__ID__', full.id);
                     return '<div class="btn-group1">' +
                         '<input type="checkbox" name="id[]" value="' + $('<div/>').text(data).html() + '">&nbsp;&nbsp;' +
                         '<a class="btn btn-xs toggle-ignore-finding" rel="tooltip" data-placement="right" data-original-title="Toggle ignore status" data-display="' + full.name + '" href="' + ignore_url + '">' +
@@ -223,14 +220,14 @@ $(document).ready( function () {
         useBulkActionsApi: true,
         hasNucleus: false,
         hasCommentModal: true,
-        projectId: "{{ projectid }}",
+        commentUrlTemplate: "{% url 'api:update_finding_comment' projectid=projectid findingid='__ID__' %}",
         selectAllId: '#select-all-findings',
         tableId: '#table_list_findings'
     });
 
     setupBulkActions({
         formSelector: '#form-selected-findings',
-        apiUrl: '/api/v1/project/{{ projectid }}/findings/data_leaks/bulk/',
+        apiUrl: "{% url 'api:bulk_findings_data_leaks' projectid=projectid %}",
         checkboxName: 'id[]',
         tableInstances: [findingsTable],
         buttons: [

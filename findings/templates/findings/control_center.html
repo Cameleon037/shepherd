@@ -361,7 +361,7 @@ $(document).ready(function () {
         $('#selected-assets-hint').text('Loading preview...');
         $('#preview-container').hide();
         $.ajax({
-            url: "{% url 'findings:control_center_preview' %}",
+            url: "{% url 'api:scans_preview' projectid=projectid %}",
             data: filters,
             success: function(resp) {
                 $('#selected-assets-hint').text(resp.count + ' asset(s) match the filters.');
@@ -400,7 +400,7 @@ $(document).ready(function () {
         var assetMode = getAssetMode();
         $('#btn-launch-scans').prop('disabled', true).text('Launching...');
         $('#scan-feedback').text('');
-        fetch("{% url 'findings:control_center_launch' %}", {
+        fetch("{% url 'api:scans_launch' projectid=projectid %}", {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

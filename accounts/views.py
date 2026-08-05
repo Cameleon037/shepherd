@@ -15,6 +15,7 @@ from django.http import HttpResponseRedirect
 from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib import messages
+from rest_framework.authtoken.models import Token
 
 # Create your views here.
 
@@ -58,3 +59,31 @@ def change_password(request):
     else:
         form = PasswordChangeForm(request.user)
     return render(request, 'accounts/chgpwd.html', {'form': form})
+
+
+@login_required
+def manage_api_key(request):
+    token = Token.objects.filter(user=request.user).first()
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'create':
+            token, created = Token.objects.get_or_create(user=request.user)
+            if created:
+                messages.success(request, 'API key created.')
+            else:
+                messages.info(request, 'You already have an API key.')
+        elif action == 'regenerate':
+            Token.objects.filter(user=request.user).delete()
+            token = Token.objects.create(user=request.user)
+            messages.success(request, 'API key regenerated. The previous key no longer works.')
+        elif action == 'revoke':
+            deleted, _ = Token.objects.filter(user=request.user).delete()
+            token = None
+            if deleted:
+                messages.success(request, 'API key revoked.')
+            else:
+                messages.info(request, 'No API key to revoke.')
+        return redirect('accounts:api_key')
+
+    return render(request, 'accounts/api_key.html', {'token': token})

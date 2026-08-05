@@ -5,16 +5,29 @@ from django.http import HttpResponseForbidden, JsonResponse, HttpResponse, HttpR
 from django.db.models import Q, Prefetch, Count, F, Case, When, IntegerField, TextField
 from django.db.models.functions import Cast
 from django.conf import settings
+from django.urls import reverse
+from django.utils.html import escape
 from django.utils.timezone import make_aware
 
 from rest_framework import status
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.authentication import SessionAuthentication, TokenAuthentication
+from rest_framework.authentication import SessionAuthentication
+from api.authentication import ShepherdTokenAuthentication
+from rest_framework import serializers as drf_serializers
+
+from drf_spectacular.utils import extend_schema, inline_serializer
 
 from api.pagination import CustomPaginator
 from api.serializer import JobSerializer, ProjectSerializer, KeywordSerializer, SuggestionSerializer, AssetSerializer, FindingSerializer, PortSerializer, ScreenshotSerializer, DNSRecordSerializer, EndpointSerializer
+from api.schema import (
+    DATATABLES_PARAMETERS,
+    SELECTION_PARAMETER,
+    StatusMessageSerializer,
+    SuccessMessageSerializer,
+    BulkActionSerializer,
+)
 from api.utils import get_ordering_vars, apply_search_filter, apply_column_search, apply_column_search_multi
 
 from project.models import Project
@@ -24,20 +37,40 @@ from jobs.models import Job
 from findings.models import DNSRecord
 from findings.models import Finding, Port, Screenshot, Endpoint
 from assets.utils import ignore_asset
-from findings.utils import ignore_finding
-from findings.views import send_nucleus
+from findings.utils import ignore_finding, report_finding_to_nucleus
+from findings.services.scanning import filter_assets_for_project, run_scan_jobs, run_burp_scan
+from keywords.services.discovery import run_discovery_jobs
 from django_celery_beat.models import PeriodicTask, IntervalSchedule, CrontabSchedule, ClockedSchedule
 
 # Create your views here.
 
 ##### PROJECTS ###############
 
-@api_view(['GET'])
-@authentication_classes((SessionAuthentication, ))
+@extend_schema(
+    methods=['GET'],
+    tags=['Projects'],
+    summary='List projects',
+    description='DataTables-backed list of all projects.',
+    parameters=DATATABLES_PARAMETERS,
+    responses={200: ProjectSerializer(many=True)},
+)
+@extend_schema(
+    methods=['POST'],
+    tags=['Projects'],
+    summary='Create project',
+    description='Create a new project.',
+    request=ProjectSerializer,
+    responses={200: StatusMessageSerializer},
+)
+@api_view(['GET', 'POST'])
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
-def list_projects(request, format=None):
-    """List all projects
+def projects(request, format=None):
+    """List all projects (GET) or create a project (POST)
     """
+    if request.method == 'POST':
+        return create_project(request)
+
     if not request.user.has_perm('project.view_project'):
         return HttpResponseForbidden("You do not have permission to view this project.")
     
@@ -68,11 +101,8 @@ def list_projects(request, format=None):
     return paginator.get_paginated_response(serializer.data)
 
 
-@api_view(['POST'])
-@authentication_classes((SessionAuthentication, ))
-@permission_classes((IsAuthenticated,))
-def create_project(request, format=None):
-    """Create project via API
+def create_project(request):
+    """Create a project. Dispatched from `projects` on POST.
     """
     if not request.user.has_perm('project.add_project'):
         return HttpResponseForbidden("You do not have permission to view this project.")
@@ -90,13 +120,23 @@ def create_project(request, format=None):
 
 ##### SUGGESTIONS ################
 
+@extend_schema(
+    tags=['Suggestions'],
+    summary='List suggestions',
+    description='DataTables-backed list of asset suggestions for a project.',
+    parameters=DATATABLES_PARAMETERS + [SELECTION_PARAMETER],
+    responses={200: SuggestionSerializer(many=True)},
+)
 @api_view(['GET'])
-@authentication_classes((SessionAuthentication, ))
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
-def list_suggestions(request, projectid, selection, vtype, format=None):
+def list_suggestions(request, projectid, format=None):
     if not request.user.has_perm('assets.view_asset'):
         return HttpResponseForbidden("You do not have permission to view this project.")
-    
+
+    selection = request.query_params.get('selection', 'visible')
+    vtype = request.query_params.get('vtype', 'all')
+
     paginator = CustomPaginator()
     ### check if project exists
     try:
@@ -240,15 +280,25 @@ def list_suggestions(request, projectid, selection, vtype, format=None):
     return paginator.get_paginated_response(serialized_data)
 
 
+@extend_schema(
+    tags=['Suggestions'],
+    summary='Bulk update suggestions',
+    description='Bulk actions on suggestions. POST body: action=monitor|ignore|move|delete, id[]=uuid... `move` reactivates an ignored suggestion.',
+    request=BulkActionSerializer,
+    responses={200: SuccessMessageSerializer},
+)
 @api_view(['POST'])
-@authentication_classes((SessionAuthentication,))
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
 def bulk_suggestions(request, projectid, format=None):
-    """Bulk actions on suggestions: monitor, ignore, delete. POST body: action=monitor|ignore|delete, id[]=uuid..."""
+    """Bulk actions on suggestions. POST body: action=monitor|ignore|move|delete, id[]=uuid...
+
+    `move` reactivates an ignored suggestion.
+    """
     if not request.user.has_perm('assets.view_asset'):
         return HttpResponseForbidden("You do not have permission.")
     try:
-        prj = Project.objects.get(id=projectid)
+        Project.objects.get(id=projectid)
     except Project.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Project not found'}, status=404)
     action = request.POST.get('action')
@@ -257,11 +307,13 @@ def bulk_suggestions(request, projectid, format=None):
             action = 'monitor'
         elif 'btnignore' in request.POST:
             action = 'ignore'
+        elif 'btnmove' in request.POST:
+            action = 'move'
         elif 'btndelete' in request.POST:
             action = 'delete'
-    if action not in ('monitor', 'ignore', 'delete'):
+    if action not in ('monitor', 'ignore', 'move', 'delete'):
         return JsonResponse({'success': False, 'error': 'Unknown action'}, status=400)
-    if action in ('monitor', 'ignore') and not request.user.has_perm('assets.change_asset'):
+    if action in ('monitor', 'ignore', 'move') and not request.user.has_perm('assets.change_asset'):
         return HttpResponseForbidden("You do not have permission.")
     if action == 'delete' and not request.user.has_perm('assets.delete_asset'):
         return HttpResponseForbidden("You do not have permission.")
@@ -276,6 +328,9 @@ def bulk_suggestions(request, projectid, format=None):
                 s_obj.delete()
             elif action == 'ignore':
                 s_obj.ignore = True
+                s_obj.save()
+            elif action == 'move':
+                s_obj.ignore = False
                 s_obj.save()
             elif action == 'monitor':
                 if s_obj.type in ['certificate', 'domain']:
@@ -305,61 +360,26 @@ def bulk_suggestions(request, projectid, format=None):
     return JsonResponse({'success': True, 'message': 'Action completed successfully'})
 
 
-@api_view(['POST'])
-@authentication_classes((SessionAuthentication,))
-@permission_classes((IsAuthenticated,))
-def bulk_suggestions_ignored(request, projectid, format=None):
-    """Bulk actions on ignored suggestions: move (reactivate), delete. POST body: action=move|delete, id[]=uuid..."""
-    if not request.user.has_perm('assets.view_asset'):
-        return HttpResponseForbidden("You do not have permission.")
-    try:
-        Project.objects.get(id=projectid)
-    except Project.DoesNotExist:
-        return JsonResponse({'success': False, 'error': 'Project not found'}, status=404)
-    action = request.POST.get('action')
-    if not action:
-        if 'btnmove' in request.POST:
-            action = 'move'
-        elif 'btndelete' in request.POST:
-            action = 'delete'
-    if action not in ('move', 'delete'):
-        return JsonResponse({'success': False, 'error': 'Unknown action'}, status=400)
-    if action == 'move' and not request.user.has_perm('assets.change_asset'):
-        return HttpResponseForbidden("You do not have permission.")
-    if action == 'delete' and not request.user.has_perm('assets.delete_asset'):
-        return HttpResponseForbidden("You do not have permission.")
-    id_lst = request.POST.getlist('id[]')
-    if not id_lst:
-        return JsonResponse({'success': False, 'error': 'No items selected'}, status=400)
-    errors = []
-    for item in id_lst:
-        try:
-            s_obj = Asset.objects.get(uuid=item, scope='external')
-            if action == 'delete':
-                s_obj.delete()
-            elif action == 'move':
-                s_obj.ignore = False
-                s_obj.save()
-        except Asset.DoesNotExist:
-            errors.append('Unknown Suggestion: %s' % item)
-        except Exception as e:
-            errors.append(str(e))
-    if errors:
-        return JsonResponse({'success': False, 'error': '; '.join(errors[:5])}, status=400)
-    return JsonResponse({'success': True, 'message': 'Action completed successfully'})
-
-
 ##### END SUGGESTIONS ###########
 
 
 ##### ASSETS ###############
+@extend_schema(
+    tags=['Assets'],
+    summary='List assets',
+    description='DataTables-backed list of assets for a project.',
+    parameters=DATATABLES_PARAMETERS + [SELECTION_PARAMETER],
+    responses={200: AssetSerializer(many=True)},
+)
 @api_view(['GET'])
-@authentication_classes((SessionAuthentication,))
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
-def list_assets(request, projectid, selection, format=None):
+def list_assets(request, projectid, format=None):
     if not request.user.has_perm('assets.view_asset'):
         return HttpResponseForbidden("You do not have permission to view this project.")
-    
+
+    selection = request.query_params.get('selection', 'monitored')
+
     paginator = CustomPaginator()
     ### check if project exists
     try:
@@ -488,8 +508,15 @@ def list_assets(request, projectid, selection, format=None):
     return paginator.get_paginated_response(serializer.data)
 
 
+@extend_schema(
+    tags=['Assets'],
+    summary='Bulk update assets',
+    description='Bulk actions on assets: ignore, move, delete. POST body: action=ignore|move|delete, id[]=uuid...',
+    request=BulkActionSerializer,
+    responses={200: SuccessMessageSerializer},
+)
 @api_view(['POST'])
-@authentication_classes((SessionAuthentication,))
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
 def bulk_assets(request, projectid, format=None):
     """Bulk actions on assets: ignore, move, delete. POST body: action=ignore|move|delete, id[]=uuid..."""
@@ -541,8 +568,15 @@ def bulk_assets(request, projectid, format=None):
 
 ##### DNS RECORDS ###############
 
+@extend_schema(
+    tags=['Assets'],
+    summary='List DNS records',
+    description='DataTables-backed list of DNS records for a project.',
+    parameters=DATATABLES_PARAMETERS,
+    responses={200: DNSRecordSerializer(many=True)},
+)
 @api_view(['GET'])
-@authentication_classes((SessionAuthentication,))
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
 def list_dns_records(request, projectid, format=None):
     if not request.user.has_perm('assets.view_asset'):
@@ -620,8 +654,15 @@ def list_dns_records(request, projectid, format=None):
 
 ##### WEB ENDPOINTS ###############
 
+@extend_schema(
+    tags=['Assets'],
+    summary='List endpoints',
+    description='DataTables-backed list of web endpoints for a project.',
+    parameters=DATATABLES_PARAMETERS,
+    responses={200: EndpointSerializer(many=True)},
+)
 @api_view(['GET'])
-@authentication_classes((SessionAuthentication,))
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
 def list_endpoints(request, projectid, format=None):
     if not request.user.has_perm('assets.view_asset'):
@@ -687,13 +728,22 @@ def list_endpoints(request, projectid, format=None):
 
 ##### KEYWORDS ###############
 
+@extend_schema(
+    tags=['Keywords'],
+    summary='List keywords',
+    description='DataTables-backed list of keywords for a project.',
+    parameters=DATATABLES_PARAMETERS + [SELECTION_PARAMETER],
+    responses={200: KeywordSerializer(many=True)},
+)
 @api_view(['GET'])
-@authentication_classes((SessionAuthentication, ))
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
-def list_keywords(request, projectid, selection, format=None):
+def list_keywords(request, projectid, format=None):
     if not request.user.has_perm('keywords.view_keyword'):
         return HttpResponseForbidden("You do not have permission to view this project.")
-    
+
+    selection = request.query_params.get('selection', 'all')
+
     paginator = CustomPaginator()
     ### check if project exists
     try:
@@ -735,12 +785,51 @@ def list_keywords(request, projectid, selection, format=None):
     return paginator.get_paginated_response(serializer.data)
 
 
+@extend_schema(
+    tags=['Keywords'],
+    summary='Add keywords',
+    description='Add one or more keywords to a project by project name.',
+    request=inline_serializer(
+        name='AddKeywordRequest',
+        fields={
+            'projectname': drf_serializers.CharField(),
+            'keywords': drf_serializers.JSONField(help_text='A single keyword string or a list of strings.'),
+        },
+    ),
+    responses={200: StatusMessageSerializer},
+)
 @api_view(['POST'])
-@authentication_classes((SessionAuthentication, ))
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
 def add_keyword(request, format=None):
     """Add keywords to a project
     """
+    return _add_keyword(request)
+
+
+@extend_schema(
+    deprecated=True,
+    tags=['Keywords'],
+    summary='Add keywords (deprecated alias)',
+    description='Deprecated. Use POST /api/v1/keywords/add/ instead.',
+    request=inline_serializer(
+        name='AddKeywordLegacyRequest',
+        fields={
+            'projectname': drf_serializers.CharField(),
+            'keywords': drf_serializers.JSONField(help_text='A single keyword string or a list of strings.'),
+        },
+    ),
+    responses={200: StatusMessageSerializer},
+)
+@api_view(['POST'])
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
+@permission_classes((IsAuthenticated,))
+def add_keyword_legacy(request, format=None):
+    """Deprecated alias of add_keyword."""
+    return _add_keyword(request)
+
+
+def _add_keyword(request):
     if not request.user.has_perm('keywords.add_keyword'):
         return HttpResponseForbidden("You do not have permission to view this project.")
     
@@ -769,12 +858,107 @@ def add_keyword(request, format=None):
     return JsonResponse(result)
 
 
+@extend_schema(
+    tags=['Keywords'],
+    summary='Bulk sync keywords',
+    description='Sync the full keyword set of a project: create, update and delete in one call.',
+    request=inline_serializer(
+        name='BulkUpdateKeywordsRequest',
+        fields={
+            'keywords': drf_serializers.ListField(
+                child=drf_serializers.DictField(),
+                help_text='Items with optional id plus keyword, ktype, description, enabled.',
+            ),
+        },
+    ),
+    responses={200: SuccessMessageSerializer},
+)
+@api_view(['POST'])
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
+@permission_classes((IsAuthenticated,))
+def bulk_update_keywords(request, projectid, format=None):
+    """Sync the full keyword set of a project: create, update and delete in one call
+    """
+    if not request.user.has_perm('keywords.add_keyword'):
+        return HttpResponseForbidden("You do not have permission.")
+
+    try:
+        project = Project.objects.get(id=projectid)
+    except Project.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'Project not found.'}, status=400)
+
+    keywords_data = request.data.get('keywords', [])
+
+    # Get existing keyword IDs for this project
+    existing_ids = set(
+        Keyword.objects.filter(related_project=project).values_list('id', flat=True)
+    )
+
+    # Track which IDs we're keeping
+    submitted_ids = set()
+
+    for kw_data in keywords_data:
+        kw_id = kw_data.get('id')
+        keyword_value = escape(kw_data.get('keyword', '').strip())
+        ktype = kw_data.get('ktype', 'registrant_org')
+        description = escape(kw_data.get('description', '').strip())
+        enabled = kw_data.get('enabled', True)
+
+        if not keyword_value:
+            continue
+
+        if kw_id:
+            # Update existing keyword
+            submitted_ids.add(kw_id)
+            try:
+                kw = Keyword.objects.get(id=kw_id, related_project=project)
+                kw.keyword = keyword_value
+                kw.ktype = ktype
+                kw.description = description
+                kw.enabled = enabled
+                kw.save()
+            except Keyword.DoesNotExist:
+                # ID doesn't exist, create new
+                Keyword.objects.create(
+                    related_project=project,
+                    keyword=keyword_value,
+                    ktype=ktype,
+                    description=description,
+                    enabled=enabled
+                )
+        else:
+            # Create new keyword
+            Keyword.objects.create(
+                related_project=project,
+                keyword=keyword_value,
+                ktype=ktype,
+                description=description,
+                enabled=enabled
+            )
+
+    # Delete keywords that were removed (IDs in existing but not in submitted)
+    ids_to_delete = existing_ids - submitted_ids
+    if ids_to_delete:
+        Keyword.objects.filter(id__in=ids_to_delete, related_project=project).delete()
+
+    return JsonResponse({
+        'success': True,
+        'message': 'Keywords updated successfully.'
+    })
+
 
 ##### END KEYWORDS ###############
 
 ##### PORTS ###############
+@extend_schema(
+    tags=['Ports'],
+    summary='List ports',
+    description='DataTables-backed list of ports for a project.',
+    parameters=DATATABLES_PARAMETERS,
+    responses={200: PortSerializer(many=True)},
+)
 @api_view(['GET'])
-@authentication_classes((SessionAuthentication, ))
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
 def list_ports(request, projectid, format=None):
     if not request.user.has_perm('findings.view_port'):
@@ -827,8 +1011,14 @@ def list_ports(request, projectid, format=None):
 
     return paginator.get_paginated_response(serializer.data)
 
+@extend_schema(
+    tags=['Ports'],
+    summary='Delete port',
+    description='Delete a single port by ID.',
+    responses={200: SuccessMessageSerializer},
+)
 @api_view(['DELETE'])
-@authentication_classes((SessionAuthentication,))
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
 def delete_port(request, projectid, portid):
     if not request.user.has_perm('findings.delete_port'):
@@ -848,8 +1038,15 @@ def delete_port(request, projectid, portid):
     return JsonResponse({'success': True})
 
 
+@extend_schema(
+    tags=['Ports'],
+    summary='Bulk delete ports',
+    description='Bulk delete ports. POST body: action=delete, id[]=id...',
+    request=BulkActionSerializer,
+    responses={200: SuccessMessageSerializer},
+)
 @api_view(['POST'])
-@authentication_classes((SessionAuthentication,))
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
 def bulk_ports(request, projectid, format=None):
     """Bulk delete ports. POST body: action=delete, id[]=id..."""
@@ -926,8 +1123,15 @@ def bulk_ports(request, projectid, format=None):
 #     return paginator.get_paginated_response(serializer.data)
 
 
+@extend_schema(
+    tags=['Findings'],
+    summary='List findings',
+    description='DataTables-backed list of security findings for a project.',
+    parameters=DATATABLES_PARAMETERS + [SELECTION_PARAMETER],
+    responses={200: FindingSerializer(many=True)},
+)
 @api_view(['GET'])
-@authentication_classes((SessionAuthentication, ))
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
 def list_all_findings(request, projectid, format=None):
     if not request.user.has_perm('findings.view_finding'):
@@ -1025,8 +1229,15 @@ def list_all_findings(request, projectid, format=None):
     serializer = FindingSerializer(instance=kwrds, many=True)
     return paginator.get_paginated_response(serializer.data)
 
+@extend_schema(
+    tags=['Data Leaks'],
+    summary='List data leaks',
+    description='DataTables-backed list of data-leak findings for a project.',
+    parameters=DATATABLES_PARAMETERS + [SELECTION_PARAMETER],
+    responses={200: FindingSerializer(many=True)},
+)
 @api_view(['GET'])
-@authentication_classes((SessionAuthentication, ))
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
 def list_data_leaks(request, projectid, format=None):
     if not request.user.has_perm('findings.view_finding'):
@@ -1114,8 +1325,14 @@ def list_data_leaks(request, projectid, format=None):
     serializer = FindingSerializer(instance=kwrds, many=True)
     return paginator.get_paginated_response(serializer.data)
 
+@extend_schema(
+    tags=['Findings'],
+    summary='Delete finding',
+    description='Delete a specific finding by ID for a given project.',
+    responses={200: StatusMessageSerializer},
+)
 @api_view(['DELETE'])
-@authentication_classes((SessionAuthentication, ))
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
 def delete_finding(request, projectid, findingid):
     """Delete a specific finding by ID for a given project."""
@@ -1136,8 +1353,15 @@ def delete_finding(request, projectid, findingid):
         return JsonResponse({'message': 'Finding does not exist', 'status': 'failure'}, status=404)
 
 
+@extend_schema(
+    tags=['Findings'],
+    summary='Bulk update findings',
+    description='Bulk actions on findings: ignore, delete, report. POST body: action=ignore|delete|report, id[]=id...',
+    request=BulkActionSerializer,
+    responses={200: SuccessMessageSerializer},
+)
 @api_view(['POST'])
-@authentication_classes((SessionAuthentication,))
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
 def bulk_findings(request, projectid, format=None):
     """Bulk actions on findings: ignore, delete, report. POST body: action=ignore|delete|report, id[]=id..."""
@@ -1172,7 +1396,7 @@ def bulk_findings(request, projectid, format=None):
             elif action == 'ignore':
                 ignore_finding(findingid)
             elif action == 'report':
-                send_nucleus(request, findingid)
+                report_finding_to_nucleus(findingid)
         except Finding.DoesNotExist:
             errors.append('Unknown Finding: %s' % findingid)
         except Exception as e:
@@ -1182,8 +1406,15 @@ def bulk_findings(request, projectid, format=None):
     return JsonResponse({'success': True, 'message': 'Action completed successfully'})
 
 
+@extend_schema(
+    tags=['Data Leaks'],
+    summary='Bulk update data leaks',
+    description='Bulk actions on data leak findings: ignore, delete. POST body: action=ignore|delete, id[]=id...',
+    request=BulkActionSerializer,
+    responses={200: SuccessMessageSerializer},
+)
 @api_view(['POST'])
-@authentication_classes((SessionAuthentication,))
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
 def bulk_findings_data_leaks(request, projectid, format=None):
     """Bulk actions on data leak findings: ignore, delete. POST body: action=ignore|delete, id[]=id..."""
@@ -1226,8 +1457,71 @@ def bulk_findings_data_leaks(request, projectid, format=None):
     return JsonResponse({'success': True, 'message': 'Action completed successfully'})
 
 
+@extend_schema(
+    tags=['Findings'],
+    summary='Toggle finding ignore',
+    description='Toggle the ignore status of a single finding.',
+    request=None,
+    responses={200: SuccessMessageSerializer},
+)
 @api_view(['POST'])
-@authentication_classes((SessionAuthentication, ))
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
+@permission_classes((IsAuthenticated,))
+def toggle_finding_ignore(request, projectid, findingid):
+    """Toggle the ignore status of a single finding
+    """
+    if not request.user.has_perm('findings.change_finding'):
+        return HttpResponseForbidden("You do not have permission to modify findings.")
+
+    try:
+        ignore_finding(findingid)
+        return JsonResponse({'success': True, 'message': 'Ignore status toggled successfully.'})
+    except Finding.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Unknown Finding: %s' % findingid}, status=404)
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@extend_schema(
+    tags=['Findings'],
+    summary='Report finding to Nucleus',
+    description='Send the details of a single finding to Nucleus.',
+    request=None,
+    responses={200: SuccessMessageSerializer},
+)
+@api_view(['POST'])
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
+@permission_classes((IsAuthenticated,))
+def report_finding(request, projectid, findingid):
+    """Send the details of a single finding to Nucleus
+    """
+    if not request.user.has_perm('findings.change_finding'):
+        return HttpResponseForbidden("You do not have permission.")
+
+    try:
+        report_finding_to_nucleus(findingid)
+    except Finding.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Unknown Finding: %s' % findingid}, status=404)
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+    return JsonResponse({'success': True, 'message': 'Finding sent to Nucleus successfully.'})
+
+
+@extend_schema(
+    tags=['Findings'],
+    summary='Update finding comment',
+    description="Update a finding's comment.",
+    request=inline_serializer(
+        name='UpdateFindingCommentRequest',
+        fields={
+            'comment': drf_serializers.CharField(allow_blank=True),
+        },
+    ),
+    responses={200: SuccessMessageSerializer},
+)
+@api_view(['POST'])
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
 def update_finding_comment(request, projectid, findingid):
     """Update a finding's comment
@@ -1256,10 +1550,17 @@ def update_finding_comment(request, projectid, findingid):
 
 ##### JOBS ###############
 
+@extend_schema(
+    tags=['Jobs'],
+    summary='List jobs',
+    description='DataTables-backed list of jobs for a project.',
+    parameters=DATATABLES_PARAMETERS,
+    responses={200: JobSerializer(many=True)},
+)
 @api_view(['GET'])
-@authentication_classes((SessionAuthentication, ))
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
-def list_jobs(request, projectid):
+def list_jobs(request, projectid, format=None):
     if not request.user.has_perm('jobs.view_job'):
         return HttpResponseForbidden("You do not have permission to view this.")
 
@@ -1296,8 +1597,15 @@ def list_jobs(request, projectid):
 
 ##### END JOBS ###############
 
+@extend_schema(
+    tags=['Assets'],
+    summary='List screenshots',
+    description='DataTables-backed list of screenshots for a project.',
+    parameters=DATATABLES_PARAMETERS,
+    responses={200: ScreenshotSerializer(many=True)},
+)
 @api_view(['GET'])
-@authentication_classes((SessionAuthentication,))
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
 def list_screenshots(request, projectid, format=None):
     if not request.user.has_perm('findings.view_finding'):
@@ -1386,8 +1694,26 @@ def list_screenshots(request, projectid, format=None):
 
     return paginator.get_paginated_response(data)
 
+@extend_schema(
+    tags=['Jobs'],
+    summary='List scheduled jobs',
+    description='DataTables-backed list of Celery Beat scheduled jobs.',
+    parameters=DATATABLES_PARAMETERS,
+    responses={200: inline_serializer(
+        name='ScheduledJob',
+        fields={
+            'name': drf_serializers.CharField(),
+            'task': drf_serializers.CharField(),
+            'schedule': drf_serializers.CharField(),
+            'enabled': drf_serializers.BooleanField(),
+            'last_run_at': drf_serializers.CharField(allow_blank=True),
+            'description': drf_serializers.CharField(allow_blank=True),
+        },
+        many=True,
+    )},
+)
 @api_view(['GET'])
-@authentication_classes((SessionAuthentication,))
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
 def list_scheduled_jobs(request):
     if not request.user.has_perm('jobs.view_job'):
@@ -1465,3 +1791,234 @@ def list_scheduled_jobs(request):
             'description': getattr(job, 'description', ''),
         })
     return paginator.get_paginated_response(results)
+
+
+##### ASSET SCANS ###############
+
+@extend_schema(
+    tags=['Scans'],
+    summary='Preview scan assets',
+    description='Preview which assets match the control center filters.',
+    responses={200: inline_serializer(
+        name='ScansPreviewResponse',
+        fields={
+            'count': drf_serializers.IntegerField(),
+            'sample': drf_serializers.ListField(child=drf_serializers.DictField()),
+        },
+    )},
+)
+@api_view(['GET'])
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
+@permission_classes((IsAuthenticated,))
+def scans_preview(request, projectid, format=None):
+    """Preview which assets match the control center filters
+    """
+    if not request.user.has_perm('assets.view_asset'):
+        return HttpResponseForbidden("You do not have permission.")
+
+    sources = request.query_params.getlist('sources[]') or request.query_params.getlist('sources')
+    filters = {
+        'type': request.query_params.get('type'),
+        'scope': request.query_params.get('scope'),
+        'sources': sources,
+        'name': request.query_params.get('name'),
+    }
+    queryset = filter_assets_for_project(projectid, filters)
+    new_assets_only = request.query_params.get('new_assets_only')
+    if new_assets_only:
+        queryset = queryset.filter(last_scan_time__isnull=True)
+    count = queryset.count()
+    sample = list(
+        queryset.values('uuid', 'value', 'type', 'scope', 'source')[:25]
+    )
+    return JsonResponse({'count': count, 'sample': sample})
+
+
+@extend_schema(
+    tags=['Scans'],
+    summary='Preselect scan assets',
+    description='Store selected asset UUIDs in the session and hand back the control center URL.',
+    request=inline_serializer(
+        name='ScansPreselectRequest',
+        fields={
+            'uuids': drf_serializers.ListField(child=drf_serializers.CharField()),
+        },
+    ),
+    responses={200: SuccessMessageSerializer},
+)
+@api_view(['POST'])
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
+@permission_classes((IsAuthenticated,))
+def scans_preselect(request, projectid, format=None):
+    """Store selected asset UUIDs in the session and hand back the control center URL
+    """
+    if not request.user.has_perm('findings.add_finding'):
+        return HttpResponseForbidden("You do not have permission.")
+
+    selected_uuids = request.data.get('uuids', [])
+    if not selected_uuids:
+        return JsonResponse({'success': False, 'message': 'No assets selected.'}, status=400)
+
+    request.session['scan_selected_uuids'] = [str(u) for u in selected_uuids]
+    return JsonResponse({'success': True, 'redirect': reverse('findings:control_center')})
+
+
+@extend_schema(
+    tags=['Scans'],
+    summary='Launch scans',
+    description='Launch the selected scanners against the requested set of assets.',
+    request=inline_serializer(
+        name='ScansLaunchRequest',
+        fields={
+            'filters': drf_serializers.DictField(required=False),
+            'scans': drf_serializers.DictField(required=False),
+            'asset_mode': drf_serializers.CharField(required=False),
+            'selected_uuids': drf_serializers.ListField(
+                child=drf_serializers.CharField(), required=False
+            ),
+        },
+    ),
+    responses={200: SuccessMessageSerializer},
+)
+@api_view(['POST'])
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
+@permission_classes((IsAuthenticated,))
+def scans_launch(request, projectid, format=None):
+    """Launch the selected scanners against the requested set of assets
+    """
+    if not request.user.has_perm('findings.add_finding'):
+        return HttpResponseForbidden("You do not have permission.")
+
+    filters = request.data.get('filters', {})
+    scans = request.data.get('scans', {})
+    asset_mode = request.data.get('asset_mode', 'all')
+
+    scan_new_assets = False
+    if asset_mode == 'all':
+        asset_ids = []
+        asset_count_display = Asset.objects.filter(related_project_id=projectid, monitor=True).count()
+    elif asset_mode == 'new':
+        asset_ids = []
+        scan_new_assets = True
+        asset_count_display = Asset.objects.filter(
+            related_project_id=projectid, monitor=True, last_scan_time__isnull=True
+        ).count()
+    elif asset_mode == 'selected':
+        asset_ids = request.data.get('selected_uuids', [])
+        if not asset_ids:
+            return JsonResponse({'success': False, 'message': 'No pre-selected assets.'}, status=400)
+        asset_count_display = len(asset_ids)
+    else:
+        # "filter" mode: resolve UUIDs via filters
+        queryset = filter_assets_for_project(projectid, filters)
+        asset_ids = list(queryset.values_list('uuid', flat=True))
+        if not asset_ids:
+            return JsonResponse({'success': False, 'message': 'No assets match the filters.'}, status=400)
+        asset_count_display = len(asset_ids)
+
+    scan_flags = {
+        'scan_nmap': bool(scans.get('scan_nmap')),
+        'scan_httpx': bool(scans.get('scan_httpx')),
+        'scan_playwright': bool(scans.get('scan_playwright')),
+        'scan_katana': bool(scans.get('scan_katana')),
+        'scan_shepherdai': bool(scans.get('scan_shepherdai')),
+        'scan_nuclei': bool(scans.get('scan_nuclei')),
+        'scan_nuclei_new_templates': bool(scans.get('scan_nuclei_new_templates')),
+        'scan_domaintools': bool(scans.get('scan_domaintools')),
+    }
+
+    if not any(scan_flags.values()):
+        return JsonResponse({'success': False, 'message': 'Select at least one scanner.'}, status=400)
+
+    triggered = run_scan_jobs(projectid, request.user, asset_ids, scan_new_assets, scan_flags)
+    return JsonResponse({
+        'success': True,
+        'asset_count': asset_count_display,
+        'messages': triggered,
+    })
+
+
+@extend_schema(
+    tags=['Scans'],
+    summary='Launch Burp scan',
+    description='Trigger a Burp Suite scan against selected web endpoint URLs.',
+    request=inline_serializer(
+        name='ScansBurpRequest',
+        fields={
+            'urls': drf_serializers.ListField(child=drf_serializers.CharField()),
+        },
+    ),
+    responses={200: SuccessMessageSerializer},
+)
+@api_view(['POST'])
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
+@permission_classes((IsAuthenticated,))
+def scans_burp(request, projectid, format=None):
+    """Trigger a Burp Suite scan against selected web endpoint URLs
+    """
+    if not request.user.has_perm('findings.add_finding'):
+        return JsonResponse({'success': False, 'message': 'Permission denied.'}, status=403)
+
+    urls = request.data.get('urls', [])
+    if not urls:
+        return JsonResponse({'success': False, 'message': 'No URLs selected.'}, status=400)
+
+    try:
+        run_burp_scan(projectid, request.user, urls)
+    except Exception:
+        return JsonResponse({'success': False, 'message': 'Failed to prepare scan.'}, status=500)
+
+    return JsonResponse({
+        'success': True,
+        'message': f'Burp Suite scan triggered for {len(urls)} URL(s). Check Jobs for progress.',
+    })
+
+##### END ASSET SCANS ###########
+
+##### KEYWORD DISCOVERY ###############
+
+@extend_schema(
+    tags=['Discovery'],
+    summary='Launch discovery',
+    description='Launch keyword-based discovery scans from the discovery control center.',
+    request=inline_serializer(
+        name='DiscoveryLaunchRequest',
+        fields={
+            'keywords': drf_serializers.ListField(
+                child=drf_serializers.IntegerField(),
+                required=False,
+                help_text='Keyword IDs; empty means all.',
+            ),
+            'scans': drf_serializers.DictField(required=False),
+            'auto_monitor': drf_serializers.BooleanField(required=False),
+            'post_actions': drf_serializers.DictField(required=False),
+        },
+    ),
+    responses={200: SuccessMessageSerializer},
+)
+@api_view(['POST'])
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
+@permission_classes((IsAuthenticated,))
+def discovery_launch(request, projectid, format=None):
+    """Launch keyword based discovery scans from the discovery control center
+    """
+    if not request.user.has_perm('assets.add_asset'):
+        return HttpResponseForbidden("You do not have permission.")
+
+    keyword_ids = request.data.get('keywords', [])  # Empty means all
+    scans = request.data.get('scans', {})
+    auto_monitor = request.data.get('auto_monitor', False)
+    post_actions = request.data.get('post_actions', {})
+
+    triggered_messages, launched = run_discovery_jobs(
+        projectid, request.user, keyword_ids, scans, auto_monitor, post_actions
+    )
+    if not launched:
+        return JsonResponse({'success': False, 'message': 'Select at least one scan or action.'}, status=400)
+
+    return JsonResponse({
+        'success': True,
+        'messages': triggered_messages,
+    })
+
+##### END KEYWORD DISCOVERY ###########

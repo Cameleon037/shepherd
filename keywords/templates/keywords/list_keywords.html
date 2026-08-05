@@ -250,10 +250,13 @@ $(document).ready( function () {
         order: [[ 1, "asc" ]], // Sort by Type (column index 1)
         ajax: {
             processing: true,
-            url: "/api/v1/project/{{ projectid }}/keywords/all/",
+            url: "{% url 'api:list_keywords' projectid=projectid %}",
             dataSrc: "results",
             type: "GET",
-            dataType: "json"
+            dataType: "json",
+            data: function (d) {
+                d.selection = 'all';
+            }
         },
         columns: [
             {'data': 'keyword', 'sName': 'Keyword', 'aTargets': [ 0 ],
@@ -305,10 +308,13 @@ $(document).ready( function () {
         order: [[ 0, "asc" ]], // Sort by Supplier (column index 0)
         ajax: {
             processing: true,
-            url: "/api/v1/project/{{ projectid }}/keywords/suppliers/",
+            url: "{% url 'api:list_keywords' projectid=projectid %}",
             dataSrc: "results",
             type: "GET",
-            dataType: "json"
+            dataType: "json",
+            data: function (d) {
+                d.selection = 'suppliers';
+            }
         },
         columns: [
             {'data': 'keyword', 'sName': 'Supplier', 'aTargets': [ 0 ],
@@ -414,8 +420,9 @@ $(document).ready( function () {
         $list.html('<div class="text-center text-muted">Loading keywords...</div>');
         
         $.ajax({
-            url: '/api/v1/project/{{ projectid }}/keywords/all/',
+            url: "{% url 'api:list_keywords' projectid=projectid %}",
             type: 'GET',
+            data: { selection: 'all' },
             success: function(response) {
                 $list.empty();
                 var keywords = response.results || response;
@@ -489,7 +496,7 @@ $(document).ready( function () {
         $('#keywords-save-status').text('').css('color', '');
 
         $.ajax({
-            url: '{% url "keywords:bulk_update_keywords" %}',
+            url: "{% url 'api:bulk_update_keywords' projectid=projectid %}",
             type: 'POST',
             contentType: 'application/json',
             headers: { 'X-CSRFToken': getCookie('csrftoken') },

@@ -126,7 +126,7 @@ $(document).ready(function () {
     ];
 
     // Initialize DataTables
-    var jobTable = initializeDataTable('#table_list_jobs', "/api/v1/project/{{ projectid }}/jobs/all/", jobColumns);
+    var jobTable = initializeDataTable('#table_list_jobs', "{% url 'api:list_jobs' projectid=projectid %}", jobColumns);
 
     // Find the second header row (filter row) and bind to its inputs/selects
     var $filterRow = $('#table_list_jobs thead tr:eq(1)');

@@ -79,10 +79,14 @@ $(document).ready( function () {
         order: [[ 4, "desc" ]],
         ajax: {
             processing: true,
-            url: "/api/v1/project/{{ projectid }}/suggestions/ignored/all/",
+            url: "{% url 'api:list_suggestions' projectid=projectid %}",
             dataSrc: "results",
             type: "GET",
-            dataType: "json"
+            dataType: "json",
+            data: function (d) {
+                d.selection = 'ignored';
+                d.vtype = 'all';
+            }
         },
         columns: [
             {'data': 'uuid', 'sName': 'Operations', 'aTargets': [ 0 ],
@@ -139,7 +143,7 @@ $(document).ready( function () {
     // Bulk actions via API (no page refresh)
     setupBulkActions({
         formSelector: '#form-selected',
-        apiUrl: '/api/v1/project/{{ projectid }}/suggestions/ignored/bulk/',
+        apiUrl: "{% url 'api:bulk_suggestions' projectid=projectid %}",
         checkboxName: 'id[]',
         tableInstances: [pTable],
         buttons: [

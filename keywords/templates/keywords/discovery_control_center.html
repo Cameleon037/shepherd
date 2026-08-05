@@ -321,7 +321,7 @@ $(document).ready(function () {
         $('#btn-launch-discovery').prop('disabled', true).text('Launching...');
         $('#scan-feedback').text('');
         
-        fetch("{% url 'keywords:discovery_control_center_launch' %}", {
+        fetch("{% url 'api:discovery_launch' projectid=projectid %}", {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

@@ -114,7 +114,7 @@ $(document).ready(function () {
 
     var scheduledJobTable = initializeDataTable(
         '#table_list_scheduled_jobs',
-        "/api/v1/scheduled_jobs/", // You must implement this API endpoint to return scheduled jobs in JSON
+        "{% url 'api:list_scheduled_jobs' %}", // Scheduled jobs JSON endpoint
         scheduledJobColumns
     );
 

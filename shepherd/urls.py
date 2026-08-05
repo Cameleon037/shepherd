@@ -17,6 +17,10 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.authentication import SessionAuthentication
+
 from shepherd import views
 
 urlpatterns = [
@@ -27,6 +31,32 @@ urlpatterns = [
     path('findings/', include(('findings.urls', 'findings'), namespace='findings')),
     path('dashboard/', include(('dashboard.urls', 'dashboard'), namespace='dashboard')),
     path('accounts/', include(('accounts.urls', 'accounts'), namespace='accounts')),
+    path(
+        'api/schema/',
+        SpectacularAPIView.as_view(
+            authentication_classes=[SessionAuthentication],
+            permission_classes=[IsAuthenticated],
+        ),
+        name='schema',
+    ),
+    path(
+        'api/docs/',
+        SpectacularSwaggerView.as_view(
+            url_name='schema',
+            authentication_classes=[SessionAuthentication],
+            permission_classes=[IsAuthenticated],
+        ),
+        name='swagger-ui',
+    ),
+    path(
+        'api/redoc/',
+        SpectacularRedocView.as_view(
+            url_name='schema',
+            authentication_classes=[SessionAuthentication],
+            permission_classes=[IsAuthenticated],
+        ),
+        name='redoc',
+    ),
     path('api/', include(('api.urls', 'api'), namespace='api')),
     path('jobs/', include(('jobs.urls', 'jobs'), namespace='jobs')),
     path('oidc/', include('mozilla_django_oidc.urls')),
