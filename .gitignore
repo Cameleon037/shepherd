@@ -12,10 +12,6 @@ scanners/management/commands/test_custom.py
 cert.pem
 key.pem
 
-# Ignore Django migration files
-**/migrations/*.py
-!**/migrations/__init__.py
-
 # sockets
 gunicorn.sock
 
