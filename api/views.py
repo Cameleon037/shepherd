@@ -379,6 +379,7 @@ def list_assets(request, projectid, format=None):
         return HttpResponseForbidden("You do not have permission to view this project.")
 
     selection = request.query_params.get('selection', 'monitored')
+    has_endpoints = request.query_params.get('has_endpoints', None)
 
     paginator = CustomPaginator()
     ### check if project exists
@@ -424,8 +425,13 @@ def list_assets(request, projectid, format=None):
         vuln_critical=Count('finding', filter=Q(finding__severity='critical') & Q(finding__ignore=False)),
         vuln_high=Count('finding', filter=Q(finding__severity='high') & Q(finding__ignore=False)),
         vuln_medium=Count('finding', filter=Q(finding__severity='medium') & Q(finding__ignore=False)),
-        vuln_low=Count('finding', filter=Q(finding__severity='low') & Q(finding__ignore=False))
+        vuln_low=Count('finding', filter=Q(finding__severity='low') & Q(finding__ignore=False)),
+        endpoint_count=Count('endpoint')
     )
+
+    # Only assets that have at least one endpoint (used by the Web Endpoints page)
+    if has_endpoints:
+        queryset = queryset.filter(endpoint_count__gt=0)
 
     # Filter by scope if provided
     if search_columns['scope'] and search_columns['scope'] != "":
@@ -693,6 +699,8 @@ def list_endpoints(request, projectid, format=None):
     search_url = request.query_params.get('columns[1][search][value]', None)
     search_technologies = request.query_params.get('columns[3][search][value]', None)
     search_date = request.query_params.get('columns[4][search][value]', None)
+    search_global = request.query_params.get('search', None)
+    asset_filter = request.query_params.get('asset', None)
 
     ### create queryset - only for monitored assets
     queryset = Endpoint.objects.filter(
@@ -700,6 +708,20 @@ def list_endpoints(request, projectid, format=None):
         asset__monitor=True,
         asset__ignore=False,
     ).select_related('asset')
+
+    ### filter by asset (endpoints panel for a single asset)
+    if asset_filter:
+        queryset = queryset.filter(asset__uuid=asset_filter)
+
+    ### filter by global keyword across all endpoints of every asset
+    ### supports multiple comma-separated values and ! prefix for exclusion
+    if search_global:
+        queryset = apply_column_search_multi(
+            queryset,
+            search_global,
+            ['url__icontains', 'technologies__icontains', 'asset__value__icontains'],
+            min_length=1,
+        )
 
     ### filter by search parameters
     queryset = apply_column_search_multi(queryset, search_asset, 'asset__value__icontains', min_length=1)
@@ -722,7 +744,32 @@ def list_endpoints(request, projectid, format=None):
     
     ### order queryset
     if order_by_column:
-        queryset = queryset.order_by(f'{order_direction}{order_by_column}')
+        primary_order = f'{order_direction}{order_by_column}'
+        if order_by_column == 'asset__value':
+            # The search-results UI fixes asset as the primary order so rows from
+            # the same asset remain contiguous for grouping. Honor its secondary
+            # column order within each asset group.
+            secondary_index = request.query_params.get('order[1][column]')
+            secondary_column = request.query_params.get(
+                f'columns[{secondary_index}][data]'
+            ) if secondary_index is not None else None
+            secondary_fields = {
+                'url': 'url',
+                'technologies': 'technologies',
+                'date': 'date',
+            }
+            secondary_field = secondary_fields.get(secondary_column, 'date') if secondary_column else 'date'
+            secondary_direction = (
+                '-'
+                if request.query_params.get('order[1][dir]', 'desc') == 'desc'
+                else ''
+            )
+            queryset = queryset.order_by(
+                primary_order,
+                f'{secondary_direction}{secondary_field}',
+            )
+        else:
+            queryset = queryset.order_by(primary_order)
 
     endpoints = paginator.paginate_queryset(queryset, request)
     serializer = EndpointSerializer(instance=endpoints, many=True)
@@ -1973,11 +2020,12 @@ def scans_launch(request, projectid, format=None):
 @extend_schema(
     tags=['Scans'],
     summary='Launch Burp scan',
-    description='Trigger a Burp Suite scan against selected web endpoint URLs.',
+    description='Trigger a Burp Suite scan against selected web endpoint URLs and/or all endpoints of selected assets.',
     request=inline_serializer(
         name='ScansBurpRequest',
         fields={
-            'urls': drf_serializers.ListField(child=drf_serializers.CharField()),
+            'urls': drf_serializers.ListField(child=drf_serializers.CharField(), required=False),
+            'assets': drf_serializers.ListField(child=drf_serializers.CharField(), required=False),
         },
     ),
     responses={200: SuccessMessageSerializer},
@@ -1986,23 +2034,39 @@ def scans_launch(request, projectid, format=None):
 @authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
 def scans_burp(request, projectid, format=None):
-    """Trigger a Burp Suite scan against selected web endpoint URLs
+    """Trigger a Burp Suite scan against selected web endpoint URLs and/or all endpoints of selected assets
     """
     if not request.user.has_perm('findings.add_finding'):
         return JsonResponse({'success': False, 'message': 'Permission denied.'}, status=403)
 
     urls = request.data.get('urls', [])
-    if not urls:
-        return JsonResponse({'success': False, 'message': 'No URLs selected.'}, status=400)
+    assets = request.data.get('assets', [])
+
+    if not urls and not assets:
+        return JsonResponse({'success': False, 'message': 'No URLs or assets selected.'}, status=400)
+
+    # Resolve asset selections to their endpoint URLs server-side so the UI
+    # never has to transfer potentially thousands of URLs.
+    all_urls = set(urls)
+    if assets:
+        asset_urls = Endpoint.objects.filter(
+            asset__uuid__in=assets,
+            asset__monitor=True,
+            asset__ignore=False,
+        ).values_list('url', flat=True)
+        all_urls.update(asset_urls)
+
+    if not all_urls:
+        return JsonResponse({'success': False, 'message': 'No endpoints found for the selected assets.'}, status=400)
 
     try:
-        run_burp_scan(projectid, request.user, urls)
+        run_burp_scan(projectid, request.user, list(all_urls))
     except Exception:
         return JsonResponse({'success': False, 'message': 'Failed to prepare scan.'}, status=500)
 
     return JsonResponse({
         'success': True,
-        'message': f'Burp Suite scan triggered for {len(urls)} URL(s). Check Jobs for progress.',
+        'message': f'Burp Suite scan triggered for {len(all_urls)} URL(s). Check Jobs for progress.',
     })
 
 ##### END ASSET SCANS ###########

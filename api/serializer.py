@@ -72,6 +72,7 @@ class AssetSerializer(serializers.ModelSerializer):
     vulns = serializers.SerializerMethodField()
     ip = serializers.SerializerMethodField()
     registrant_info_display = serializers.SerializerMethodField()
+    endpoint_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Asset
@@ -79,6 +80,9 @@ class AssetSerializer(serializers.ModelSerializer):
 
     def get_registrant_info_display(self, obj):
         return _format_registrant_info_display(obj.registrant_info)
+
+    def get_endpoint_count(self, obj):
+        return getattr(obj, 'endpoint_count', 0)
 
     def get_vulns(self, obj):
         return '<span class="label label-default">'+str(obj.vuln_critical)+'</span><span class="label label-danger">'+str(obj.vuln_high)+'</span><span class="label label-warning">'+str(obj.vuln_medium)+'</span><span class="label label-success">'+str(obj.vuln_low)+'</span><span  class="label label-primary">'+str(obj.vuln_info)+'</span>'
