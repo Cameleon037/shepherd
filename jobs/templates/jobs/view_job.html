@@ -35,13 +35,13 @@
                 <td>Arguments:</td><td>{{ j_obj.args }}</td>
             </tr>
             <tr>
-                <td>Status:</td><td>{{ j_obj.status }}</td>
+                <td>Status:</td><td id="job-status">{{ j_obj.status }}</td>
             </tr>
             <tr>
                 <td>Created:</td><td>{{ j_obj.created_at }}</td>
             </tr>
             <tr>
-                <td>Finished:</td><td>{{ j_obj.finished_at }}</td>
+                <td>Finished:</td><td id="job-finished">{{ j_obj.finished_at }}</td>
             </tr>
         </tbody>
         </table>
@@ -81,6 +81,46 @@ document.addEventListener("DOMContentLoaded", function() {
     var outputDiv = document.getElementById("job-output");
     if (outputDiv) {
         outputDiv.scrollTop = outputDiv.scrollHeight;
+    }
+
+    // Auto-poll the job status/output while the job is running so the page stays
+    // up to date without a manual refresh.
+    var apiUrl = "{% url 'api:get_job' projectid=projectid job_id=j_obj.id %}";
+    var statusCell = document.getElementById("job-status");
+    var finishedCell = document.getElementById("job-finished");
+    var terminalStates = ["finished", "failed"];
+    var pollIntervalMs = 3000;
+    var timer = null;
+
+    function escapeHtml(text) {
+        return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function updateJob() {
+        fetch(apiUrl, {headers: {"Accept": "application/json"}})
+            .then(function (resp) { return resp.json(); })
+            .then(function (data) {
+                if (!data || !data.result) return;
+                var job = data.result;
+                if (statusCell) statusCell.textContent = job.status;
+                if (finishedCell && job.finished_at) finishedCell.textContent = job.finished_at;
+                if (outputDiv && typeof job.output === "string") {
+                    outputDiv.innerHTML = escapeHtml(job.output).replace(/\n/g, "<br>");
+                    outputDiv.scrollTop = outputDiv.scrollHeight;
+                }
+                if (timer && terminalStates.indexOf(job.status) !== -1) {
+                    clearInterval(timer);
+                    timer = null;
+                }
+            })
+            .catch(function () {
+                // Transient network/server error: keep polling.
+            });
+    }
+
+    var initialStatus = statusCell ? statusCell.textContent.trim() : "";
+    if (terminalStates.indexOf(initialStatus) === -1) {
+        timer = setInterval(updateJob, pollIntervalMs);
     }
 });
 </script>

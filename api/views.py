@@ -1599,6 +1599,33 @@ def list_jobs(request, projectid, format=None):
 
     return paginator.get_paginated_response(data)
 
+
+@extend_schema(
+    methods=['GET'],
+    tags=['Jobs'],
+    summary='Get job details',
+    description='Fetch a single job including its live output. Used by the job status page polling.',
+    responses={200: JobSerializer},
+)
+@api_view(['GET'])
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
+@permission_classes((IsAuthenticated,))
+def get_job(request, projectid, job_id, format=None):
+    if not request.user.has_perm('jobs.view_job'):
+        return HttpResponseForbidden("You do not have permission to view this.")
+
+    try:
+        prj = Project.objects.get(id=projectid)
+    except Project.DoesNotExist:
+        return JsonResponse({"status": False, "code": 404, "message": "Project not found."}, status=404)
+
+    try:
+        job = Job.objects.get(id=job_id, related_project=prj)
+    except Job.DoesNotExist:
+        return JsonResponse({"status": False, "code": 404, "message": "Job not found."}, status=404)
+
+    return JsonResponse({"status": True, "code": 200, "result": JobSerializer(job).data})
+
 ##### END JOBS ###############
 
 @extend_schema(

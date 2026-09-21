@@ -52,6 +52,7 @@ urlpatterns = [
 
     ##### JOBS #####
     path('v1/project/<str:projectid>/jobs/', views.list_jobs, name='list_jobs'),
+    path('v1/project/<str:projectid>/jobs/<int:job_id>/', views.get_job, name='get_job'),
 
     ##### ASSET SCANS #####
     path('v1/project/<str:projectid>/scans/preview/', views.scans_preview, name='scans_preview'),

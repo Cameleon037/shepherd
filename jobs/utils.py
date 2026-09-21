@@ -1,10 +1,60 @@
+import gc
+import queue
 import subprocess
 import threading
 import time
-import gc
+
 from django.utils.timezone import now
+
 from jobs.models import Job
 from project.models import Project
+
+# How often (seconds) the captured output is persisted to the database.
+FLUSH_INTERVAL = 5.0
+# Also flush once this many lines have accumulated (protects against huge buffers).
+MAX_LINES_PER_FLUSH = 100
+# How long to wait for the next line before re-checking the flush timer (seconds).
+READ_TIMEOUT = 0.5
+# Retry parameters for transient DB errors (e.g. SQLite "database is locked").
+DB_MAX_RETRIES = 5
+DB_RETRY_DELAY = 1.0
+
+# Sentinel pushed by the reader thread when the subprocess stdout reaches EOF.
+_EOF = object()
+
+
+def _persist_output(job, max_retries=DB_MAX_RETRIES, delay=DB_RETRY_DELAY):
+    """Best-effort save of the job's output field.
+
+    The child management command writes to the same database, so under SQLite the
+    parent can hit transient "database is locked" errors. Retry instead of letting
+    a transient lock kill the job. If the save ultimately fails the output stays in
+    the in-memory ``job.output`` and is retried on the next flush cycle, so no
+    output is lost.
+    """
+    for attempt in range(max_retries):
+        try:
+            job.save(update_fields=['output'])
+            return True
+        except Exception:
+            if attempt == max_retries - 1:
+                return False
+            time.sleep(delay)
+    return False
+
+
+def _persist_job(job, max_retries=DB_MAX_RETRIES, delay=DB_RETRY_DELAY):
+    """Best-effort full save (terminal status/timestamps + any pending output)."""
+    for attempt in range(max_retries):
+        try:
+            job.save()
+            return True
+        except Exception:
+            if attempt == max_retries - 1:
+                return False
+            time.sleep(delay)
+    return False
+
 
 def run_job(command, args, projectid, user=None):
     job = Job()
@@ -16,6 +66,10 @@ def run_job(command, args, projectid, user=None):
     job.args = args
     job.output = ''
     job.save()
+
+    process = None
+    reader_thread = None
+    line_queue = queue.Queue()
     try:
         process = subprocess.Popen(
             ['python3', '-u', 'manage.py', job.command] + job.args.split(),
@@ -24,38 +78,54 @@ def run_job(command, args, projectid, user=None):
             text=True,
             bufsize=1,
         )
-        
-        # Collect output in chunks to reduce memory usage and database writes
-        output_buffer = []
-        buffer_size = 100  # Save to DB every 100 lines
-        flush_interval = 5.0  # Also flush every 4 seconds for small outputs
-        line_count = 0
-        last_flush_time = time.time()
-        
-        for line in process.stdout:
-            output_buffer.append(line)
-            line_count += 1
-            current_time = time.time()
-            
-            # Save to database in chunks to reduce memory pressure
-            # Flush if we have enough lines OR enough time has passed
-            if (line_count % buffer_size == 0 or 
-                (output_buffer and current_time - last_flush_time >= flush_interval)):
-                # Append new output to existing output
-                new_output = ''.join(output_buffer)
-                job.output = (job.output or '') + new_output
-                job.save(update_fields=['output'])
-                # Clear buffer to free memory
-                output_buffer = []
-                last_flush_time = current_time
-        
-        # Save any remaining output
-        if output_buffer:
-            new_output = ''.join(output_buffer)
-            job.output = (job.output or '') + new_output
-            job.save(update_fields=['output'])
-            
-        process.stdout.close()
+
+        def _read_stdout():
+            try:
+                for line in process.stdout:
+                    line_queue.put(line)
+            finally:
+                line_queue.put(_EOF)
+                try:
+                    process.stdout.close()
+                except Exception:
+                    pass
+
+        # Read the subprocess output in a separate thread so the flush loop below
+        # can run on a strict timer even when the subprocess is silent. Otherwise
+        # (line-driven flush) output produced in bursts would sit in memory until
+        # the next line arrives or the process exits.
+        reader_thread = threading.Thread(target=_read_stdout, daemon=True)
+        reader_thread.start()
+
+        pending = []
+        last_flush = time.monotonic()
+        eof = False
+
+        while not eof:
+            try:
+                item = line_queue.get(timeout=READ_TIMEOUT)
+            except queue.Empty:
+                item = None  # timeout: no new line yet
+
+            if item is _EOF:
+                eof = True
+            elif item is not None:
+                pending.append(item)
+
+            now_t = time.monotonic()
+            if pending and (
+                eof
+                or len(pending) >= MAX_LINES_PER_FLUSH
+                or now_t - last_flush >= FLUSH_INTERVAL
+            ):
+                job.output = (job.output or '') + ''.join(pending)
+                pending = []
+                last_flush = now_t
+                _persist_output(job)
+
+        if reader_thread:
+            reader_thread.join(timeout=5)
+
         process.wait()
         # Defensive: ensure all output is captured
         if process.returncode == 0:
@@ -67,16 +137,16 @@ def run_job(command, args, projectid, user=None):
         job.status = 'failed'
     finally:
         job.finished_at = now()
-        job.save()
-        
-        # Explicit memory cleanup
-        try:
-            # Clear local variables to free memory
-            if 'output_buffer' in locals():
-                output_buffer.clear()
-            if 'process' in locals():
-                del process
-            # Force garbage collection
-            gc.collect()
-        except:
-            pass  # Don't let cleanup errors affect the job status
+        _persist_job(job)
+
+        # Defensive cleanup: never leave a stray subprocess or reader thread behind.
+        if process is not None:
+            try:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=5)
+            except Exception:
+                pass
+        if reader_thread is not None:
+            reader_thread.join(timeout=2)
+        gc.collect()
