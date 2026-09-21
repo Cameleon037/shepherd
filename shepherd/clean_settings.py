@@ -217,6 +217,10 @@ HTTPX_PATH = ""
 # Katana (crawler) path - https://github.com/projectdiscovery/katana
 KATANA_PATH = ""
 
+# Feroxbuster (content discovery) path - https://github.com/epi052/feroxbuster
+FEROXBUSTER_PATH = ""
+FEROXBUSTER_WORDLIST = ""
+
 # GitHound working directory
 GITHOUND_WORKING_DIR = ""
 

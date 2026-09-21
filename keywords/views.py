@@ -1,6 +1,6 @@
 # vim: tabstop=4 expandtab shiftwidth=4 softtabstop=4
 
-from django.http import HttpResponseForbidden
+from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
@@ -58,10 +58,15 @@ def delete_keyword(request, keywordid):
     if not request.user.has_perm('keywords.delete_keyword'):
         return HttpResponseForbidden("You do not have permission.")
     
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest'
     try:
-        kw_obj = Keyword.objects.get(id=keywordid).delete()
+        Keyword.objects.get(id=keywordid).delete()
     except Keyword.DoesNotExist:
+        if is_ajax:
+            return JsonResponse({'success': False, 'error': 'Unknown keyword'}, status=404)
         return redirect(reverse('keywords:keywords'))
+    if is_ajax:
+        return JsonResponse({'success': True, 'message': 'Keyword deleted.'})
     return redirect(reverse('keywords:keywords'))
 
 @login_required

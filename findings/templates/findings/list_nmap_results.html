@@ -153,11 +153,9 @@ $(document).ready(function () {
     // Enable confirm dialog for delete buttons
     setupConfirmDialog(portTable);
 
-    // Initialize common standalone features
-    initializeStandaloneFeatures({
-        selectAllSelector: '#select-all-items-dom',
-        tableSelector: '#table_list_ports'
-    });
+    // Setup select all (note: do NOT call initializeStandaloneFeatures here, it would
+    // register a second .confirm handler via setupStandaloneConfirm and double the dialogs)
+    setupStandaloneSelectAll('#select-all-items-dom', '#table_list_ports');
 
     // Bulk actions via API (no page refresh)
     setupBulkActions({

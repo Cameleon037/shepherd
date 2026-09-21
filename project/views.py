@@ -1,4 +1,4 @@
-from django.http import HttpResponseForbidden
+from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
@@ -56,13 +56,17 @@ def delete_project(request, projectid):
     if not request.user.has_perm('project.delete_project'):
         return HttpResponseForbidden("You do not have permission.")
     
-    context = {}
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest'
     try:
         prj_obj = Project.objects.get(id=projectid)
         prj_obj.delete()
     except Project.DoesNotExist:
+        if is_ajax:
+            return JsonResponse({'success': False, 'error': 'Unknown project'}, status=404)
         print('ERROR: project not existing')
     request.session['current_project'] = None
+    if is_ajax:
+        return JsonResponse({'success': True, 'message': 'Project deleted.'})
     return redirect(reverse('projects:projects'))
 
 @login_required

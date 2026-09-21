@@ -134,7 +134,7 @@ $(document).ready( function () {
                 "mRender": function (data, type, full) {
                     var delete_url = "{% url 'projects:delete_project' projectid=0 %}".replace(0, full.id);
                     return '<div class="btn-group1">' +
-                      '<a class="btn btn-xs confirm" rel="tooltip" data-placement="right" data-original-title="Delete Entry" data-display="'+full.projectname+'" data-href="'+delete_url+'" href="#">' +
+                      '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Delete Entry" data-action="delete" data-url="'+delete_url+'" data-display="'+full.projectname+'" href="#">' +
                       '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
                       '</a> ' +
                       '</div>';
@@ -145,18 +145,12 @@ $(document).ready( function () {
             },
         ]
     });
-});
-// confirm button
-$(document).on("click", ".confirm", function(e) {
-        e.preventDefault();
-        var title = $(this).attr('data-display');
-        var location = $(this).attr('data-href');
-        bootbox.confirm('Are you sure?', function(confirmed) {
-            if(confirmed)
-            {
-                window.location.replace(location);
-            }
-        });
+
+    // Row-level delete via API (no page refresh)
+    setupRowActions({
+        tableInstances: [pTable],
+        confirmActions: ['delete']
+    });
 });
 </script>
 {% endblock%}

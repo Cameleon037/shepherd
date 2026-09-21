@@ -265,6 +265,72 @@ function setupBulkActions(config) {
     });
 }
 
+/**
+ * Setup row-level action buttons (monitor/ignore/move/activate/delete) that POST to
+ * a bulk API (or a direct view URL) and reload the tables without a page refresh.
+ * @param {object} config - apiUrl (bulk API URL), tableInstances (DataTable APIs to reload),
+ *   confirmActions (array of action names that require a bootbox confirm, e.g. ['delete'])
+ * Row buttons must have class "row-action", data-action, data-uuid (or data-url for direct views),
+ *   and optionally data-display (shown in the confirm dialog).
+ */
+function setupRowActions(config) {
+    config = config || {};
+    var apiUrl = config.apiUrl;
+    var tableInstances = config.tableInstances || [];
+    var confirmActions = config.confirmActions || [];
+
+    $(document).on('click', '.row-action', function (e) {
+        e.preventDefault();
+        var $btn = $(this);
+        var action = $btn.attr('data-action');
+        var uuid = $btn.attr('data-uuid');
+        var url = $btn.attr('data-url');
+        var display = $btn.attr('data-display');
+
+        function sendRequest() {
+            var formData = new FormData();
+            formData.append('action', action);
+            formData.append('csrfmiddlewaretoken', getCookie('csrftoken'));
+            if (uuid) formData.append('id[]', uuid);
+            $.ajax({
+                url: url || apiUrl,
+                type: 'POST',
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken'),
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function (response) {
+                    if (response && response.success) {
+                        displayMessage('info', response.message || 'Action completed.');
+                        tableInstances.forEach(function (t) {
+                            if (t && t.ajax && t.ajax.reload) t.ajax.reload();
+                        });
+                    } else {
+                        displayMessage('danger', (response && response.error) || 'Action failed.');
+                    }
+                },
+                error: function (xhr) {
+                    var err = 'Action failed.';
+                    try { var r = JSON.parse(xhr.responseText); if (r.error) err = r.error; } catch (e2) {}
+                    displayMessage('danger', err);
+                }
+            });
+        }
+
+        if (confirmActions.indexOf(action) !== -1 && typeof bootbox !== 'undefined') {
+            var msg = display ? ('Are you sure?<br/>(Entry: ' + display + ')') : 'Are you sure?';
+            bootbox.confirm(msg, function (confirmed) {
+                if (confirmed) sendRequest();
+            });
+        } else {
+            sendRequest();
+        }
+    });
+}
+
 // Common bulk toggle ignore status (legacy: now use setupBulkActions with API URL)
 function setupBulkToggleIgnore(table) {
     // No-op; bulk actions go through setupBulkActions and API

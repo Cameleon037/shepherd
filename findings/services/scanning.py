@@ -68,6 +68,9 @@ def run_scan_jobs(project_id, user, selected_uuids, scan_new_assets, scans):
     def scan_katana():
         launch('scan_katana')
 
+    def scan_feroxbuster():
+        launch('scan_feroxbuster')
+
     def scan_shepherdai():
         launch('scan_shepherdai')
 
@@ -93,15 +96,17 @@ def run_scan_jobs(project_id, user, selected_uuids, scan_new_assets, scans):
     scan_httpx_flag = scans.get('scan_httpx')
     scan_playwright_flag = scans.get('scan_playwright')
     scan_katana_flag = scans.get('scan_katana')
+    scan_feroxbuster_flag = scans.get('scan_feroxbuster')
     scan_shepherdai_flag = scans.get('scan_shepherdai')
     scan_nuclei_flag = scans.get('scan_nuclei')
     scan_nuclei_new_flag = scans.get('scan_nuclei_new_templates')
 
-    # Check if we need to chain Nmap -> Screenshot (HTTPX or Playwright) and/or Katana
+    # Check if we need to chain Nmap -> Screenshot (HTTPX or Playwright) and/or Katana/Feroxbuster
     screenshot_selected = scan_httpx_flag or scan_playwright_flag
     nmap_then_screenshot = scan_nmap_flag and screenshot_selected
     nmap_then_katana = scan_nmap_flag and scan_katana_flag
-    nmap_chained = nmap_then_screenshot or nmap_then_katana
+    nmap_then_feroxbuster = scan_nmap_flag and scan_feroxbuster_flag
+    nmap_chained = nmap_then_screenshot or nmap_then_katana or nmap_then_feroxbuster
 
     # Primary threads: all scans except Shepherd AI (which runs last)
     primary_threads = []
@@ -128,6 +133,8 @@ def run_scan_jobs(project_id, user, selected_uuids, scan_new_assets, scans):
                 scan_playwright()
             if scan_katana_flag:
                 scan_katana()
+            if scan_feroxbuster_flag:
+                scan_feroxbuster()
 
         primary_threads.append(threading.Thread(target=nmap_then_dependent_scans))
         add_message('Nmap scan has been triggered in the background. (check jobs)')
@@ -137,6 +144,8 @@ def run_scan_jobs(project_id, user, selected_uuids, scan_new_assets, scans):
             add_message('Playwright scan will start after Nmap completes. (check jobs)')
         if scan_katana_flag:
             add_message('Katana scan will start after Nmap completes. (check jobs)')
+        if scan_feroxbuster_flag:
+            add_message('Feroxbuster scan will start after Nmap completes. (check jobs)')
     else:
         # No dependency - run independently
         if scan_nmap_flag:
@@ -154,6 +163,10 @@ def run_scan_jobs(project_id, user, selected_uuids, scan_new_assets, scans):
         if scan_katana_flag:
             primary_threads.append(threading.Thread(target=scan_katana))
             add_message('Katana scan has been triggered in the background. (check jobs)')
+
+        if scan_feroxbuster_flag:
+            primary_threads.append(threading.Thread(target=scan_feroxbuster))
+            add_message('Feroxbuster scan has been triggered in the background. (check jobs)')
 
     if scan_nuclei_flag:
         primary_threads.append(threading.Thread(target=scan_nuclei))

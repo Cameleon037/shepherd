@@ -176,6 +176,13 @@ def scan_playwright_task():
     return "scan_playwright completed"
 
 @shared_task
+def scan_feroxbuster_task():
+    command = 'scan_feroxbuster'
+    args = f'--projectid {project_id} --scope external'
+    run_job(command, args, project_id, user=scheduler_user)
+    return "scan_feroxbuster completed"
+
+@shared_task
 def scan_shepherdai_task():
     command = 'scan_shepherdai'
     args = f'--projectid {project_id}'

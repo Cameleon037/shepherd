@@ -511,7 +511,7 @@ def list_assets(request, projectid, format=None):
 @extend_schema(
     tags=['Assets'],
     summary='Bulk update assets',
-    description='Bulk actions on assets: ignore, move, delete. POST body: action=ignore|move|delete, id[]=uuid...',
+    description='Bulk actions on assets: ignore, move, activate, delete. POST body: action=ignore|move|activate|delete, id[]=uuid...',
     request=BulkActionSerializer,
     responses={200: SuccessMessageSerializer},
 )
@@ -519,7 +519,7 @@ def list_assets(request, projectid, format=None):
 @authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
 @permission_classes((IsAuthenticated,))
 def bulk_assets(request, projectid, format=None):
-    """Bulk actions on assets: ignore, move, delete. POST body: action=ignore|move|delete, id[]=uuid..."""
+    """Bulk actions on assets: ignore, move, activate, delete. POST body: action=ignore|move|activate|delete, id[]=uuid..."""
     if not request.user.has_perm('assets.view_asset'):
         return HttpResponseForbidden("You do not have permission.")
     if not request.user.has_perm('assets.change_asset'):
@@ -536,7 +536,7 @@ def bulk_assets(request, projectid, format=None):
             action = 'move'
         elif 'btndelete' in request.POST:
             action = 'delete'
-    if action not in ('ignore', 'move', 'delete'):
+    if action not in ('ignore', 'move', 'activate', 'delete'):
         return JsonResponse({'success': False, 'error': 'Unknown action'}, status=400)
     if action == 'delete' and not request.user.has_perm('assets.delete_asset'):
         return HttpResponseForbidden("You do not have permission.")
@@ -551,6 +551,10 @@ def bulk_assets(request, projectid, format=None):
             elif action == 'move':
                 a_obj = Asset.objects.get(uuid=uuid)
                 a_obj.monitor = False
+                a_obj.save()
+            elif action == 'activate':
+                a_obj = Asset.objects.get(uuid=uuid)
+                a_obj.monitor = True
                 a_obj.save()
             elif action == 'delete':
                 a_obj = Asset.objects.get(uuid=uuid)
@@ -1625,14 +1629,14 @@ def list_screenshots(request, projectid, format=None):
     domains = prj.asset_set.all().filter(monitor=True, ignore=False)
     queryset = Screenshot.objects.filter(asset__in=domains).order_by('-date')
 
-    # DataTables search on columns
-    search_url = request.GET.get('columns[0][search][value]', '')
-    search_technologies = request.GET.get('columns[2][search][value]', '')
-    search_title = request.GET.get('columns[3][search][value]', '')
-    search_status_code = request.GET.get('columns[4][search][value]', '')
-    search_webserver = request.GET.get('columns[5][search][value]', '')
-    search_date = request.GET.get('columns[6][search][value]', '')
-    search_asset_source = request.GET.get('columns[7][search][value]', '')
+    # DataTables search on columns (column 0 is the checkbox/scan column)
+    search_url = request.GET.get('columns[1][search][value]', '')
+    search_technologies = request.GET.get('columns[3][search][value]', '')
+    search_title = request.GET.get('columns[4][search][value]', '')
+    search_status_code = request.GET.get('columns[5][search][value]', '')
+    search_webserver = request.GET.get('columns[6][search][value]', '')
+    search_date = request.GET.get('columns[7][search][value]', '')
+    search_asset_source = request.GET.get('columns[8][search][value]', '')
     
     queryset = apply_column_search_multi(queryset, search_url, 'url__icontains')
     queryset = apply_column_search_multi(queryset, search_technologies, 'technologies__icontains')
@@ -1653,7 +1657,7 @@ def list_screenshots(request, projectid, format=None):
     # Ordering
     order_column_index = request.GET.get('order[0][column]', None)
     order_dir = request.GET.get('order[0][dir]', 'desc')
-    order_columns = ['url', '', 'technologies', 'title', 'status_code', 'webserver', 'date', 'asset__source']
+    order_columns = ['', 'url', '', 'technologies', 'title', 'status_code', 'webserver', 'date', 'asset__source']
     if order_column_index is not None:
         idx = int(order_column_index)
         if order_columns[idx]:
@@ -1921,6 +1925,7 @@ def scans_launch(request, projectid, format=None):
         'scan_httpx': bool(scans.get('scan_httpx')),
         'scan_playwright': bool(scans.get('scan_playwright')),
         'scan_katana': bool(scans.get('scan_katana')),
+        'scan_feroxbuster': bool(scans.get('scan_feroxbuster')),
         'scan_shepherdai': bool(scans.get('scan_shepherdai')),
         'scan_nuclei': bool(scans.get('scan_nuclei')),
         'scan_nuclei_new_templates': bool(scans.get('scan_nuclei_new_templates')),

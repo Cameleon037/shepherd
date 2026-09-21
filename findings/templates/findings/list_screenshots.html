@@ -32,6 +32,7 @@
     <div class="panel-heading">// General Actions</div>
     <div class="panel-body">
       <a class="btn btn-primary btn-xs confirm" href="{% url 'findings:export_technologies_csv' %}">Export to csv</a>&nbsp;
+      <button type="button" id="scan-selected-assets-btn" class="btn btn-primary btn-xs">Scan selected assets</button>&nbsp;
     </div>
 </div>
 
@@ -41,6 +42,7 @@
         <table id="table_list_httpx_results" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;">
             <thead>
                 <tr>
+                    <th><input type="checkbox" name="select_all" value="1" id="select-all-screenshots">&nbsp; Scan</th>
                     <th>URL</th>
                     <th>Screenshot</th>
                     <th>Technologies</th>
@@ -51,6 +53,7 @@
                     <th>Asset Source</th>
                 </tr>
                 <tr>
+                    <th></th>
                     <th><input type="text" placeholder="Search URL" class="column-search-input form-control input-sm"></th>
                     <th></th>
                     <th><input type="text" placeholder="Search Technologies" class="column-search-input form-control input-sm"></th>
@@ -78,7 +81,7 @@ $(document).ready(function () {
             pageLength: 25,
             orderCellsTop: true,
             oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
-            order: [[0, "asc"]], // Default order by URL column
+            order: [[1, "asc"]], // Default order by URL column
             ajax: {
                 url: ajaxUrl,
                 dataSrc: function(json) {
@@ -94,6 +97,16 @@ $(document).ready(function () {
 
     var assetViewUrl = "{% url 'assets:view_asset' uuid='__UUID__' %}";
     const httpxColumns = [
+        {
+            data: 'asset',
+            sName: 'Scan',
+            orderable: false,
+            searchable: false,
+            render: function (data, type, row) {
+                if (!data) return '';
+                return '<input type="checkbox" name="id[]" value="' + $('<div/>').text(data).html() + '">';
+            }
+        },
         {
             data: 'url',
             sName: 'URL',
@@ -140,6 +153,43 @@ $(document).ready(function () {
     // Find the second header row (filter row) and bind to its inputs/selects
     var $filterRow = $('#table_list_httpx_results thead tr:eq(1)');
     applyDebouncedColumnSearch(httpxTable, 'input.column-search-input', 'select.column-search-input', 400, $filterRow);
+
+    // Setup select all for the screenshots table
+    setupStandaloneSelectAll('#select-all-screenshots', '#table_list_httpx_results');
+
+    // "Scan selected assets" -> store asset UUIDs in session and redirect to control center
+    $('#scan-selected-assets-btn').on('click', function (e) {
+      var selectedUuids = [];
+      httpxTable.$('input[type="checkbox"][name="id[]"]:checked').each(function () {
+        selectedUuids.push($(this).val());
+      });
+      // Deduplicate asset UUIDs (multiple screenshots can belong to the same asset)
+      selectedUuids = selectedUuids.filter(function (v, i, a) { return a.indexOf(v) === i; });
+
+      if (selectedUuids.length === 0) {
+        e.preventDefault();
+        bootbox.alert("Please select at least one asset to scan.");
+        return false;
+      }
+
+      var btn = $(this);
+      btn.prop('disabled', true).text('Redirecting...');
+
+      $.ajax({
+        url: "{% url 'api:scans_preselect' projectid=projectid %}",
+        method: 'POST',
+        contentType: 'application/json',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        data: JSON.stringify({ uuids: selectedUuids }),
+        success: function (resp) {
+          window.location.href = resp.redirect;
+        },
+        error: function () {
+          bootbox.alert("Failed to transfer assets. Please try again.");
+          btn.prop('disabled', false).text('Scan selected assets');
+        }
+      });
+    });
 
 });
 </script>

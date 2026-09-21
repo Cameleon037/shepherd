@@ -156,6 +156,10 @@
             <input type="checkbox" id="scan-katana">
             <label for="scan-katana">Katana</label>
         </div>
+        <div class="toggle-row">
+            <input type="checkbox" id="scan-feroxbuster">
+            <label for="scan-feroxbuster">Feroxbuster (content discovery)</label>
+        </div>
     </div>
 
     <div class="scanner-section">
@@ -271,6 +275,7 @@ $(document).ready(function () {
             scan_httpx: $('#scan-httpx').is(':checked'),
             scan_playwright: $('#scan-playwright').is(':checked'),
             scan_katana: $('#scan-katana').is(':checked'),
+            scan_feroxbuster: $('#scan-feroxbuster').is(':checked'),
             scan_shepherdai: $('#scan-shepherdai').is(':checked'),
             scan_nuclei: $('#scan-nuclei').is(':checked'),
             scan_nuclei_new_templates: $('#scan-nuclei-new').is(':checked'),

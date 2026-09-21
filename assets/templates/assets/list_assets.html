@@ -212,14 +212,12 @@ $(document).ready(function () {
     const monitoredColumns = [
         {'data': 'uuid', 'sName': 'Operations', 'bSortable': false,
             "mRender": function (data, type, full) {
-                var ignore_url = "{% url 'assets:ignore_asset_glyphicon' uuid=0 %}".replace(0, full.uuid);
-                var move_url = "{% url 'assets:move_asset' uuid=0 %}".replace(0, full.uuid);
                 return '<div class="btn-group1">' +
                     '<input type="checkbox" name="id[]" value="' + $('<div/>').text(data).html() + '">&nbsp;&nbsp;' +
-                    '<a class="btn btn-xs" rel="tooltip" data-placement="right" data-original-title="Ignore Entry" data-display="'+full.value+'" href="'+ignore_url+'">' +
+                    '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Ignore Entry" data-action="ignore" data-uuid="' + full.uuid + '" href="#">' +
                     '<span class="glyphicon glyphicon-eye-close" aria-hidden="true"></span>' +
                     '</a> ' +
-                    '<a class="btn btn-xs confirm" rel="tooltip" data-placement="right" data-original-title="Move to Suggestions" data-display="'+full.value+'" data-href="'+move_url+'" href="#">' +
+                    '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Move to Suggestions" data-action="move" data-uuid="' + full.uuid + '" data-display="' + full.value + '" href="#">' +
                     '<span class="glyphicon glyphicon-transfer" aria-hidden="true"></span>' +
                     '</a> ' +
                     '</div>';
@@ -296,14 +294,12 @@ $(document).ready(function () {
     const ignoredColumns = [
         {'data': 'uuid', 'sName': 'Operations', 'bSortable': false,
             "mRender": function (data, type, full) {
-                var activate_url = "{% url 'assets:activate_asset' uuid=0 %}".replace(0, full.uuid);
-                var delete_url = "{% url 'assets:delete_asset' uuid=0 %}".replace(0, full.uuid);
                 return '<div class="btn-group1">' +
                     '<input type="checkbox" name="id[]" value="' + $('<div/>').text(data).html() + '">&nbsp;&nbsp;' +
-                    '<a class="btn btn-xs" rel="tooltip" data-placement="right" data-original-title="Activate Entry" data-display="'+full.value+'" href="'+activate_url+'">' +
+                    '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Activate Entry" data-action="activate" data-uuid="' + full.uuid + '" href="#">' +
                     '<span class="glyphicon glyphicon-eye-open" aria-hidden="true"></span>' +
                     '</a> ' +
-                    '<a class="btn btn-xs confirm" rel="tooltip" data-placement="right" data-original-title="Delete Asset" data-display="'+full.value+'" data-href="'+delete_url+'" href="#">' +
+                    '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Delete Asset" data-action="delete" data-uuid="' + full.uuid + '" data-display="' + full.value + '" href="#">' +
                     '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
                     '</a> ' +
                     '</div>';
@@ -384,6 +380,13 @@ $(document).ready(function () {
         { name: 'btnmove', action: 'move', confirm: false },
         { name: 'btndelete', action: 'delete', confirm: true }
       ]
+    });
+
+    // Row-level actions (ignore/move/activate/delete) via API (no page refresh)
+    setupRowActions({
+      apiUrl: "{% url 'api:bulk_assets' projectid=projectid %}",
+      tableInstances: [monitoredTable, ignoredTable],
+      confirmActions: ['move', 'delete']
     });
 
     // "Scan selected assets" -> store UUIDs in session and redirect to control center

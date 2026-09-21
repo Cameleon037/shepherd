@@ -454,18 +454,15 @@
           {
             'data': 'uuid', 'sName': 'Operations', 'aTargets': [0], 'bSortable': false,
             "mRender": function (data, type, full) {
-              var monitor_url = "{% url 'assets:monitor_suggestion' uuid=0 %}".replace(0, full.uuid);
-              var ignore_url = "{% url 'assets:ignore_suggestion' uuid=0 %}".replace(0, full.uuid);
-              var delete_url = "{% url 'assets:delete_suggestion' uuid=0 %}".replace(0, full.uuid);
               return '<div class="btn-group1">' +
                 '<input type="checkbox" name="id[]" value="' + $('<div/>').text(data).html() + '">&nbsp;&nbsp;' +
-                '<a class="btn btn-xs" rel="tooltip" data-placement="right" data-original-title="Monitor Entry" data-href="#" href="' + monitor_url + '">' +
+                '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Monitor Entry" data-action="monitor" data-uuid="' + full.uuid + '" href="#">' +
                 '<span class="glyphicon glyphicon-eye-open" aria-hidden="true"></span>' +
                 '</a> ' +
-                '<a class="btn btn-xs" rel="tooltip" data-placement="right" data-original-title="Ignore Entry" data-display="' + full.value + '" href="' + ignore_url + '">' +
+                '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Ignore Entry" data-action="ignore" data-uuid="' + full.uuid + '" href="#">' +
                 '<span class="glyphicon glyphicon-eye-close" aria-hidden="true"></span>' +
                 '</a> ' +
-                '<a class="btn btn-xs btn-column confirm" rel="tooltip" data-placement="right" data-original-title="Delete Entry" data-display="' + full.value + '" data-href="' + delete_url + '" href="#">' +
+                '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Delete Entry" data-action="delete" data-uuid="' + full.uuid + '" data-display="' + full.value + '" href="#">' +
                 '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
                 '</a> ' +
                 '</div>';
@@ -547,18 +544,15 @@
           {
             'data': 'uuid', 'sName': 'Operations', 'aTargets': [0], 'bSortable': false,
             "mRender": function (data, type, full) {
-              var monitor_url = "{% url 'assets:monitor_suggestion' uuid=0 %}".replace(0, full.uuid);
-              var ignore_url = "{% url 'assets:ignore_suggestion' uuid=0 %}".replace(0, full.uuid);
-              var delete_url = "{% url 'assets:delete_suggestion' uuid=0 %}".replace(0, full.uuid);
               return '<div class="btn-group1">' +
                 '<input type="checkbox" name="id[]" value="' + $('<div/>').text(data).html() + '">&nbsp;&nbsp;' +
-                '<a class="btn btn-xs" rel="tooltip" data-placement="right" data-original-title="Monitor Entry" data-href="#" href="' + monitor_url + '">' +
+                '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Monitor Entry" data-action="monitor" data-uuid="' + full.uuid + '" href="#">' +
                 '<span class="glyphicon glyphicon-eye-open" aria-hidden="true"></span>' +
                 '</a> ' +
-                '<a class="btn btn-xs" rel="tooltip" data-placement="right" data-original-title="Ignore Entry" data-display="' + full.value + '" href="' + ignore_url + '">' +
+                '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Ignore Entry" data-action="ignore" data-uuid="' + full.uuid + '" href="#">' +
                 '<span class="glyphicon glyphicon-eye-close" aria-hidden="true"></span>' +
                 '</a> ' +
-                '<a class="btn btn-xs btn-column confirm" rel="tooltip" data-placement="right" data-original-title="Delete Entry" data-display="' + full.value + '" data-href="' + delete_url + '" href="#">' +
+                '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Delete Entry" data-action="delete" data-uuid="' + full.uuid + '" data-display="' + full.value + '" href="#">' +
                 '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
                 '</a> ' +
                 '</div>';
@@ -638,46 +632,11 @@
       ]
     });
 
-    $(document).on("click", ".confirm", function (e) {
-      e.preventDefault();
-      var title = $(this).attr('data-display');
-      var location = $(this).attr('data-href');
-      var form = $(this).closest('form'); // Find the closest form element
-      var buttonName = $(this).attr('name'); // Get the button's name attribute
-      var column_button = $(this).hasClass('btn-column')
-
-      bootbox.confirm('Are you sure?', function (confirmed) {
-        if (confirmed) {
-
-          if (column_button) {
-            // If the class is btn-column, directly relocate to data-href
-            window.location.replace(location);
-            return;
-          }
-
-          if (form.length) {
-            // If it's part of a form, append the action URL and button name, then submit the form
-            $('<input>')
-              .attr('type', 'hidden')
-              .attr('name', 'action_url')
-              .val(location)
-              .appendTo(form);
-            if (buttonName) {
-              $('<input>')
-                .attr('type', 'hidden')
-                .attr('name', buttonName)
-                .val('true')
-                .appendTo(form);
-            }
-            form.submit();
-          }
-          
-          else {
-            // Otherwise, redirect as before
-            window.location.replace(location);
-          }
-        }
-      });
+    // Row-level actions (monitor/ignore/delete) via API (no page refresh)
+    setupRowActions({
+      apiUrl: "{% url 'api:bulk_suggestions' projectid=projectid %}",
+      tableInstances: [domTable, subTable, starredTable, ipTable],
+      confirmActions: ['delete']
     });
 
     // Track if scan was triggered for selected suggestions

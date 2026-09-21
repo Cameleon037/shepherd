@@ -291,7 +291,7 @@ $(document).ready( function () {
                 "mRender": function (data, type, full) {
                     var delete_url = "{% url 'keywords:delete_keyword' keywordid=0 %}".replace(0, full.id);
                     return '<div class="btn-group1">' +
-                        '<a class="btn btn-xs confirm" rel="tooltip" data-placement="right" data-original-title="Delete Keyword" data-display="'+full.keyword+'" data-href="'+delete_url+'" href="#">' +
+                        '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Delete Keyword" data-action="delete" data-url="'+delete_url+'" data-display="'+full.keyword+'" href="#">' +
                         '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
                         '</a> ' +
                         '</div>';
@@ -348,7 +348,7 @@ $(document).ready( function () {
                 "mRender": function (data, type, full) {
                     var delete_url = "{% url 'keywords:delete_keyword' keywordid=0 %}".replace(0, full.id);
                     return '<div class="btn-group1">' +
-                        '<a class="btn btn-xs confirm" rel="tooltip" data-placement="right" data-original-title="Delete Supplier" data-display="'+full.keyword+'" data-href="'+delete_url+'" href="#">' +
+                        '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Delete Supplier" data-action="delete" data-url="'+delete_url+'" data-display="'+full.keyword+'" href="#">' +
                         '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
                         '</a> ' +
                         '</div>';
@@ -549,17 +549,11 @@ $(document).ready( function () {
         clearBtnId: '#upload-suppliers-clear-file',
         acceptedExtension: '.txt'
     });
-});
 
-$(document).on("click", ".confirm", function(e) {
-    e.preventDefault();
-    var title = $(this).attr('data-display');
-    var location = $(this).attr('data-href');
-    bootbox.confirm('Are you sure?<br/>(Delete Entry: ' + title + ')', function(confirmed) {
-        if(confirmed)
-        {
-            window.location.replace(location);
-        }
+    // Row-level delete via API (no page refresh)
+    setupRowActions({
+        tableInstances: [keywordsTable, suppliersTable],
+        confirmActions: ['delete']
     });
 });
 </script>

@@ -61,6 +61,15 @@ go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
 go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
 CGO_ENABLED=1 go install github.com/projectdiscovery/katana/cmd/katana@latest
 
+# Feroxbuster (content discovery) - https://github.com/epi052/feroxbuster
+cargo install feroxbuster
+# or download a prebuilt binary from the releases page
+
+# Wordlist (required by the feroxbuster scanner)
+# Debian/Ubuntu: apt install seclists   -> /usr/share/seclists/...
+# macOS:          brew install seclists  -> /opt/homebrew/share/seclists/...
+# Set FEROXBUSTER_WORDLIST in settings.py to the raft-medium-directories.txt path.
+
 cd /var/www/
 git clone https://github.com/tillson/git-hound
 cd git-hound

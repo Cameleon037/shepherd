@@ -92,14 +92,12 @@ $(document).ready( function () {
             {'data': 'uuid', 'sName': 'Operations', 'aTargets': [ 0 ],
                 'bSortable': false,
                 "mRender": function (data, type, full) {
-                    var delete_url = "{% url 'assets:delete_suggestion_ignored' uuid=0 %}".replace(0, full.uuid);
-                    var reactivate_url = "{% url 'assets:reactivate_suggestion' uuid=0 %}".replace(0, full.uuid);
                     return '<div class="btn-group1">' +
                         '<input type="checkbox" name="id[]" value="' + $('<div/>').text(data).html() + '">&nbsp;&nbsp;' +
-                        '<a class="btn btn-xs" rel="tooltip" data-placement="right" data-original-title="Move to Suggestions" href="'+reactivate_url+'">' +
+                        '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Move to Suggestions" data-action="move" data-uuid="' + full.uuid + '" href="#">' +
                         '<span class="glyphicon glyphicon-transfer" aria-hidden="true"></span>' +
                         '</a> ' +
-                        '<a class="btn btn-xs confirm" rel="tooltip" data-placement="right" data-original-title="Delete Entry" data-display="'+full.value+'" data-href="'+delete_url+'" href="#">' +
+                        '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Delete Entry" data-action="delete" data-uuid="' + full.uuid + '" data-display="' + full.value + '" href="#">' +
                         '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
                         '</a> ' +
                         '</div>';
@@ -150,6 +148,13 @@ $(document).ready( function () {
             { name: 'btnmove', action: 'move', confirm: false },
             { name: 'btndelete', action: 'delete', confirm: true }
         ]
+    });
+
+    // Row-level actions (move/delete) via API (no page refresh)
+    setupRowActions({
+        apiUrl: "{% url 'api:bulk_suggestions' projectid=projectid %}",
+        tableInstances: [pTable],
+        confirmActions: ['delete']
     });
 });
 
