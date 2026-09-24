@@ -8,8 +8,6 @@
 {% spaceless %}
 <div class="page-header">
   <div class="media">
-    <div class="media-left">
-    </div>
     <div class="media-body">
       <h2 class="media-heading">🌐 Web Endpoints</h2>
     </div>
@@ -21,21 +19,59 @@
     <div class="panel-heading">// General Actions</div>
     <div class="panel-body">
       <a class="btn btn-primary btn-xs" href="{% url 'findings:export_web_endpoints_csv' %}">Export to csv</a>&nbsp;
-      <button type="button" class="btn btn-primary btn-xs" id="btn-burp-scan">Burp scan selected</button>
+      <button type="button" class="btn btn-primary btn-xs" id="btn-burp-scan">Burp scan selected</button>&nbsp;
+      <span id="selection-count" class="label label-primary">0 assets, 0 URLs selected</span>&nbsp;
       <span id="burp-scan-status" style="margin-left: 8px;"></span>
     </div>
 </div>
 
-<!-- Web Endpoints List -->
+<!-- Global search across all endpoints -->
 <div class="panel panel-default">
+  <div class="panel-heading">// Search across all endpoints</div>
+  <div class="panel-body">
+    <input type="text" id="global-endpoint-search" class="form-control" placeholder="Search all endpoints (! = exclude)" title="Match URL, technologies or asset name. Use , for multiple values and prepend ! to exclude, e.g. login, !admin">
+  </div>
+</div>
+
+<!-- Assets view (default) -->
+<div class="panel panel-default" id="assets-panel">
   <div class="panel-heading">
-    // Web Endpoints for Monitored Assets ({{ total_endpoints }} total)
+    // Assets ({{ total_endpoints }} endpoints total)
   </div>
   <div class="panel-body table-responsive">
-    <table id="table_list_web_endpoints" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;">
+    <table id="table_assets" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;">
       <thead>
         <tr>
-          <th><input type="checkbox" name="select_all" value="1" id="select-all-endpoints">&nbsp; Operations</th>
+          <th><input type="checkbox" name="select_all_assets" value="1" id="select-all-assets">&nbsp; Operations</th>
+          <th>Asset</th>
+          <th>Endpoints</th>
+          <th>Actions</th>
+        </tr>
+        <tr>
+          <th></th>
+          <th><input type="text" placeholder="Search Asset" class="column-search-input form-control input-sm"></th>
+          <th></th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Data will be loaded via AJAX -->
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Endpoints of the expanded asset -->
+<div class="panel panel-default" id="endpoints-panel" style="display: none;">
+  <div class="panel-heading">
+    <span id="endpoints-panel-title">// Endpoints</span>
+    <button type="button" class="btn btn-default btn-xs pull-right" id="btn-close-endpoints">Close</button>
+  </div>
+  <div class="panel-body table-responsive">
+    <table id="table_asset_endpoints" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;">
+      <thead>
+        <tr>
+          <th><input type="checkbox" name="select_all_endpoints" value="1" id="select-all-endpoints">&nbsp; Operations</th>
           <th>URL</th>
           <th>Asset</th>
           <th>Technologies</th>
@@ -44,9 +80,33 @@
         <tr>
           <th></th>
           <th><input type="text" placeholder="Search URL" class="column-search-input form-control input-sm"></th>
-          <th><input type="text" placeholder="Search Asset" class="column-search-input form-control input-sm"></th>
+          <th></th>
           <th><input type="text" placeholder="Search Technologies" class="column-search-input form-control input-sm"></th>
           <th><input type="text" placeholder="Search Date" class="column-search-input form-control input-sm"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Data will be loaded via AJAX -->
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Search results across all assets -->
+<div class="panel panel-default" id="search-results-panel" style="display: none;">
+  <div class="panel-heading">
+    <span id="search-results-title">// Search results</span>
+    <button type="button" class="btn btn-default btn-xs pull-right" id="btn-clear-search">Clear search</button>
+  </div>
+  <div class="panel-body table-responsive">
+    <table id="table_search_results" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;">
+      <thead>
+        <tr>
+          <th>Operations</th>
+          <th>URL</th>
+          <th>Technologies</th>
+          <th>Date</th>
+          <th>Asset</th>
         </tr>
       </thead>
       <tbody>
@@ -62,98 +122,323 @@
 {% block javascript %}
 <script type="text/javascript" language="javascript" class="init">
 $(document).ready(function() {
-    // Function to initialize a DataTable with server-side processing
-    function initializeDataTable(tableId, ajaxUrl) {
-        return $(tableId).DataTable({
+    var selectedAssets = new Set();
+    var selectedUrls = new Set();
+    var currentAssetUuid = null;
+    var endpointsTable = null;
+    var searchResultsTable = null;
+    var assetUrlTemplate = "{% url 'assets:view_asset' uuid='PLACEHOLDER' %}";
+
+    function assetLink(uuid, name) {
+        return '<a href="' + assetUrlTemplate.replace('PLACEHOLDER', encodeURIComponent(uuid)) + '">' + name + '</a>';
+    }
+
+    function renderDate(data) {
+        if (!data) return '';
+        if (window.moment) {
+            if (typeof data === 'string' && data.endsWith('Z')) {
+                return moment.utc(data).local().format('DD-MM-YYYY HH:mm');
+            }
+            return moment(data).format('DD-MM-YYYY HH:mm');
+        }
+        return data;
+    }
+
+    function updateSelectionCount() {
+        $('#selection-count').text(selectedAssets.size + ' asset(s), ' + selectedUrls.size + ' URL(s) selected');
+    }
+
+    // Re-apply checkbox states after DataTables redraws rows
+    function restoreSelectionState() {
+        $('input.endpoint-checkbox').each(function() {
+            $(this).prop('checked', selectedUrls.has($(this).val()));
+        });
+        $('.asset-checkbox').each(function() {
+            $(this).prop('checked', selectedAssets.has($(this).val()));
+        });
+        if (currentAssetUuid) {
+            $('#select-all-endpoints').prop('checked', selectedAssets.has(currentAssetUuid));
+        }
+    }
+
+    // Group search results by asset (the server returns rows ordered by asset)
+    function groupByAsset() {
+        var api = this.api();
+        var rows = api.rows({ page: 'current' }).nodes();
+        var data = api.rows({ page: 'current' }).data();
+
+        var groupSizes = {};
+        $.each(data, function(i, endpoint) {
+            var uuid = endpoint.asset_uuid || '';
+            groupSizes[uuid] = (groupSizes[uuid] || 0) + 1;
+        });
+
+        var lastUuid = null;
+        $.each(data, function(i, endpoint) {
+            var uuid = endpoint.asset_uuid || '';
+            if (uuid === lastUuid) return;
+
+            var assetName = endpoint.asset_value || 'Unassigned';
+            var $checkbox = $('<input>', {
+                type: 'checkbox',
+                class: 'asset-checkbox',
+                value: uuid
+            });
+            var $label = $('<strong>').append($('<a>', {
+                href: assetUrlTemplate.replace('PLACEHOLDER', encodeURIComponent(uuid)),
+                text: '📦 ' + assetName
+            }));
+            var $cell = $('<td>').append($checkbox).append('&nbsp; ').append($label)
+                .append(' <span class="text-muted">(' + groupSizes[uuid] + ' on this page)</span>');
+
+            $('<tr>', { class: 'asset-group-row' })
+                .append($('<td>', { colspan: api.columns(':visible').count() }).append($cell))
+                .insertBefore($(rows).eq(i));
+            lastUuid = uuid;
+        });
+
+        restoreSelectionState();
+    }
+
+    // ---- Assets table ----
+    var assetsTable = $('#table_assets').DataTable({
+        processing: true,
+        serverSide: true,
+        pageLength: 25,
+        orderCellsTop: true,
+        oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
+        order: [[1, 'asc']],
+        ajax: {
+            url: "{% url 'api:list_assets' projectid=projectid %}?selection=monitored&has_endpoints=1",
+            dataSrc: 'results',
+            type: 'GET',
+            dataType: 'json'
+        },
+        columns: [
+            {
+                'data': 'uuid', 'sName': 'Operations', 'bSortable': false,
+                'mRender': function(data) {
+                    return '<input type="checkbox" name="asset[]" value="' + data + '" class="asset-checkbox">';
+                }
+            },
+            {
+                'data': 'value', 'sName': 'Asset',
+                'mRender': function(data, type, full) {
+                    return assetLink(full.uuid, data);
+                }
+            },
+            { 'data': 'endpoint_count', 'sName': 'Endpoints', 'bSortable': false },
+            {
+                'data': 'uuid', 'sName': 'Actions', 'bSortable': false,
+                'mRender': function(data) {
+                    return '<button type="button" class="btn btn-primary btn-xs btn-view-endpoints" data-asset-uuid="' + data + '">View endpoints</button>';
+                }
+            }
+        ],
+        drawCallback: restoreSelectionState
+    });
+
+    // Asset column search
+    var $assetsFilterRow = $('#table_assets thead tr:eq(1)');
+    applyDebouncedColumnSearch(assetsTable, 'input.column-search-input', 'select.column-search-input', 400, $assetsFilterRow);
+
+    // Select all assets on the current page
+    $('#select-all-assets').on('change', function() {
+        var checked = $(this).prop('checked');
+        assetsTable.$('input.asset-checkbox').each(function() {
+            $(this).prop('checked', checked);
+            var uuid = $(this).val();
+            if (checked) { selectedAssets.add(uuid); } else { selectedAssets.delete(uuid); }
+        });
+        updateSelectionCount();
+    });
+
+    // ---- Expand / collapse the endpoints panel ----
+    $(document).on('click', '.btn-view-endpoints', function() {
+        var uuid = $(this).data('asset-uuid');
+        var row = assetsTable.row($(this).closest('tr'));
+        var assetName = row.data() ? row.data().value : uuid;
+        loadAssetEndpoints(uuid, assetName);
+    });
+
+    $('#btn-close-endpoints').on('click', function() {
+        $('#endpoints-panel').hide();
+        currentAssetUuid = null;
+        if (endpointsTable) {
+            endpointsTable.destroy();
+            endpointsTable = null;
+        }
+    });
+
+    function loadAssetEndpoints(assetUuid, assetName) {
+        currentAssetUuid = assetUuid;
+        $('#endpoints-panel-title').text('// Endpoints for ' + assetName);
+        $('#endpoints-panel').show();
+        if (endpointsTable) { endpointsTable.destroy(); }
+
+        endpointsTable = $('#table_asset_endpoints').DataTable({
             processing: true,
             serverSide: true,
             pageLength: 25,
             orderCellsTop: true,
             oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
-            order: [[4, "desc"]], // Sort by date
+            order: [[4, 'desc']],
             ajax: {
-                url: ajaxUrl,
-                dataSrc: "results",
-                type: "GET",
-                dataType: "json"
+                url: "{% url 'api:list_endpoints' projectid=projectid %}?asset=" + encodeURIComponent(assetUuid),
+                dataSrc: 'results',
+                type: 'GET',
+                dataType: 'json'
             },
             columns: [
                 {
-                    'data': 'url', 'sName': 'Operations', 'aTargets': [0], 'bSortable': false,
-                    "mRender": function (data, type, full) {
-                        return '<input type="checkbox" name="url[]" value="' + data + '">';
+                    'data': 'url', 'sName': 'Operations', 'bSortable': false,
+                    'mRender': function(data, type, full) {
+                        return '<input type="checkbox" name="url[]" value="' + data + '" class="endpoint-checkbox" data-asset-uuid="' + full.asset_uuid + '">';
                     }
                 },
                 {
-                    'data': 'url', 'sName': 'URL', 'aTargets': [1],
-                    "mRender": function (data, type, full) {
+                    'data': 'url', 'sName': 'URL',
+                    'mRender': function(data) {
+                        return '<a href="' + data + '" target="_blank" rel="noopener noreferrer">' + data + '</a>';
+                    }
+                },
+                { 'data': 'asset_value', 'sName': 'Asset', 'visible': false },
+                {
+                    'data': 'technologies', 'sName': 'Technologies',
+                    'mRender': function(data) { return data ? data : '-'; }
+                },
+                {
+                    'data': 'date', 'sName': 'Date',
+                    'mRender': renderDate
+                }
+            ],
+            drawCallback: restoreSelectionState
+        });
+
+        var $filterRow = $('#table_asset_endpoints thead tr:eq(1)');
+        applyDebouncedColumnSearch(endpointsTable, 'input.column-search-input', 'select.column-search-input', 400, $filterRow);
+
+        $('#select-all-endpoints').prop('checked', selectedAssets.has(assetUuid));
+    }
+
+    // Select all endpoints of the expanded asset
+    $('#select-all-endpoints').on('change', function() {
+        var checked = $(this).prop('checked');
+        if (checked) { selectedAssets.add(currentAssetUuid); } else { selectedAssets.delete(currentAssetUuid); }
+        if (endpointsTable) {
+            endpointsTable.$('input.endpoint-checkbox').prop('checked', checked);
+        }
+        // Sync the corresponding asset checkbox in the assets table if visible
+        assetsTable.$('input.asset-checkbox[value="' + currentAssetUuid + '"]').prop('checked', checked);
+        updateSelectionCount();
+    });
+
+    // ---- Global search across all endpoints ----
+    var searchTimer;
+    $('#global-endpoint-search').on('input', function() {
+        var value = this.value.trim();
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(function() {
+            if (value.length === 0) {
+                showAssetsView();
+            } else {
+                showSearchResults(value);
+            }
+        }, 400);
+    });
+
+    $('#btn-clear-search').on('click', function() {
+        $('#global-endpoint-search').val('');
+        showAssetsView();
+    });
+
+    function showAssetsView() {
+        $('#search-results-panel').hide();
+        $('#assets-panel').show();
+        if (searchResultsTable) {
+            searchResultsTable.destroy();
+            searchResultsTable = null;
+        }
+    }
+
+    function showSearchResults(keyword) {
+        $('#assets-panel').hide();
+        $('#endpoints-panel').hide();
+        $('#search-results-title').text('// Search results for "' + keyword + '"');
+        $('#search-results-panel').show();
+        if (searchResultsTable) { searchResultsTable.destroy(); }
+
+        searchResultsTable = $('#table_search_results').DataTable({
+            processing: true,
+            serverSide: true,
+            pageLength: 25,
+            oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
+            orderFixed: { pre: [[4, 'asc']] }, // Keep rows grouped by asset
+            order: [[3, 'desc']], // Sort endpoints within each asset by date
+            ajax: {
+                url: "{% url 'api:list_endpoints' projectid=projectid %}?search=" + encodeURIComponent(keyword),
+                dataSrc: 'results',
+                type: 'GET',
+                dataType: 'json'
+            },
+            columns: [
+                {
+                    'data': 'url', 'sName': 'Operations', 'bSortable': false,
+                    'mRender': function(data, type, full) {
+                        return '<input type="checkbox" name="url[]" value="' + data + '" class="endpoint-checkbox" data-asset-uuid="' + full.asset_uuid + '">';
+                    }
+                },
+                {
+                    'data': 'url', 'sName': 'URL',
+                    'mRender': function(data) {
                         return '<a href="' + data + '" target="_blank" rel="noopener noreferrer">' + data + '</a>';
                     }
                 },
                 {
-                    'data': 'asset_value', 'sName': 'Asset', 'aTargets': [2],
-                    "mRender": function (data, type, full) {
-                        if (!data) return '-';
-                        var asset_url = "{% url 'assets:view_asset' uuid='PLACEHOLDER' %}".replace('PLACEHOLDER', full.asset_uuid);
-                        return '<a href="' + asset_url + '">' + data + '</a>';
-                    }
+                    'data': 'technologies', 'sName': 'Technologies',
+                    'mRender': function(data) { return data ? data : '-'; }
                 },
                 {
-                    'data': 'technologies', 'sName': 'Technologies', 'aTargets': [3],
-                    "mRender": function (data, type, full) {
-                        return data ? data : '-';
-                    }
+                    'data': 'date', 'sName': 'Date',
+                    'mRender': renderDate
                 },
-                {
-                    'data': 'date', 'sName': 'Date', 'aTargets': [4],
-                    "mRender": function (data, type, full) {
-                        if (!data) return '';
-                        if (window.moment) {
-                            if (typeof data === 'string' && data.endsWith('Z')) {
-                                return moment.utc(data).local().format('DD-MM-YYYY HH:mm');
-                            }
-                            return moment(data).format('DD-MM-YYYY HH:mm');
-                        }
-                        return data;
-                    }
-                }
-            ]
+                { 'data': 'asset_value', 'sName': 'Asset', 'visible': false }
+            ],
+            drawCallback: groupByAsset
         });
     }
 
-    // Initialize the web endpoints table
-    var endpointsTable = initializeDataTable('#table_list_web_endpoints', "{% url 'api:list_endpoints' projectid=projectid %}");
-
-    // Find the second header row (filter row) and bind to its inputs/selects
-    var $filterRow = $('#table_list_web_endpoints thead tr:eq(1)');
-    applyDebouncedColumnSearch(endpointsTable, 'input.column-search-input', 'select.column-search-input', 400, $filterRow);
-
-    // Select all functionality
-    $('#select-all-endpoints').on('change', function() {
-        var isChecked = $(this).prop('checked');
-        endpointsTable.$('input[name="url[]"]').prop('checked', isChecked);
+    // ---- Selection handlers ----
+    $(document).on('change', '.asset-checkbox', function() {
+        var uuid = $(this).val();
+        var checked = $(this).prop('checked');
+        if (checked) { selectedAssets.add(uuid); } else { selectedAssets.delete(uuid); }
+        // Sync visible endpoint checkboxes of this asset
+        $('input.endpoint-checkbox[data-asset-uuid="' + uuid + '"]').prop('checked', checked);
+        // Sync the expanded panel select-all if this is the expanded asset
+        if (uuid === currentAssetUuid) {
+            $('#select-all-endpoints').prop('checked', checked);
+        }
+        updateSelectionCount();
     });
 
-    // Individual checkbox change (using event delegation for dynamically loaded content)
-    $(document).on('change', 'input[name="url[]"]', function() {
-        var totalCheckboxes = endpointsTable.$('input[name="url[]"]').length;
-        var checkedCheckboxes = endpointsTable.$('input[name="url[]"]:checked').length;
-        $('#select-all-endpoints').prop('checked', totalCheckboxes === checkedCheckboxes);
+    $(document).on('change', 'input.endpoint-checkbox', function() {
+        var url = $(this).val();
+        if ($(this).prop('checked')) { selectedUrls.add(url); } else { selectedUrls.delete(url); }
+        updateSelectionCount();
     });
 
-    // Burp Scan button handler
+    // ---- Burp scan ----
     $('#btn-burp-scan').on('click', function() {
-        var selectedUrls = [];
-        endpointsTable.$('input[name="url[]"]:checked').each(function() {
-            selectedUrls.push($(this).val());
-        });
+        var selectedUrlsArr = Array.from(selectedUrls);
+        var selectedAssetsArr = Array.from(selectedAssets);
 
-        if (selectedUrls.length === 0) {
-            alert('Please select at least one endpoint to scan.');
+        if (selectedUrlsArr.length === 0 && selectedAssetsArr.length === 0) {
+            alert('Please select at least one endpoint or asset to scan.');
             return;
         }
 
-        if (!confirm('Launch Burp Suite scan for ' + selectedUrls.length + ' URL(s)?')) {
+        if (!confirm('Launch Burp Suite scan for the selected endpoints?')) {
             return;
         }
 
@@ -166,7 +451,7 @@ $(document).ready(function() {
             url: "{% url 'api:scans_burp' projectid=projectid %}",
             type: 'POST',
             contentType: 'application/json',
-            data: JSON.stringify({ urls: selectedUrls }),
+            data: JSON.stringify({ urls: selectedUrlsArr, assets: selectedAssetsArr }),
             headers: { 'X-CSRFToken': '{{ csrf_token }}' },
             success: function(data) {
                 $btn.prop('disabled', false).text('Burp scan selected');

@@ -202,3 +202,13 @@
     white-space: normal;
     word-break: break-all;
 }
+
+/* Asset group header rows (Web Endpoints search results) */
+.asset-group-row td {
+    background-color: var(--bg-tertiary) !important;
+    border-top: 2px solid var(--border-primary) !important;
+    border-bottom: 1px solid var(--border-primary) !important;
+    color: var(--text-primary);
+    font-weight: 600;
+    padding: 8px 10px !important;
+}

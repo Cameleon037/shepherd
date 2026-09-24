@@ -112,10 +112,14 @@ def apply_column_search_multi(queryset, search_value, field_path, delimiter=',',
     "!value" (exclude) or "value" (include). E.g. "!a,!b" excludes rows where
     the field contains "a" and also excludes rows where it contains "b".
 
+    field_path may be a single field path (e.g. "source__icontains") or a list of
+    field paths (e.g. ["url__icontains", "technologies__icontains"]); for a list,
+    each segment matches if any of the fields contains the value.
+
     Args:
         queryset: Django queryset to filter
         search_value: Search string; split on delimiter; each segment can start with ! for exclude
-        field_path: Django field path (e.g. "source__icontains")
+        field_path: Django field path or list of field paths
         delimiter: Split search_value on this (default: comma)
         min_length: Minimum length of each segment (after stripping !) to apply (default: 1)
 
@@ -124,6 +128,7 @@ def apply_column_search_multi(queryset, search_value, field_path, delimiter=',',
     """
     if not search_value:
         return queryset
+    field_paths = field_path if isinstance(field_path, (list, tuple)) else [field_path]
     segments = [s.strip() for s in search_value.split(delimiter) if s.strip()]
     for segment in segments:
         is_negative = segment.startswith('!')
@@ -131,8 +136,11 @@ def apply_column_search_multi(queryset, search_value, field_path, delimiter=',',
             segment = segment[1:].strip()
         if not segment or len(segment) < min_length:
             continue
+        field_q = Q()
+        for fp in field_paths:
+            field_q |= Q(**{fp: segment})
         if is_negative:
-            queryset = queryset.exclude(**{field_path: segment})
+            queryset = queryset.exclude(field_q)
         else:
-            queryset = queryset.filter(**{field_path: segment})
+            queryset = queryset.filter(field_q)
     return queryset
