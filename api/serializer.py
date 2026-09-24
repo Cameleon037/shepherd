@@ -108,6 +108,8 @@ class FindingSerializer(serializers.ModelSerializer):
         return None
 
 class JobSerializer(serializers.ModelSerializer):
+    pid = serializers.IntegerField(write_only=True, required=False)
+
     class Meta:
         model = Job
         fields = '__all__'

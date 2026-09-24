@@ -16,6 +16,9 @@
         </div>
         <div class="media-body">
             <h2 class="media-heading">🧾 Job</h2><span class="text-muted">ID: {{ j_obj.id }}</span>
+            <a id="delete-job" href="#" class="btn btn-xs" rel="tooltip" data-placement="right" data-original-title="Delete Job (kills process if running)" data-href="{% url 'api:delete_job' projectid=projectid job_id=j_obj.id %}">
+                <span class="glyphicon glyphicon-trash" aria-hidden="true"></span>
+            </a>
         </div>
     </div>
 </div>
@@ -81,6 +84,31 @@ document.addEventListener("DOMContentLoaded", function() {
     var outputDiv = document.getElementById("job-output");
     if (outputDiv) {
         outputDiv.scrollTop = outputDiv.scrollHeight;
+    }
+
+    // Delete button: same bootbox + DELETE + CSRF flow as the list page, but
+    // there is no DataTable here to reload, so navigate back to the jobs page.
+    var deleteBtn = document.getElementById("delete-job");
+    if (deleteBtn) {
+        $(deleteBtn).tooltip();
+        deleteBtn.addEventListener("click", function (e) {
+            e.preventDefault();
+            bootbox.confirm("Delete this job?", function (confirmed) {
+                if (!confirmed) return;
+                $.ajax({
+                    url: deleteBtn.getAttribute("data-href"),
+                    type: "DELETE",
+                    headers: {"X-CSRFToken": getCookie("csrftoken")},
+                    success: function (response) {
+                        window.location.replace("{% url 'jobs:jobs' %}");
+                    },
+                    error: function (xhr) {
+                        var error = xhr.responseText ? JSON.parse(xhr.responseText) : {error: 'Delete failed'};
+                        displayMessage('danger', 'Error: ' + (error.error || 'Delete failed'));
+                    }
+                });
+            });
+        });
     }
 
     // Auto-poll the job status/output while the job is running so the page stays
