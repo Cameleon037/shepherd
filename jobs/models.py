@@ -14,6 +14,7 @@ class Job(models.Model):
 
     status = models.CharField(max_length=20, default='pending')  # pending, running, finished, failed
     output = models.TextField(blank=True, default='')
+    pid = models.IntegerField(null=True, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)

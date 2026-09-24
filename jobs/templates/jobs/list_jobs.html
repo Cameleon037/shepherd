@@ -80,8 +80,12 @@ $(document).ready(function () {
     const jobColumns = [
         {'data': 'id', 'sName': 'Operations', 'bSortable': false,
             "mRender": function (data, type, full) {
+                var delete_url = "{% url 'api:delete_job' projectid=projectid job_id='__ID__' %}".replace('__ID__', data);
                 return '<div class="btn-group1">' +
                     '<input type="checkbox" name="id[]" value="' + $('<div/>').text(data).html() + '">' +
+                    '<a class="btn btn-xs confirm" rel="tooltip" data-placement="right" data-original-title="Delete Job (kills process if running)" data-display="' + $('<div/>').text(full.command).html() + '" data-href="' + delete_url + '" href="#" data-method="DELETE">' +
+                        '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
+                    '</a>' +
                     '</div>';
             },
             "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
@@ -133,10 +137,8 @@ $(document).ready(function () {
     applyDebouncedColumnSearch(jobTable, 'input.column-search-input', 'select.column-search-input', 400, $filterRow);
 
     // Initialize common standalone features
-    initializeStandaloneFeatures({
-        selectAllSelector: '#select-all-jobs',
-        tableSelector: '#table_list_jobs'
-    });
+    setupStandaloneSelectAll('#select-all-jobs', '#table_list_jobs');
+    setupConfirmDialog(jobTable);
 });
 </script>
 {% endblock %}

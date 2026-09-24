@@ -34,6 +34,7 @@ from project.models import Project
 from keywords.models import Keyword
 from assets.models import Asset
 from jobs.models import Job
+from jobs.utils import kill_job_process_tree
 from findings.models import DNSRecord
 from findings.models import Finding, Port, Screenshot, Endpoint
 from assets.utils import ignore_asset
@@ -1672,6 +1673,35 @@ def get_job(request, projectid, job_id, format=None):
         return JsonResponse({"status": False, "code": 404, "message": "Job not found."}, status=404)
 
     return JsonResponse({"status": True, "code": 200, "result": JobSerializer(job).data})
+
+
+@extend_schema(
+    tags=['Jobs'],
+    summary='Delete job',
+    description='Delete a job row. If the job is running, terminate its process group first.',
+    responses={200: SuccessMessageSerializer},
+)
+@api_view(['DELETE'])
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
+@permission_classes((IsAuthenticated,))
+def delete_job(request, projectid, job_id):
+    if not request.user.has_perm('jobs.delete_job'):
+        return HttpResponseForbidden("You do not have permission to delete jobs.")
+
+    try:
+        Project.objects.get(id=projectid)
+    except Project.DoesNotExist:
+        return JsonResponse({'error': 'Project not found'}, status=404)
+
+    try:
+        job = Job.objects.get(id=job_id, related_project__id=projectid)
+    except Job.DoesNotExist:
+        return JsonResponse({'error': 'Job not found'}, status=404)
+
+    if job.status == 'running' and job.pid:
+        kill_job_process_tree(job.pid)
+    job.delete()
+    return JsonResponse({'success': True})
 
 ##### END JOBS ###############
 

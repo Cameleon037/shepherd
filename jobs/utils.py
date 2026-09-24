@@ -1,5 +1,7 @@
 import gc
+import os
 import queue
+import signal
 import subprocess
 import threading
 import time
@@ -23,8 +25,8 @@ DB_RETRY_DELAY = 1.0
 _EOF = object()
 
 
-def _persist_output(job, max_retries=DB_MAX_RETRIES, delay=DB_RETRY_DELAY):
-    """Best-effort save of the job's output field.
+def _persist_fields(job, fields, max_retries=DB_MAX_RETRIES, delay=DB_RETRY_DELAY):
+    """Best-effort save of the given job fields.
 
     The child management command writes to the same database, so under SQLite the
     parent can hit transient "database is locked" errors. Retry instead of letting
@@ -34,7 +36,7 @@ def _persist_output(job, max_retries=DB_MAX_RETRIES, delay=DB_RETRY_DELAY):
     """
     for attempt in range(max_retries):
         try:
-            job.save(update_fields=['output'])
+            job.save(update_fields=fields)
             return True
         except Exception:
             if attempt == max_retries - 1:
@@ -77,7 +79,12 @@ def run_job(command, args, projectid, user=None):
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            start_new_session=True,
         )
+        # Record the OS pid so a delete can kill the process tree (same process
+        # group as the child, so one killpg reaches its tools too).
+        job.pid = process.pid
+        _persist_fields(job, ['pid'])
 
         def _read_stdout():
             try:
@@ -121,7 +128,7 @@ def run_job(command, args, projectid, user=None):
                 job.output = (job.output or '') + ''.join(pending)
                 pending = []
                 last_flush = now_t
-                _persist_output(job)
+                _persist_fields(job, ['output'])
 
         if reader_thread:
             reader_thread.join(timeout=5)
@@ -150,3 +157,30 @@ def run_job(command, args, projectid, user=None):
         if reader_thread is not None:
             reader_thread.join(timeout=2)
         gc.collect()
+
+
+# Grace period (seconds) after SIGTERM before escalating to SIGKILL.
+KILL_GRACE = 5.0
+
+
+def kill_job_process_tree(pid, grace=KILL_GRACE):
+    """Terminate a running job's process group. Returns True if the process is
+    gone or was never reachable; False on PermissionError (process owned by
+    another user — nothing to do)."""
+    try:
+        os.killpg(os.getpgid(pid), signal.SIGTERM)
+    except (ProcessLookupError, PermissionError):
+        return True  # already dead, or not ours; either way: nothing running under pid
+
+    deadline = time.monotonic() + grace
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        time.sleep(0.2)
+    try:
+        os.killpg(os.getpgid(pid), signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    return True
