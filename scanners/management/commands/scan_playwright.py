@@ -1,6 +1,5 @@
 import asyncio
 import base64
-import re
 from urllib.parse import urlparse
 from django.core.management.base import BaseCommand, CommandError
 from django.utils.timezone import make_aware
@@ -8,6 +7,7 @@ from datetime import datetime
 from assets.models import Asset
 from project.models import Project
 from scanners.scan_utils import resolve_uuids, add_common_scan_arguments
+from scanners.tech_detect import detect_technologies
 from findings.models import Screenshot
 from django.conf import settings
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError, Error as PlaywrightError
@@ -292,11 +292,16 @@ class Command(BaseCommand):
                             try:
                                 content = await page.content()
                                 result["response_body"] = content[:100000] if content else ""
-                                
-                                # Try to detect technologies from HTML
-                                technologies = self.detect_technologies(content)
-                                if technologies:
-                                    result["technologies"] = ",".join(technologies)
+                                if content:
+                                    try:
+                                        headers = dict(response.headers) if response else {}
+                                    except Exception:
+                                        headers = {}
+                                    # Detection is CPU-bound; run off the event loop so the other
+                                    # max_concurrent browser tasks are not stalled.
+                                    technologies = await asyncio.to_thread(detect_technologies, url, content, headers)
+                                    if technologies:
+                                        result["technologies"] = ",".join(technologies)
                             except:
                                 pass
 
@@ -410,46 +415,4 @@ class Command(BaseCommand):
             await browser.close()
 
         return processed_results
-
-    def detect_technologies(self, html_content):
-        """Detect technologies from HTML content"""
-        if not html_content:
-            return []
-        
-        technologies = []
-        html_lower = html_content.lower()
-        
-        # Common technology patterns
-        tech_patterns = {
-            'WordPress': [r'wp-content', r'wordpress', r'/wp-includes/'],
-            'Drupal': [r'drupal', r'/sites/all/'],
-            'Joomla': [r'joomla', r'/media/system/'],
-            'React': [r'react', r'__REACT_DEVTOOLS'],
-            'Vue.js': [r'vue\.js', r'__VUE__'],
-            'Angular': [r'angular', r'ng-'],
-            'jQuery': [r'jquery', r'\.jquery'],
-            'Bootstrap': [r'bootstrap', r'bs-'],
-            'ASP.NET': [r'asp\.net', r'__VIEWSTATE'],
-            'PHP': [r'\.php', r'php/'],
-            'Laravel': [r'laravel_session', r'laravel'],
-            'Django': [r'csrftoken', r'django'],
-            'Flask': [r'flask', r'werkzeug'],
-            'Express': [r'express', r'x-powered-by.*express'],
-            'Nginx': [r'nginx'],
-            'Apache': [r'apache', r'apache/'],
-            'IIS': [r'iis', r'microsoft-iis'],
-            'Cloudflare': [r'cloudflare', r'cf-ray'],
-            'AWS': [r'aws', r'amazonaws'],
-            'Google Analytics': [r'google-analytics', r'ga\.js', r'gtag'],
-            'Google Tag Manager': [r'googletagmanager', r'gtm\.js'],
-        }
-        
-        for tech, patterns in tech_patterns.items():
-            for pattern in patterns:
-                if re.search(pattern, html_lower, re.IGNORECASE):
-                    if tech not in technologies:
-                        technologies.append(tech)
-                    break
-        
-        return technologies
 

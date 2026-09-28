@@ -37,10 +37,10 @@ def is_menu_active(menu_item, request_path):
             # Check if this looks like a Security Scans sub-item
             security_scans_paths = [
                 "/findings/control-center/",
-                "/findings/nmap/results/",
-                "/findings/scanners/results", 
-                "/findings/httpx/results/",
-                "/findings/data_leaks/"
+                "/findings/nmap/",
+                "/findings/scanners/",
+                "/findings/screenshots/",
+                "/findings/data-leaks/"
             ]
             if any(request_path.startswith(path) for path in security_scans_paths):
                 return False

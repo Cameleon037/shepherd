@@ -14,6 +14,7 @@ from findings.models import Endpoint
 from assets.models import Asset
 from project.models import Project
 from scanners.scan_utils import resolve_uuids, add_common_scan_arguments
+from scanners.tech_detect import detect_technologies
 
 
 class Command(BaseCommand):
@@ -134,23 +135,29 @@ class Command(BaseCommand):
         self.stdout.write(f'  Deleted {deleted_count} existing endpoint(s)')
 
         # Merge root + discovered and create Endpoint records
-        all_urls = list(dict.fromkeys(root_urls + discovered_urls))
+        body_by_url = {url: (body, resp_headers) for url, body, resp_headers in discovered_urls}
+        all_urls = list(dict.fromkeys(root_urls + [url for url, _, _ in discovered_urls]))
         created = 0
         for url in all_urls:
             url = (url or '').strip()
             if not url:
                 continue
+            body, resp_headers = body_by_url.get(url, ('', None))
+            techs = detect_technologies(url, body, resp_headers)
             Endpoint.objects.create(
                 url=url,
                 asset=asset,
-                technologies='',
+                technologies=','.join(techs),  # '' when nothing detected, as before
             )
             created += 1
 
         self.stdout.write(f'  Endpoints created: {created}')
 
     def _run_katana(self, urls):
-        """Run Katana with -list input and -jsonl output; return list of discovered URLs."""
+        """Run Katana with -list input and -jsonl -store-response output.
+
+        Return (url, response_body, response_headers) tuples per discovered URL.
+        """
         katana_path = settings.KATANA_PATH
         if not katana_path:
             self.stdout.write('  KATANA_PATH not set; skipping Katana.')
@@ -162,7 +169,7 @@ class Command(BaseCommand):
             list_path = f.name
 
         try:
-            cmd = [katana_path, '-list', list_path, '-jsonl']
+            cmd = [katana_path, '-list', list_path, '-jsonl', '-store-response']
 
             result = subprocess.run(
                 cmd,
@@ -179,8 +186,11 @@ class Command(BaseCommand):
                     obj = json.loads(line)
                     req = obj.get('request') or {}
                     url = req.get('endpoint') or req.get('url')
-                    if url:
-                        discovered.append(url)
+                    if not url:
+                        continue
+                    resp = obj.get('response') if isinstance(obj.get('response'), dict) else {}
+                    body = resp.get('body') or ''
+                    discovered.append((url, body, resp.get('headers') or None))
                 except (json.JSONDecodeError, TypeError):
                     pass
 

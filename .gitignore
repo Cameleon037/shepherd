@@ -195,3 +195,9 @@ cython_debug/
 
 # OS files
 .DS_Store
+
+# Docs
+docs/
+
+# IA
+AGENTS.md

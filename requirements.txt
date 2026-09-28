@@ -28,3 +28,4 @@ openai-agents
 azure-identity
 asyncio
 playwright
+wappalyzer-python3==0.0.11
