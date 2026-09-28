@@ -13,6 +13,9 @@
             <h2 class="media-heading">🧠 Control Center</h2>
             <p class="text-muted" style="margin-top:4px;">Central place to orchestrate scans and monitor recent activity</p>
         </div>
+        <div class="media-right">
+            <a class="btn btn-primary btn-sm" title="Run targeted Burp Suite scans against discovered web endpoints." href="{% url 'findings:web_endpoints' %}">🗡 Pentest (Burp) →</a>
+        </div>
     </div>
 </div>
 
@@ -209,11 +212,6 @@
     <div id="scan-feedback" class="meta" style="margin-top:10px;"></div>
 </div>
 
-<div class="control-card">
-    <h4>4. Penetration Testing</h4>
-    <p class="meta">Run targeted Burp Suite scans against discovered web endpoints. Select the URLs you want to test on the Web Endpoints page. Run the Katana scan against the asset you want to discover more endpoints on.</p>
-    <a class="btn btn-primary btn-sm" href="{% url 'findings:web_endpoints' %}">Go to Web Endpoints →</a>
-</div>
 {% endspaceless %}
 {% endblock %}
 

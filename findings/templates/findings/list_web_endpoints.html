@@ -312,7 +312,10 @@ $(document).ready(function() {
                     'mRender': renderDate
                 }
             ],
-            drawCallback: restoreSelectionState
+            drawCallback: restoreSelectionState,
+            fnInitComplete: function() {
+                $('#endpoints-panel').get(0).scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
         });
 
         var $filterRow = $('#table_asset_endpoints thead tr:eq(1)');
