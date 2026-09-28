@@ -420,8 +420,7 @@ $(document).ready(function () {
                 if (!response.ok) {
                     throw data;
                 }
-                var msg = data.asset_count + ' asset(s) queued. ' + (data.messages || []).join(' ');
-                $('#scan-feedback').text(msg);
+                window.location.href = "{% url 'jobs:jobs' %}";
             });
         }).catch(function(err) {
             var errorText = (err && err.message) ? err.message : 'Failed to launch scans.';
