@@ -85,6 +85,7 @@ class Endpoint(models.Model):
     url = models.CharField(max_length=2048, primary_key=True)
     asset = models.ForeignKey(Asset, on_delete=models.CASCADE, null=True, default=None)
     technologies = models.CharField(max_length=2048, blank=True, default='')
+    response_size = models.IntegerField(null=True, blank=True)
     date = models.DateTimeField(auto_now_add=True)
 
 class DNSRecord(models.Model):

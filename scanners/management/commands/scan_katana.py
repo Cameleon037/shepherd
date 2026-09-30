@@ -135,19 +135,20 @@ class Command(BaseCommand):
         self.stdout.write(f'  Deleted {deleted_count} existing endpoint(s)')
 
         # Merge root + discovered and create Endpoint records
-        body_by_url = {url: (body, resp_headers) for url, body, resp_headers in discovered_urls}
-        all_urls = list(dict.fromkeys(root_urls + [url for url, _, _ in discovered_urls]))
+        body_by_url = {url: (body, resp_headers, response_size) for url, body, resp_headers, response_size in discovered_urls}
+        all_urls = list(dict.fromkeys(root_urls + [url for url, _, _, _ in discovered_urls]))
         created = 0
         for url in all_urls:
             url = (url or '').strip()
             if not url:
                 continue
-            body, resp_headers = body_by_url.get(url, ('', None))
+            body, resp_headers, response_size = body_by_url.get(url, ('', None, None))
             techs = detect_technologies(url, body, resp_headers)
             Endpoint.objects.create(
                 url=url,
                 asset=asset,
                 technologies=','.join(techs),  # '' when nothing detected, as before
+                response_size=response_size,
             )
             created += 1
 
@@ -156,7 +157,7 @@ class Command(BaseCommand):
     def _run_katana(self, urls):
         """Run Katana with -list input and -jsonl -store-response output.
 
-        Return (url, response_body, response_headers) tuples per discovered URL.
+        Return (url, response_body, response_headers, response_size) tuples per discovered URL.
         """
         katana_path = settings.KATANA_PATH
         if not katana_path:
@@ -190,7 +191,8 @@ class Command(BaseCommand):
                         continue
                     resp = obj.get('response') if isinstance(obj.get('response'), dict) else {}
                     body = resp.get('body') or ''
-                    discovered.append((url, body, resp.get('headers') or None))
+                    size = len(body.encode('utf-8')) if resp.get('body') is not None else None
+                    discovered.append((url, body, resp.get('headers') or None, size))
                 except (json.JSONDecodeError, TypeError):
                     pass
 

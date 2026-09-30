@@ -146,7 +146,8 @@ class Command(BaseCommand):
         self.stdout.write(f'  Deleted {deleted_count} existing endpoint(s)')
 
         # Merge root + discovered and create Endpoint records
-        all_urls = list(dict.fromkeys(root_urls + discovered_urls))
+        size_by_url = dict(discovered_urls)
+        all_urls = list(dict.fromkeys(root_urls + [url for url, _ in discovered_urls]))
         created = 0
         for url in all_urls:
             url = (url or '').strip()
@@ -156,13 +157,14 @@ class Command(BaseCommand):
                 url=url,
                 asset=asset,
                 technologies='',
+                response_size=size_by_url.get(url),
             )
             created += 1
 
         self.stdout.write(f'  Endpoints created: {created}')
 
     def _run_feroxbuster(self, urls):
-        """Run Feroxbuster with --stdin input and --json output; return list of discovered URLs."""
+        """Run Feroxbuster with --stdin input and --json output; return list of (url, content_length) tuples."""
         feroxbuster_path = settings.FEROXBUSTER_PATH
         wordlist = settings.FEROXBUSTER_WORDLIST
         if not feroxbuster_path or not wordlist:
@@ -205,7 +207,7 @@ class Command(BaseCommand):
                             obj = json.loads(line)
                             url = obj.get('url')
                             if url:
-                                discovered.append(url)
+                                discovered.append((url, obj.get('content_length')))
                         except (json.JSONDecodeError, TypeError):
                             pass
 

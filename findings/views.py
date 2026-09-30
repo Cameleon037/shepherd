@@ -198,6 +198,7 @@ def export_web_endpoints_csv(request):
             endpoint.asset.value if endpoint.asset else '',
             endpoint.url,
             endpoint.technologies if endpoint.technologies else '',
+            endpoint.response_size if endpoint.response_size is not None else '',
             endpoint.date.strftime('%Y-%m-%d %H:%M:%S') if endpoint.date else '',
         ]
 
@@ -207,7 +208,7 @@ def export_web_endpoints_csv(request):
 
     pseudo_buffer = Echo()
     writer = csv.writer(pseudo_buffer)
-    header = ['Asset', 'URL', 'Technologies', 'Date']
+    header = ['Asset', 'URL', 'Technologies', 'Size', 'Date']
     rows = (endpoint_row(e) for e in endpoints)
     response = StreamingHttpResponse(
         (writer.writerow(row) for row in ([header] + list(rows))),

@@ -75,6 +75,7 @@
           <th>URL</th>
           <th>Asset</th>
           <th>Technologies</th>
+          <th>Size</th>
           <th>Date</th>
         </tr>
         <tr>
@@ -82,6 +83,7 @@
           <th><input type="text" placeholder="Search URL" class="column-search-input form-control input-sm"></th>
           <th></th>
           <th><input type="text" placeholder="Search Technologies" class="column-search-input form-control input-sm"></th>
+          <th></th>
           <th><input type="text" placeholder="Search Date" class="column-search-input form-control input-sm"></th>
         </tr>
       </thead>
@@ -105,6 +107,7 @@
           <th>Operations</th>
           <th>URL</th>
           <th>Technologies</th>
+          <th>Size</th>
           <th>Date</th>
           <th>Asset</th>
         </tr>
@@ -142,6 +145,20 @@ $(document).ready(function() {
             return moment(data).format('DD-MM-YYYY HH:mm');
         }
         return data;
+    }
+
+    function formatSize(data) {
+        if (data === null || data === undefined || data === '') return '-';
+        var n = Number(data);
+        if (isNaN(n) || n < 0) return '-';
+        if (n < 1024) return n + ' B';
+        var units = ['KB', 'MB', 'GB'];
+        var i = -1;
+        do {
+            n = n / 1024;
+            i++;
+        } while (n >= 1024 && i < units.length - 1);
+        return n.toFixed(1) + ' ' + units[i];
     }
 
     function updateSelectionCount() {
@@ -282,7 +299,7 @@ $(document).ready(function() {
             pageLength: 25,
             orderCellsTop: true,
             oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
-            order: [[4, 'desc']],
+            order: [[5, 'desc']],
             ajax: {
                 url: "{% url 'api:list_endpoints' projectid=projectid %}?asset=" + encodeURIComponent(assetUuid),
                 dataSrc: 'results',
@@ -307,6 +324,7 @@ $(document).ready(function() {
                     'data': 'technologies', 'sName': 'Technologies',
                     'mRender': function(data) { return data ? data : '-'; }
                 },
+                { 'data': 'response_size', 'sName': 'Size', 'mRender': formatSize },
                 {
                     'data': 'date', 'sName': 'Date',
                     'mRender': renderDate
@@ -376,8 +394,8 @@ $(document).ready(function() {
             serverSide: true,
             pageLength: 25,
             oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
-            orderFixed: { pre: [[4, 'asc']] }, // Keep rows grouped by asset
-            order: [[3, 'desc']], // Sort endpoints within each asset by date
+            orderFixed: { pre: [[5, 'asc']] }, // Keep rows grouped by asset
+            order: [[4, 'desc']], // Sort endpoints within each asset by date
             ajax: {
                 url: "{% url 'api:list_endpoints' projectid=projectid %}?search=" + encodeURIComponent(keyword),
                 dataSrc: 'results',
@@ -401,6 +419,7 @@ $(document).ready(function() {
                     'data': 'technologies', 'sName': 'Technologies',
                     'mRender': function(data) { return data ? data : '-'; }
                 },
+                { 'data': 'response_size', 'sName': 'Size', 'mRender': formatSize },
                 {
                     'data': 'date', 'sName': 'Date',
                     'mRender': renderDate
