@@ -422,12 +422,12 @@ def list_assets(request, projectid, format=None):
 
     # Annotate vulnerabilities (exclude ignored findings)
     queryset = queryset.annotate(
-        vuln_info=Count('finding', filter=Q(finding__severity='info') & Q(finding__ignore=False)),
-        vuln_critical=Count('finding', filter=Q(finding__severity='critical') & Q(finding__ignore=False)),
-        vuln_high=Count('finding', filter=Q(finding__severity='high') & Q(finding__ignore=False)),
-        vuln_medium=Count('finding', filter=Q(finding__severity='medium') & Q(finding__ignore=False)),
-        vuln_low=Count('finding', filter=Q(finding__severity='low') & Q(finding__ignore=False)),
-        endpoint_count=Count('endpoint')
+        vuln_info=Count('finding', filter=Q(finding__severity='info') & Q(finding__ignore=False), distinct=True),
+        vuln_critical=Count('finding', filter=Q(finding__severity='critical') & Q(finding__ignore=False), distinct=True),
+        vuln_high=Count('finding', filter=Q(finding__severity='high') & Q(finding__ignore=False), distinct=True),
+        vuln_medium=Count('finding', filter=Q(finding__severity='medium') & Q(finding__ignore=False), distinct=True),
+        vuln_low=Count('finding', filter=Q(finding__severity='low') & Q(finding__ignore=False), distinct=True),
+        endpoint_count=Count('endpoint', distinct=True)
     )
 
     # Only assets that have at least one endpoint (used by the Web Endpoints page)

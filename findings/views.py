@@ -257,7 +257,8 @@ def web_endpoints(request):
     # Get endpoints for the current project, only for monitored assets
     endpoints = Endpoint.objects.filter(
         asset__related_project=prj,
-        asset__monitor=True
+        asset__monitor=True,
+        asset__ignore=False
     ).select_related('asset').order_by('-date')
     
     context['endpoints'] = endpoints
