@@ -2,8 +2,10 @@ import subprocess
 import json
 import tempfile
 import os
+import re
 import time
 from collections import deque
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.utils.timezone import make_aware
 from datetime import datetime
@@ -28,6 +30,11 @@ class Command(BaseCommand):
     NUCLEI_MAX_HOST_ERR = 15     # -mhe skip host after N consecutive errors
     NUCLEI_STATS_INTERVAL = 15   # -si  heartbeat interval (s)
     DB_BATCH_SIZE = 500          # bulk_create batch size
+
+    # FP filtering: only high-confidence findings reach the DB.
+    # default-login checks are deliberately kept (user decision); dos must never run on prod.
+    NUCLEI_SEVERITY = 'medium,high,critical'
+    NUCLEI_EXCLUDE_TAGS = 'dos,fuzz,brute-force'
 
     def add_arguments(self, parser):
         parser.add_argument('--projectid', type=int, help='ID of the project to scan')
@@ -55,41 +62,53 @@ class Command(BaseCommand):
         total = len(domain_list)
         num_chunks = (total + self.CHUNK_SIZE - 1) // self.CHUNK_SIZE
         nt_option = kwargs.get('nt')
+        eid_path = self._time_based_template_ids()
+        eid_count = 0
+        if eid_path:
+            with open(eid_path, 'r', encoding='utf-8') as f:
+                eid_count = sum(1 for _ in f)
 
-        self._log_banner(total, num_chunks)
+        self._log_banner(total, num_chunks, eid_count)
         scan_start = time.time()
         total_findings = 0
 
-        for i in range(0, total, self.CHUNK_SIZE):
-            chunk = domain_list[i:i + self.CHUNK_SIZE]
-            chunk_idx = (i // self.CHUNK_SIZE) + 1
+        try:
+            for i in range(0, total, self.CHUNK_SIZE):
+                chunk = domain_list[i:i + self.CHUNK_SIZE]
+                chunk_idx = (i // self.CHUNK_SIZE) + 1
 
-            self.stdout.write(f'\n--- Chunk {chunk_idx}/{num_chunks} ({len(chunk):,} assets) ---')
-            chunk_start = time.time()
+                self.stdout.write(f'\n--- Chunk {chunk_idx}/{num_chunks} ({len(chunk):,} assets) ---')
+                chunk_start = time.time()
 
-            n_findings = self._scan_chunk(chunk, nt_option)
-            total_findings += n_findings
+                n_findings = self._scan_chunk(chunk, nt_option, eid_path)
+                total_findings += n_findings
 
-            # Per-chunk metrics
-            chunk_secs = time.time() - chunk_start
-            self.stdout.write(
-                f'  Chunk done: {n_findings} findings in {chunk_secs:.0f}s '
-                f'({chunk_secs / len(chunk):.2f}s/asset)'
-            )
+                # Per-chunk metrics
+                chunk_secs = time.time() - chunk_start
+                self.stdout.write(
+                    f'  Chunk done: {n_findings} findings in {chunk_secs:.0f}s '
+                    f'({chunk_secs / len(chunk):.2f}s/asset)'
+                )
 
-            # Overall progress + ETA
-            scanned = min(i + self.CHUNK_SIZE, total)
-            elapsed = time.time() - scan_start
-            avg = elapsed / scanned
-            eta = (total - scanned) * avg
-            self.stdout.write(
-                f'  Progress: {scanned:,}/{total:,} | '
-                f'{total_findings:,} findings | '
-                f'{avg:.2f}s/asset | '
-                f'ETA {eta / 60:.1f}min'
-            )
+                # Overall progress + ETA
+                scanned = min(i + self.CHUNK_SIZE, total)
+                elapsed = time.time() - scan_start
+                avg = elapsed / scanned
+                eta = (total - scanned) * avg
+                self.stdout.write(
+                    f'  Progress: {scanned:,}/{total:,} | '
+                    f'{total_findings:,} findings | '
+                    f'{avg:.2f}s/asset | '
+                    f'ETA {eta / 60:.1f}min'
+                )
 
-        self._log_summary(total, total_findings, time.time() - scan_start)
+            self._log_summary(total, total_findings, time.time() - scan_start)
+        finally:
+            if eid_path and os.path.exists(eid_path):
+                try:
+                    os.unlink(eid_path)
+                except OSError:
+                    pass
 
     # -------------------------------------------------------------------------
     # Domain selection (same filters as scan_nuclei.py)
@@ -123,7 +142,7 @@ class Command(BaseCommand):
     # Scan a chunk of domains
     # -------------------------------------------------------------------------
 
-    def _scan_chunk(self, chunk, nt_option):
+    def _scan_chunk(self, chunk, nt_option, eid_path):
         """Scan a chunk of domains. Returns the number of findings."""
         targets_path = results_path = None
         try:
@@ -138,7 +157,7 @@ class Command(BaseCommand):
                 results_path = f.name
 
             # Run nuclei with live output
-            findings = self._run_nuclei(targets_path, results_path, nt_option)
+            findings = self._run_nuclei(targets_path, results_path, nt_option, eid_path)
 
             # Persist findings
             scan_time = make_aware(datetime.now())
@@ -167,7 +186,7 @@ class Command(BaseCommand):
     # Run nuclei subprocess with streamed heartbeat
     # -------------------------------------------------------------------------
 
-    def _run_nuclei(self, targets_path, results_path, nt_option):
+    def _run_nuclei(self, targets_path, results_path, nt_option, eid_path):
         """Run nuclei with optimized flags and stream its output as heartbeat."""
         cmd = [
             'nuclei',
@@ -187,6 +206,13 @@ class Command(BaseCommand):
         ]
         if nt_option:
             cmd.append('-nt')
+        cmd.append('-severity')
+        cmd.append(self.NUCLEI_SEVERITY)
+        cmd.append('-exclude-tags')
+        cmd.append(self.NUCLEI_EXCLUDE_TAGS)
+        if eid_path:
+            cmd.append('-eid')
+            cmd.append(eid_path)
 
         self.stdout.write(f'  CMD: {" ".join(cmd)}')
 
@@ -359,7 +385,53 @@ class Command(BaseCommand):
             'last_seen': scan_time,
         }
 
-    def _log_banner(self, total, num_chunks):
+    def _time_based_template_ids(self):
+        """Write IDs of time-based (duration) templates to a temp file; return its path.
+
+        The file is handed to nuclei via -eid so response-delay templates never run.
+        Returns None (with a warning) when NUCLEI_TEMPLATES is unset or missing.
+        """
+        tpl_dir = getattr(settings, 'NUCLEI_TEMPLATES', '')
+        if not tpl_dir:
+            self.stdout.write(
+                '  [i] NUCLEI_TEMPLATES not set in settings; skipping time-based template exclusion.'
+            )
+            return None
+
+        tpl_dir = os.path.expanduser(tpl_dir)
+        if not os.path.isdir(tpl_dir):
+            self.stdout.write(f'  [i] NUCLEI_TEMPLATES dir not found: {tpl_dir}')
+            return None
+
+        ids = set()
+        id_re = re.compile(r'^id:\s*(\S+)')
+        for root, _dirs, files in os.walk(tpl_dir):
+            for fname in files:
+                if not fname.endswith('.yaml'):
+                    continue
+                path = os.path.join(root, fname)
+                try:
+                    with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                        text = f.read()
+                except OSError:
+                    continue
+                if 'duration' not in text:
+                    continue
+                m = id_re.search(text)
+                if m:
+                    ids.add(m.group(1))
+
+        if not ids:
+            return None
+
+        f = tempfile.NamedTemporaryFile(delete=False, suffix='.txt', mode='w', encoding='utf-8')
+        try:
+            f.write('\n'.join(sorted(ids)))
+        finally:
+            f.close()
+        return f.name
+
+    def _log_banner(self, total, num_chunks, eid_count):
         self.stdout.write(
             f'\n{"=" * 60}\n'
             f'  NUCLEI SCAN (Optimized: 8 CPUs / 32GB RAM)\n'
@@ -370,6 +442,9 @@ class Command(BaseCommand):
             f'  Timeout: {self.NUCLEI_TIMEOUT}s | '
             f'Max host errors: {self.NUCLEI_MAX_HOST_ERR} | '
             f'Strategy: host-spray\n'
+            f'  Filters: severity {self.NUCLEI_SEVERITY} | '
+            f'exclude-tags {self.NUCLEI_EXCLUDE_TAGS} | '
+            f'time-based templates excluded: {eid_count or "none"}\n'
             f'{"=" * 60}'
         )
 

@@ -232,6 +232,9 @@ NUCLEUS_URL = ''
 NUCLEUS_KEY = ''
 NUCLEUS_PROJECT = ''
 
+# Nuclei templates directory (projectdiscovery/nuclei-templates) - used to exclude time-based templates
+NUCLEI_TEMPLATES = ''
+
 # Azure AI
 AZURE_OPENAI_ENDPOINT = ''
 AZURE_API_KEY = ''
