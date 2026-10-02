@@ -254,14 +254,12 @@ def web_endpoints(request):
     context = {'projectid': request.session['current_project']['prj_id']}
     prj = Project.objects.get(id=context['projectid'])
     
-    # Get endpoints for the current project, only for monitored assets
-    endpoints = Endpoint.objects.filter(
+    # Header count only. Per-asset endpoints are fetched lazily via the
+    # list_endpoints API when the user clicks "View endpoints".
+    context['total_endpoints'] = Endpoint.objects.filter(
         asset__related_project=prj,
         asset__monitor=True,
-        asset__ignore=False
-    ).select_related('asset').order_by('-date')
-    
-    context['endpoints'] = endpoints
-    context['total_endpoints'] = endpoints.count()
+        asset__ignore=False,
+    ).count()
     
     return render(request, 'findings/list_web_endpoints.html', context)
