@@ -12,18 +12,22 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseRedirect
-from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
+from django.contrib.auth import BACKEND_SESSION_KEY, authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib import messages
 from rest_framework.authtoken.models import Token
+
+from accounts.auth import entra_logout_url
 
 # Create your views here.
 
 @ratelimit(key='ip', method=ratelimit.ALL, rate='5/m')
 def accounts_login(request):
-    context = {}
+    context = {'sso_enabled': bool(getattr(settings, 'OIDC_RP_CLIENT_ID', ''))}
     if request.user.is_authenticated:
         return HttpResponseRedirect(reverse("home"))
+    if request.GET.get('error') == 'sso_failed':
+        messages.error(request, 'Single sign-on failed. Contact the administrator.')
     if request.method == 'POST':
         username = request.POST['username']
         password = request.POST['password']
@@ -41,9 +45,11 @@ def accounts_login(request):
 
 @login_required
 def accounts_logout(request):
+    sso_session = request.session.get(BACKEND_SESSION_KEY) == 'accounts.auth.CustomOIDCBackend'
+    redirect_url = entra_logout_url(request) if sso_session else reverse('accounts:login')
     logout(request)
     messages.info(request, 'Successfully logged out.')
-    return HttpResponseRedirect(reverse("accounts:login"))
+    return HttpResponseRedirect(redirect_url)
 
 @login_required
 def change_password(request):

@@ -14,6 +14,10 @@
 <div id="create_results"></div> <!-- errors go here -->
 <br/>
 <center>
+{% if sso_enabled %}
+<a class="btn btn-primary btn-block" href="{% url 'oidc_authentication_init' %}{% if request.GET.next %}?next={{ request.GET.next }}{% endif %}">Sign in with Microsoft</a>
+<p class="text-muted">or</p>
+{% endif %}
 <form method="post" id="post-login" action="" class="form-inline">
     {% csrf_token %}
     <div class="form-group">
