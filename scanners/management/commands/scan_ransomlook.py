@@ -3,6 +3,7 @@ import requests
 from project.models import Project
 from keywords.models import Keyword
 from findings.models import Finding
+from scanners.scan_utils import add_keyword_id_arguments, filter_keywords
 import json
 
 from django.core.management.base import BaseCommand, CommandError
@@ -22,6 +23,8 @@ class Command(BaseCommand):
             type=int,
             help='Filter by specific project ID',
         )
+
+        add_keyword_id_arguments(parser)
         parser.add_argument(
             '--days',
             type=int,
@@ -39,7 +42,7 @@ class Command(BaseCommand):
             self.stdout.write(f"Project: {prj.projectname}")
             
             # Step 1: Build a list of all ransomlook_supplier keywords
-            keywords = prj.keyword_set.filter(enabled=True, ktype='ransomlook_supplier')
+            keywords = filter_keywords(prj.keyword_set.filter(enabled=True, ktype='ransomlook_supplier'), options)
             
             if not keywords.exists():
                 self.stdout.write(f'[+] No enabled "ransomlook_supplier" keywords found for project {prj.projectname}')

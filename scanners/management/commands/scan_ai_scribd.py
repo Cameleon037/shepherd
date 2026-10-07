@@ -5,6 +5,7 @@ import shutil
 import tempfile
 from project.models import Project
 from findings.models import Finding
+from scanners.scan_utils import add_keyword_id_arguments, filter_keywords
 import asyncio
 from django.core.management.base import BaseCommand
 from django.conf import settings
@@ -30,6 +31,8 @@ class Command(BaseCommand):
             type=int,
             help='Filter by specific project ID',
         )
+
+        add_keyword_id_arguments(parser)
 
     def extract_json_from_response(self, response_text):
         """
@@ -109,7 +112,7 @@ class Command(BaseCommand):
         projects = Project.objects.filter(**project_filter)
         for prj in projects:
             self.stdout.write(f"Project: {prj.projectname}")
-            for kw in prj.keyword_set.all():
+            for kw in filter_keywords(prj.keyword_set.all(), options):
                 if not kw.enabled:
                     continue
                 keyword = html.unescape(kw.keyword)

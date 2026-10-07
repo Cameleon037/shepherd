@@ -11,7 +11,7 @@ from django.utils.timezone import make_aware
 
 from findings.models import Finding
 from project.models import Project
-from scanners.scan_utils import add_common_scan_arguments
+from scanners.scan_utils import add_common_scan_arguments, add_keyword_id_arguments, filter_keywords
 
 
 class Command(BaseCommand):
@@ -20,6 +20,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--projectid", type=int, help="Filter by specific project ID")
         add_common_scan_arguments(parser)
+        add_keyword_id_arguments(parser)
 
     def handle(self, *args, **options):
         project_filter = {}
@@ -30,7 +31,7 @@ class Command(BaseCommand):
         for prj in projects:
             self.stdout.write(f"Project: {prj.projectname}")
 
-            keywords = prj.keyword_set.filter(enabled=True, ktype="git-hound_keyword")
+            keywords = filter_keywords(prj.keyword_set.filter(enabled=True, ktype="git-hound_keyword"), options)
             for kw in keywords:
                 keyword = html.unescape(kw.keyword)
                 self.stdout.write(f"[+] ghleaks search: {keyword}")

@@ -4,7 +4,7 @@ import subprocess
 from project.models import Project
 from keywords.models import Keyword
 from assets.models import Asset
-from scanners.scan_utils import add_common_scan_arguments
+from scanners.scan_utils import add_common_scan_arguments, add_keyword_id_arguments, filter_keywords
 from findings.models import Finding
 import re
 import json
@@ -23,6 +23,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('--projectid', type=int, help='Filter by specific project ID')
         add_common_scan_arguments(parser)
+        add_keyword_id_arguments(parser)
         parser.add_argument(
             '--dig-files',
             action='store_true',
@@ -48,7 +49,7 @@ class Command(BaseCommand):
             keywords = prj.keyword_set.filter(enabled=True)
             
             # Filter by keyword type - only scan git-hound_keyword types
-            keywords = keywords.filter(ktype='git-hound_keyword')
+            keywords = filter_keywords(keywords.filter(ktype='git-hound_keyword'), options)
             
             for kw in keywords:
                 keyword = html.unescape(kw.keyword)

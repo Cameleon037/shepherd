@@ -13,6 +13,7 @@ import tldextract
 from project.models import Project
 from keywords.models import Keyword
 from assets.models import Asset
+from scanners.scan_utils import add_keyword_id_arguments, filter_keywords
 
 from django.core.management.base import BaseCommand, CommandError
 from django.contrib.auth.models import User
@@ -31,6 +32,8 @@ class Command(BaseCommand):
             type=int,
             help='Filter by specific project ID',
         )
+
+        add_keyword_id_arguments(parser)
 
     def timestamp(self):
         return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -51,7 +54,7 @@ class Command(BaseCommand):
         projects = Project.objects.filter(**project_filter)
         for prj in projects:
             self.stdout.write(prj.projectname)
-            for kw in prj.keyword_set.all():
+            for kw in filter_keywords(prj.keyword_set.all(), options):
 
                 if not kw.enabled:
                     continue

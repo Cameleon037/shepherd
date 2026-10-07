@@ -10,6 +10,7 @@ import tldextract
 from project.models import Project
 from keywords.models import Keyword
 from assets.models import Asset
+from scanners.scan_utils import add_keyword_id_arguments, filter_keywords
 
 from django.core.management.base import BaseCommand, CommandError
 from django.contrib.auth.models import User
@@ -28,6 +29,8 @@ class Command(BaseCommand):
             help='Filter by specific project ID',
         )
 
+        add_keyword_id_arguments(parser)
+
     def handle(self, *args, **options):
         total_suggestion_count = 0
         api_url = "https://api.shodan.io/shodan/host/search"
@@ -40,20 +43,21 @@ class Command(BaseCommand):
         projects = Project.objects.filter(**project_filter)
         for prj in projects:
             self.stdout.write(prj.projectname)
-            for kw in prj.keyword_set.all():
+            for kw in filter_keywords(prj.keyword_set.all(), options):
                 if not kw.enabled:
                     continue
                 if kw.ktype != "shodan_keyword":
                     continue
                 keyword = html.unescape(kw.keyword)
-                self.stdout.write(f"[+] Shodan search for keyword: {keyword}")
-                params = {
-                    "key": api_key,
-                    "query": keyword
-                }
-                suggestion_count = self.shodan_suggestion_population(api_url, params, kw, prj)
-                self.stdout.write(f"[+] suggestions populated: {suggestion_count}")
-                total_suggestion_count += suggestion_count
+                for query in (keyword, f"ssl:{keyword}"):
+                    self.stdout.write(f"[+] Shodan search for query: {query}")
+                    params = {
+                        "key": api_key,
+                        "query": query,
+                    }
+                    suggestion_count = self.shodan_suggestion_population(api_url, params, kw, prj)
+                    self.stdout.write(f"[+] suggestions populated: {suggestion_count}")
+                    total_suggestion_count += suggestion_count
 
         self.stdout.write(f"[+] total shodan suggestions populated or updated: {total_suggestion_count}")
 
@@ -62,6 +66,8 @@ class Command(BaseCommand):
         page = 1
         total = None
         page_size = 100
+
+        keyword = html.unescape(kw.keyword).lower()
         while True:
             try:
                 paged_params = params.copy()
@@ -78,7 +84,7 @@ class Command(BaseCommand):
             if not items:
                 break
             for item in items:
-                hostnames = item.get('hostnames', [])
+                hostnames = [h for h in item.get('hostnames', []) if keyword in h.lower()]
 
                 # print(f"page {page} !!!")
                 # print(hostnames)

@@ -6,6 +6,7 @@ from project.models import Project
 from keywords.models import Keyword
 from assets.models import Asset
 from findings.models import Finding
+from scanners.scan_utils import add_keyword_id_arguments, filter_keywords
 import re
 import json
 
@@ -27,6 +28,8 @@ class Command(BaseCommand):
             help='Filter by specific project ID',
         )
 
+        add_keyword_id_arguments(parser)
+
     def handle(self, *args, **options):
 
         project_filter = {}
@@ -36,7 +39,7 @@ class Command(BaseCommand):
         projects = Project.objects.filter(**project_filter)
         for prj in projects:
             self.stdout.write(f"Project: {prj.projectname}")
-            for kw in prj.keyword_set.all():
+            for kw in filter_keywords(prj.keyword_set.all(), options):
 
                 if not kw.enabled:
                     continue

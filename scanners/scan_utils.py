@@ -1,6 +1,8 @@
 import os
 import tempfile
 
+from django.core.management.base import CommandError
+
 UUIDS_DIR = os.path.join(tempfile.gettempdir(), 'shepherd_scans')
 
 
@@ -51,3 +53,36 @@ def add_common_scan_arguments(parser):
         help='Path to a file containing Asset UUIDs (one per line)',
         required=False,
     )
+
+
+def add_keyword_id_arguments(parser):
+    """Add --keyword-ids argument to a management command parser."""
+    parser.add_argument(
+        '--keyword-ids',
+        type=str,
+        help='Comma-separated list of Keyword IDs to process',
+        required=False,
+    )
+
+
+def filter_keywords(keyword_qs, options):
+    """Restrict a Keyword queryset to the IDs passed via --keyword-ids.
+
+    Returns the queryset unchanged when --keyword-ids is absent or empty.
+    """
+    raw = options.get('keyword_ids')
+    if not raw:
+        return keyword_qs
+
+    ids = []
+    for token in raw.split(','):
+        token = token.strip()
+        if not token:
+            continue
+        if not token.isdigit():
+            raise CommandError(f"Invalid keyword id: {token}")
+        ids.append(int(token))
+
+    if not ids:
+        return keyword_qs
+    return keyword_qs.filter(id__in=ids)
