@@ -616,13 +616,43 @@ body {
     flex: 2;
 }
 
-.keyword-editor-row select {
-    flex: 1;
-}
-
 .keyword-editor-row.disabled-keyword {
     opacity: 0.6;
     background: var(--bg-tertiary);
+}
+
+.keyword-type-picker {
+    flex: 3;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* Mini-section heading, same style as .scanner-section h5 */
+.keyword-type-section-title {
+    font-size: 0.7em;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+}
+
+.keyword-type-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+}
+
+.keyword-type-option {
+    margin: 0;
+    font-size: 0.8em;
+    font-weight: 400;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.keyword-type-picker.invalid .keyword-type-option {
+    color: #c9302c;
 }
 
 .new-keyword-row {

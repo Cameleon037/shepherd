@@ -57,7 +57,7 @@
     <table id="table_list_keywords" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;">
     <thead>
         <th>Keyword</th>
-        <th>Type</th>
+        <th>Types</th>
         <th>Enabled</th>
         <th>Description</th>
         <th>Created</th>
@@ -97,6 +97,8 @@
     </ul>
   </div>
 </div>
+
+{{ keyword_types|json_script:"keyword-types-data" }}
 
 <!-- Manage Keywords Modal -->
 <div class="modal fade" id="ManageKeywordsModal" tabindex="-1" role="dialog" aria-labelledby="manageKeywordsModal">
@@ -247,7 +249,7 @@ $(document).ready( function () {
     var keywordsTable = $('#table_list_keywords').DataTable({
         processing: true, serverSide: true, pageLength: 25, select: true,
         oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
-        order: [[ 1, "asc" ]], // Sort by Type (column index 1)
+        order: [[ 0, "asc" ]], // Sort by Keyword (column index 0)
         ajax: {
             processing: true,
             url: "{% url 'api:list_keywords' projectid=projectid %}",
@@ -260,12 +262,21 @@ $(document).ready( function () {
         },
         columns: [
             {'data': 'keyword', 'sName': 'Keyword', 'aTargets': [ 0 ],
+                'render': function (data, type) {
+                    return type === 'display' ? escapeHtml(data) : data;
+                },
                 "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
                     $("div", nTd).tooltip();
                 },
             },
-            {'data': 'ktype', 'sName': 'Type', 'aTargets': [ 1 ]},
-            {'data': 'enabled', 'sName': 'Enabled', 'aTargets': [ 2 ],
+            {'data': 'ktypes', 'sName': 'Types', 'aTargets': [ 1 ], 'bSortable': false,
+                'render': function (data) {
+                    return (data || []).map(function (t) {
+                        return '<span class="keyword-badge">' + t + '</span>';
+                    }).join('');
+                },
+            },
+            {'data': 'enabled', 'sName': 'Enabled', 'aTargets': [ 2 ], 'bSortable': false,
                 "mRender": function (data, type, full) {
                     var toggle_url = "{% url 'keywords:toggle_keyword' keywordid=0 %}".replace(0, full.id);
                     var labelClass = data ? 'label-success' : 'label-danger';
@@ -273,8 +284,12 @@ $(document).ready( function () {
                     return '<div rel="tooltip" data-placement="left" data-original-title="' + tooltip + '"><a href="'+toggle_url+'"><span class="label ' + labelClass + '">'+data+'</span></a></div>';
                 },
             },
-            {'data': 'description', 'sName': 'Description', 'aTargets': [ 3 ]},
-            {'data': 'creation_time', 'sName': 'Created', 'aTargets': [ 4 ],
+            {'data': 'description', 'sName': 'Description', 'aTargets': [ 3 ], 'bSortable': false,
+                'render': function (data, type) {
+                    return type === 'display' ? escapeHtml(data) : data;
+                },
+            },
+            {'data': 'creation_time', 'sName': 'Created', 'aTargets': [ 4 ], 'bSortable': false,
               'render': function(data, type, row) {
                 if (!data) return '';
                 if (window.moment) {
@@ -291,7 +306,7 @@ $(document).ready( function () {
                 "mRender": function (data, type, full) {
                     var delete_url = "{% url 'keywords:delete_keyword' keywordid=0 %}".replace(0, full.id);
                     return '<div class="btn-group1">' +
-                        '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Delete Keyword" data-action="delete" data-url="'+delete_url+'" data-display="'+full.keyword+'" href="#">' +
+                        '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Delete Keyword" data-action="delete" data-url="'+delete_url+'" data-display="'+escapeHtml(full.keyword)+'" href="#">' +
                         '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
                         '</a> ' +
                         '</div>';
@@ -318,6 +333,9 @@ $(document).ready( function () {
         },
         columns: [
             {'data': 'keyword', 'sName': 'Supplier', 'aTargets': [ 0 ],
+                'render': function (data, type) {
+                    return type === 'display' ? escapeHtml(data) : data;
+                },
                 "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
                     $("div", nTd).tooltip();
                 },
@@ -330,7 +348,11 @@ $(document).ready( function () {
                     return '<div rel="tooltip" data-placement="left" data-original-title="' + tooltip + '"><a href="'+toggle_url+'"><span class="label ' + labelClass + '">'+data+'</span></a></div>';
                 },
             },
-            {'data': 'description', 'sName': 'Description', 'aTargets': [ 2 ]},
+            {'data': 'description', 'sName': 'Description', 'aTargets': [ 2 ],
+                'render': function (data, type) {
+                    return type === 'display' ? escapeHtml(data) : data;
+                },
+            },
             {'data': 'creation_time', 'sName': 'Created', 'aTargets': [ 3 ],
               'render': function(data, type, row) {
                 if (!data) return '';
@@ -348,7 +370,7 @@ $(document).ready( function () {
                 "mRender": function (data, type, full) {
                     var delete_url = "{% url 'keywords:delete_keyword' keywordid=0 %}".replace(0, full.id);
                     return '<div class="btn-group1">' +
-                        '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Delete Supplier" data-action="delete" data-url="'+delete_url+'" data-display="'+full.keyword+'" href="#">' +
+                        '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Delete Supplier" data-action="delete" data-url="'+delete_url+'" data-display="'+escapeHtml(full.keyword)+'" href="#">' +
                         '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
                         '</a> ' +
                         '</div>';
@@ -379,37 +401,35 @@ $(document).ready( function () {
     });
 
     // ========== Manage Keywords Modal ==========
-    var keywordTypes = [
-        { value: 'domaintools_registrant_org', label: 'DomainTools - Registrant Organization' },
-        { value: 'domaintools_registrant_email', label: 'DomainTools - Registrant Email' },
-        { value: 'domaintools_registrant_email_domain', label: 'DomainTools - Registrant Email Domain' },
-        { value: 'crtsh_domain', label: 'CRTSH - Domain' },
-        { value: 'shodan_keyword', label: 'Shodan - query keyword' },
-        { value: 'porch-pirate_keyword', label: 'Porch-pirate - query keyword' },
-        { value: 'swaggerhub_keyword', label: 'SwaggerHub - query keyword' },
-        { value: 'ai_scribd_keyword', label: 'ShepherdAI - Scribd search' },
-        { value: 'git-hound_keyword', label: 'GitHound - query keyword' },
-        { value: 'fofa_keyword', label: 'FOFA - query keyword' },
-    ];
+    var keywordTypeSections = JSON.parse(document.getElementById('keyword-types-data').textContent);
 
-    function createKeywordRow(keyword) {
-        var isNew = !keyword.id;
+    function createKeywordRow(group) {
+        var isNew = !group.id;
         var rowClass = isNew ? 'keyword-editor-row new-keyword-row' : 'keyword-editor-row';
-        if (keyword.enabled === false) {
+        if (group.enabled === false) {
             rowClass += ' disabled-keyword';
         }
-        
-        var typeOptions = keywordTypes.map(function(t) {
-            var selected = (keyword.ktype === t.value) ? 'selected' : '';
-            return '<option value="' + t.value + '" ' + selected + '>' + t.label + '</option>';
+
+        var typeSections = keywordTypeSections.map(function (section) {
+            var boxes = section.types.map(function (pair) {
+                var checked = (group.type_ids && group.type_ids[pair[0]]) ? 'checked' : '';
+                return '<label class="keyword-type-option">' +
+                       '<input type="checkbox" class="keyword-type-option" value="' + pair[0] + '" ' + checked + '> ' +
+                       pair[1] + '</label>';
+            }).join('');
+            return '<div class="keyword-type-section">' +
+                   '<div class="keyword-type-section-title">' + section.name + '</div>' +
+                   '<div class="keyword-type-options">' + boxes + '</div>' +
+                   '</div>';
         }).join('');
 
-        var enabledChecked = (keyword.enabled !== false) ? 'checked' : '';
-        
-        return '<div class="' + rowClass + '" data-id="' + (keyword.id || 'new-' + Date.now()) + '">' +
-            '<input type="text" class="form-control input-sm keyword-value" placeholder="Keyword" value="' + (keyword.keyword || '') + '">' +
-            '<select class="form-control input-sm keyword-type">' + typeOptions + '</select>' +
-            '<input type="text" class="form-control input-sm keyword-description" placeholder="Description (optional)" value="' + (keyword.description || '') + '" style="flex:1.5;">' +
+        var enabledChecked = (group.enabled !== false) ? 'checked' : '';
+
+        return '<div class="' + rowClass + '"' +
+            ' data-type-ids="' + escapeHtml(JSON.stringify(group.type_ids || {})) + '">' +
+            '<input type="text" class="form-control input-sm keyword-value" placeholder="Keyword" value="' + escapeHtml(group.keyword) + '">' +
+            '<div class="keyword-type-picker">' + typeSections + '</div>' +
+            '<input type="text" class="form-control input-sm keyword-description" placeholder="Description (optional)" value="' + escapeHtml(group.description) + '" style="flex:1.5;">' +
             '<label style="margin:0; white-space:nowrap;"><input type="checkbox" class="keyword-enabled" ' + enabledChecked + '> Enabled</label>' +
             '<span class="btn-remove glyphicon glyphicon-trash" title="Remove"></span>' +
             '</div>';
@@ -429,8 +449,6 @@ $(document).ready( function () {
                 if (keywords.length === 0) {
                     $list.html('<div class="text-center text-muted">No keywords yet. Click "Add Keyword" to create one.</div>');
                 } else {
-                    // Sort by ID
-                    keywords.sort(function(a, b) { return a.id - b.id; });
                     keywords.forEach(function(kw) {
                         $list.append(createKeywordRow(kw));
                     });
@@ -452,7 +470,7 @@ $(document).ready( function () {
         var $list = $('#keyword-editor-list');
         // Remove "no keywords" message if present
         $list.find('.text-muted').remove();
-        $list.append(createKeywordRow({ ktype: 'domaintools_registrant_org', enabled: true }));
+        $list.append(createKeywordRow({ enabled: true }));
         // Scroll to bottom
         $list.scrollTop($list[0].scrollHeight);
     });
@@ -464,6 +482,7 @@ $(document).ready( function () {
     $('#btn-save-keywords').on('click', function() {
         var keywords = [];
         var hasError = false;
+        var seenKeywords = {};
         
         $('#keyword-editor-list .keyword-editor-row').each(function() {
             var $row = $(this);
@@ -475,20 +494,39 @@ $(document).ready( function () {
             }
             $row.find('.keyword-value').css('border-color', '');
             
-            var idAttr = $row.data('id');
-            var id = (typeof idAttr === 'string' && idAttr.startsWith('new-')) ? null : idAttr;
-            
-            keywords.push({
-                id: id,
-                keyword: value,
-                ktype: $row.find('.keyword-type').val(),
-                description: $row.find('.keyword-description').val().trim(),
-                enabled: $row.find('.keyword-enabled').is(':checked')
+            var types = [];
+            $row.find('.keyword-type-option:checked').each(function () { types.push($(this).val()); });
+            if (types.length === 0) {
+                $row.find('.keyword-type-picker').addClass('invalid');
+                hasError = true;
+                return;
+            }
+            $row.find('.keyword-type-picker').removeClass('invalid');
+
+            if (seenKeywords[value]) {
+                $('#keywords-save-status').text('Duplicate keyword: "' + value + '". Merge the two entries.').css('color', 'red');
+                hasError = true;
+                return;
+            }
+            seenKeywords[value] = true;
+
+            var typeIds = {};
+            try { typeIds = JSON.parse($row.attr('data-type-ids') || '{}'); } catch (e) {}
+            var description = $row.find('.keyword-description').val().trim();
+            var enabled = $row.find('.keyword-enabled').is(':checked');
+            types.forEach(function (t) {
+                keywords.push({
+                    id: typeIds[t] || null,
+                    keyword: value,
+                    ktype: t,
+                    description: description,
+                    enabled: enabled
+                });
             });
         });
 
         if (hasError) {
-            $('#keywords-save-status').text('Please fill in all keyword values.').css('color', 'red');
+            $('#keywords-save-status').text('Please fill in all keyword values and select at least one type.').css('color', 'red');
             return;
         }
 
@@ -521,6 +559,10 @@ $(document).ready( function () {
             }
         });
     });
+
+    function escapeHtml(value) {
+        return $('<div/>').text(value == null ? '' : String(value)).html().replace(/"/g, '&quot;');
+    }
 
     function getCookie(name) {
         var cookieValue = null;

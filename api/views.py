@@ -6,7 +6,6 @@ from django.db.models import Q, Prefetch, Count, F, Case, When, IntegerField, Te
 from django.db.models.functions import Cast
 from django.conf import settings
 from django.urls import reverse
-from django.utils.html import escape
 from django.utils.timezone import make_aware
 
 from rest_framework import status
@@ -31,7 +30,7 @@ from api.schema import (
 from api.utils import get_ordering_vars, apply_search_filter, apply_column_search, apply_column_search_multi
 
 from project.models import Project
-from keywords.models import Keyword
+from keywords.models import Keyword, group_keywords_by_text
 from assets.models import Asset
 from jobs.models import Job
 from jobs.utils import kill_job_process_tree
@@ -783,7 +782,7 @@ def list_endpoints(request, projectid, format=None):
 @extend_schema(
     tags=['Keywords'],
     summary='List keywords',
-    description='DataTables-backed list of keywords for a project.',
+    description='DataTables-backed list of keywords for a project. selection=all returns one object per keyword text with ktypes, type_ids and ids.',
     parameters=DATATABLES_PARAMETERS + [SELECTION_PARAMETER],
     responses={200: KeywordSerializer(many=True)},
 )
@@ -822,6 +821,14 @@ def list_keywords(request, projectid, format=None):
         ['keyword__icontains', 'description__istartswith'],
         min_length=1
     )
+
+    if selection == 'all':
+        # Grouped output: one object per keyword text, types collected as a list.
+        queryset = queryset.order_by('keyword', 'ktype')
+        groups = group_keywords_by_text(queryset)
+        kwrds = paginator.paginate_queryset(groups, request)
+        return paginator.get_paginated_response(kwrds)
+
     ### get variables
     order_by_column, order_direction = get_ordering_vars(request.query_params,
                                                          default_column='ktype' if selection == 'all' else 'last_modified',
@@ -943,7 +950,7 @@ def bulk_update_keywords(request, projectid, format=None):
 
     # Get existing keyword IDs for this project
     existing_ids = set(
-        Keyword.objects.filter(related_project=project).values_list('id', flat=True)
+        Keyword.objects.filter(related_project=project).exclude(ktype='ransomlook_supplier').values_list('id', flat=True)
     )
 
     # Track which IDs we're keeping
@@ -951,9 +958,9 @@ def bulk_update_keywords(request, projectid, format=None):
 
     for kw_data in keywords_data:
         kw_id = kw_data.get('id')
-        keyword_value = escape(kw_data.get('keyword', '').strip())
+        keyword_value = kw_data.get('keyword', '').strip()
         ktype = kw_data.get('ktype', 'registrant_org')
-        description = escape(kw_data.get('description', '').strip())
+        description = kw_data.get('description', '').strip()
         enabled = kw_data.get('enabled', True)
 
         if not keyword_value:
@@ -971,21 +978,19 @@ def bulk_update_keywords(request, projectid, format=None):
                 kw.save()
             except Keyword.DoesNotExist:
                 # ID doesn't exist, create new
-                Keyword.objects.create(
+                Keyword.objects.get_or_create(
                     related_project=project,
                     keyword=keyword_value,
                     ktype=ktype,
-                    description=description,
-                    enabled=enabled
+                    defaults={'description': description, 'enabled': enabled}
                 )
         else:
             # Create new keyword
-            Keyword.objects.create(
+            Keyword.objects.get_or_create(
                 related_project=project,
                 keyword=keyword_value,
                 ktype=ktype,
-                description=description,
-                enabled=enabled
+                defaults={'description': description, 'enabled': enabled}
             )
 
     # Delete keywords that were removed (IDs in existing but not in submitted)

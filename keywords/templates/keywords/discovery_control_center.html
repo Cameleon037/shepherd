@@ -34,12 +34,14 @@
         </div>
         {% if keywords %}
             <hr style="margin:6px 0;">
-            {% for kw in keywords %}
+            {% for group in keywords %}
                 <div class="checkbox">
                     <label>
-                        <input type="checkbox" class="keyword-option" value="{{ kw.id }}" checked>
-                        {{ kw.keyword }}
-                        <span class="keyword-badge">{{ kw.ktype }}</span>
+                        <input type="checkbox" class="keyword-option" value="{{ group.id_csv }}" checked>
+                        {{ group.keyword }}
+                        {% for ktype in group.ktypes %}
+                            <span class="keyword-badge">{{ ktype }}</span>
+                        {% endfor %}
                     </label>
                 </div>
             {% endfor %}
@@ -203,7 +205,9 @@ $(document).ready(function () {
         }
         var values = [];
         $('.keyword-option:checked').each(function () {
-            values.push($(this).val());
+            $(this).val().split(',').forEach(function (id) {
+                values.push(id);
+            });
         });
         return values;
     }

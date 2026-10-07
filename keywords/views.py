@@ -8,12 +8,11 @@ from django.contrib import messages
 from django.views.decorators.http import require_POST
 
 from project.models import Project
-from keywords.models import Keyword
+from keywords.models import Keyword, group_keywords_by_text, ktype_picker_sections
 from assets.models import Asset
 from keywords.forms import AddKeywordForm
 import threading
 
-from django.utils.html import escape
 from jobs.utils import run_job
 
 @login_required
@@ -35,7 +34,8 @@ def keywords(request):
     context = {
         'projectid': project_id,
         'addkeywordform': add_keyword_form,
-        'descriptions': descriptions
+        'descriptions': descriptions,
+        'keyword_types': ktype_picker_sections(),
     }
     return render(request, 'keywords/list_keywords.html', context)
 
@@ -49,8 +49,10 @@ def toggle_keyword(request, keywordid):
     except Keyword.DoesNotExist:
         kw_obj = None
     if kw_obj is not None:
-        kw_obj.enabled = not kw_obj.enabled
-        kw_obj.save()
+        new_state = not kw_obj.enabled
+        for kw in Keyword.objects.filter(related_project=kw_obj.related_project, keyword=kw_obj.keyword):
+            kw.enabled = new_state
+            kw.save()
     return redirect(reverse('keywords:keywords'))
 
 @login_required
@@ -60,7 +62,8 @@ def delete_keyword(request, keywordid):
     
     is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest'
     try:
-        Keyword.objects.get(id=keywordid).delete()
+        kw_obj = Keyword.objects.get(id=keywordid)
+        Keyword.objects.filter(related_project=kw_obj.related_project, keyword=kw_obj.keyword).delete()
     except Keyword.DoesNotExist:
         if is_ajax:
             return JsonResponse({'success': False, 'error': 'Unknown keyword'}, status=404)
@@ -83,13 +86,13 @@ def add_keyword(request):
             except Exception as error:
                 messages.error(request, "Project not found!")
                 return redirect(reverse('keywords:keywords'))
-            data = {
-                'keyword': escape(form.cleaned_data['keyword']),
-                'ktype': form.cleaned_data['ktype'],
-                'description': escape(form.cleaned_data['description']),
-                'related_project': prj_obj
-            }
-            Keyword.objects.get_or_create(**data)
+            for ktype in form.cleaned_data['ktypes']:
+                Keyword.objects.get_or_create(
+                    keyword=form.cleaned_data['keyword'],
+                    ktype=ktype,
+                    description=form.cleaned_data['description'],
+                    related_project=prj_obj,
+                )
             messages.info(request, "Comment successfully added")
     return redirect(reverse('keywords:keywords'))
 
@@ -115,7 +118,7 @@ def upload_ransomlook_suppliers(request):
         suppliers_file = request.FILES["suppliers_file"]
         
         # Read all lines into memory
-        lines = [escape(line.decode("utf-8").strip()) for line in suppliers_file if line.strip()]
+        lines = [line.decode("utf-8").strip() for line in suppliers_file if line.strip()]
         
         def process_suppliers(lines, prj_obj):
             # Delete all existing ransomlook_supplier keywords for this project
@@ -304,10 +307,12 @@ def discovery_control_center(request):
     project_id = request.session.get('current_project', {}).get('prj_id', None)
     keywords = []
     if project_id:
-        keywords = Keyword.objects.filter(
-            related_project_id=project_id,
-            enabled=True
-        ).exclude(ktype='ransomlook_supplier').order_by('keyword')
+        keywords = group_keywords_by_text(
+            Keyword.objects.filter(
+                related_project_id=project_id,
+                enabled=True
+            ).exclude(ktype='ransomlook_supplier').order_by('keyword', 'ktype')
+        )
     
     context = {
         'projectid': project_id,
