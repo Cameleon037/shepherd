@@ -17,6 +17,14 @@ from django.contrib.auth.models import User
 from django.conf import settings
 from django.utils.timezone import make_aware
 
+# Transient Shodan/CDN failures are retried: connection problems, HTML error
+# pages, rate limits and 5xx. Semantic API errors (bad key, no credits, bad
+# query) are permanent, so they stop the query immediately.
+MAX_ATTEMPTS = 3
+MAX_EMPTY_PAGE_RETRIES = 2
+RETRY_BACKOFF = 5  # seconds, doubled per attempt
+RETRY_STATUS = {408, 429, 500, 502, 503, 504}
+
 
 class Command(BaseCommand):
     def __init__(self, *args, **kwargs):
@@ -65,24 +73,49 @@ class Command(BaseCommand):
 
         self.stdout.write(f"[+] total shodan suggestions populated or updated: {total_suggestion_count}")
 
+    def shodan_get(self, url, params, label):
+        """GET a Shodan JSON endpoint, retrying transient failures.
+
+        Returns the parsed response, or None when every attempt failed; the
+        reason is written to stdout so a zero-result run is never ambiguous.
+        """
+        delay = RETRY_BACKOFF
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            retryable = False
+            try:
+                rsp = requests.get(url, params=params, timeout=30)
+            except requests.exceptions.RequestException as e:
+                reason, retryable = f"request failed: {e}", True
+            else:
+                try:
+                    result = rsp.json()
+                except ValueError:
+                    reason, retryable = f"non-JSON response (HTTP {rsp.status_code}): {rsp.text[:200]}", True
+                else:
+                    body = rsp.text[:200]
+                    detail = (result.get('error') or body) if isinstance(result, dict) else body
+                    if rsp.status_code != 200:
+                        reason = f"HTTP {rsp.status_code}: {detail}"
+                        retryable = rsp.status_code in RETRY_STATUS
+                    elif isinstance(result, dict) and result.get('error'):
+                        reason = f"API error: {result['error']}"
+                    else:
+                        return result
+            if retryable and attempt < MAX_ATTEMPTS:
+                self.stdout.write(f"[!] shodan {label}: {reason}; retrying in {delay}s (attempt {attempt}/{MAX_ATTEMPTS})")
+                time.sleep(delay)
+                delay *= 2
+            else:
+                self.stdout.write(f"[-] shodan {label}: {reason}")
+                return None
+
     def shodan_api_info(self, api_key):
         """Report plan and remaining credits so an empty result set can be explained."""
         if not api_key:
             self.stdout.write("[-] SHODAN_API_KEY is not configured.")
             return
-        try:
-            rsp = requests.get("https://api.shodan.io/api-info", params={"key": api_key}, timeout=30)
-        except Exception as e:
-            self.stdout.write(f"[-] Shodan api-info request failed: {e}")
-            return
-        try:
-            result = rsp.json()
-        except ValueError:
-            self.stdout.write(f"[-] Shodan api-info returned non-JSON (HTTP {rsp.status_code}): {rsp.text[:200]}")
-            return
-        if rsp.status_code != 200:
-            error = result.get('error', rsp.text[:200]) if isinstance(result, dict) else rsp.text[:200]
-            self.stdout.write(f"[-] Shodan api-info failed (HTTP {rsp.status_code}): {error}")
+        result = self.shodan_get("https://api.shodan.io/api-info", {"key": api_key}, "api-info")
+        if not isinstance(result, dict):
             return
         self.stdout.write(
             f"[+] shodan plan={result.get('plan')} query_credits={result.get('query_credits')} "
@@ -102,24 +135,16 @@ class Command(BaseCommand):
         page = 1
         total = None
         page_size = 100
+        api_error = False
+        empty_page_retries = 0
 
         keyword = html.unescape(kw.keyword).lower()
         while True:
             paged_params = params.copy()
             paged_params['page'] = page
-            try:
-                rsp = requests.get(api_url, params=paged_params, timeout=30)
-            except Exception as e:
-                self.stdout.write(f"[-] Shodan request failed: {e}")
-                break
-            try:
-                result = rsp.json()
-            except ValueError:
-                self.stdout.write(f"[-] Shodan returned non-JSON (HTTP {rsp.status_code}): {rsp.text[:200]}")
-                break
-            if rsp.status_code != 200 or (isinstance(result, dict) and result.get('error')):
-                error = result.get('error', rsp.text[:200]) if isinstance(result, dict) else rsp.text[:200]
-                self.stdout.write(f"[-] Shodan API error (HTTP {rsp.status_code}): {error}")
+            result = self.shodan_get(api_url, paged_params, f"search '{params['query']}' page {page}")
+            if result is None:
+                api_error = True
                 break
 
             if total is None:
@@ -130,7 +155,17 @@ class Command(BaseCommand):
 
             items = result.get('matches', [])
             if not items:
-                self.stdout.write(f"[-] page {page}: shodan reported {total} match(es) but returned none")
+                # Shodan claims results but served an empty page: transient, worth a retry.
+                if scanned_matches < total and empty_page_retries < MAX_EMPTY_PAGE_RETRIES:
+                    empty_page_retries += 1
+                    delay = RETRY_BACKOFF * empty_page_retries
+                    self.stdout.write(
+                        f"[!] page {page}: shodan reported {total} match(es) but served none; "
+                        f"retrying in {delay}s (retry {empty_page_retries}/{MAX_EMPTY_PAGE_RETRIES})"
+                    )
+                    time.sleep(delay)
+                    continue
+                self.stdout.write(f"[-] page {page}: shodan reported {total} match(es) but served none")
                 break
 
             pages_fetched += 1
@@ -202,6 +237,7 @@ class Command(BaseCommand):
             if len(items) < page_size:
                 break
             page += 1
+            empty_page_retries = 0
             time.sleep(1)  # Be polite to the API
 
         if total and scanned_matches < total:
@@ -209,6 +245,7 @@ class Command(BaseCommand):
         self.stdout.write(
             f"[+] shodan summary: total={total} scanned={scanned_matches} "
             f"dropped_no_keyword_hostname={filtered_matches} "
-            f"keyword_hostnames={matched_hostnames} new={created_count} updated={updated_count}"
+            f"keyword_hostnames={matched_hostnames} new={created_count} updated={updated_count} "
+            f"api_error={api_error}"
         )
         return suggestion_count
