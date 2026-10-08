@@ -157,14 +157,14 @@ class Command(BaseCommand):
                 results_path = f.name
 
             # Run nuclei with live output
-            findings = self._run_nuclei(targets_path, results_path, nt_option, eid_path)
+            findings, scan_ok = self._run_nuclei(targets_path, results_path, nt_option, eid_path)
 
             # Persist findings
             scan_time = make_aware(datetime.now())
-            self._save_findings(findings, chunk, scan_time, nt_option)
+            self._save_findings(findings, chunk, scan_time, nt_option, scan_ok)
 
-            # Mark assets as scanned (full scans only)
-            if not nt_option:
+            # Mark assets as scanned (successful full scans only)
+            if not nt_option and scan_ok:
                 uuids = [a.uuid for a in chunk]
                 Asset.objects.filter(uuid__in=uuids).update(last_scan_time=scan_time)
 
@@ -187,7 +187,10 @@ class Command(BaseCommand):
     # -------------------------------------------------------------------------
 
     def _run_nuclei(self, targets_path, results_path, nt_option, eid_path):
-        """Run nuclei with optimized flags and stream its output as heartbeat."""
+        """Run nuclei with optimized flags and stream its output as heartbeat.
+
+        Returns (findings, scan_ok), where scan_ok means nuclei exited successfully.
+        """
         cmd = [
             'nuclei',
             '-l', targets_path,
@@ -246,7 +249,8 @@ class Command(BaseCommand):
 
         proc.wait()
 
-        if proc.returncode != 0:
+        scan_ok = proc.returncode == 0
+        if not scan_ok:
             self.stderr.write(f'\n  Nuclei exited with code {proc.returncode}. Last {len(tail)} output lines:')
             for t in tail:
                 self.stderr.write(f'    | {t}')
@@ -258,36 +262,44 @@ class Command(BaseCommand):
             with open(results_path, 'r', encoding='utf-8', errors='replace') as f:
                 content = f.read().strip()
                 if content:
-                    findings = json.loads(content)
+                    parsed = json.loads(content)
+                    if isinstance(parsed, list):
+                        findings = parsed
+                    else:
+                        scan_ok = False
+                        self.stderr.write('  Nuclei results file did not contain a JSON array; treating scan as failed.')
 
-        if proc.returncode != 0:
+        if not scan_ok:
             self.stderr.write(
                 f'  Nuclei failed (exit {proc.returncode}) but recovered {len(findings)} findings from partial results.'
             )
 
-        return findings
+        return findings, scan_ok
 
     # -------------------------------------------------------------------------
     # Save findings to DB
-    #   Full scan  → delete old + bulk_create (fast for large result sets)
-    #   --nt scan  → get_or_create (preserves existing findings)
+    #   Full successful scan → delete old + bulk_create (fast for large result sets)
+    #   Failed full scan     → get_or_create (preserves old findings, avoids duplicates)
+    #   --nt scan            → get_or_create (preserves existing findings)
     # -------------------------------------------------------------------------
 
-    def _save_findings(self, findings, chunk, scan_time, nt_option):
+    def _save_findings(self, findings, chunk, scan_time, nt_option, scan_ok):
+        if not nt_option:
+            # Full scan: cleanup is only safe when nuclei completed successfully.
+            if scan_ok:
+                uuids = [a.uuid for a in chunk]
+                deleted, _ = Finding.objects.filter(asset__uuid__in=uuids, source='nuclei').delete()
+                if deleted:
+                    self.stdout.write(f'  Deleted {deleted:,} old findings')
+
         if not findings:
             return
 
         domain_map = {a.value: a for a in chunk}
         grouped = self._group_findings_by_domain(findings, domain_map)
 
-        if not nt_option:
-            # Full scan: delete existing nuclei findings, then bulk-insert
-            uuids = [a.uuid for a in chunk]
-            deleted, _ = Finding.objects.filter(asset__uuid__in=uuids, source='nuclei').delete()
-            if deleted:
-                self.stdout.write(f'  Deleted {deleted:,} old findings')
-
-            # Deduplicate by lookup key, then bulk create
+        if not nt_option and scan_ok:
+            # Successful full scan: old findings were already deleted; bulk-insert fresh findings.
             seen = set()
             objs = []
             for domain, items in grouped.items():
@@ -302,26 +314,32 @@ class Command(BaseCommand):
                 Finding.objects.bulk_create(objs, batch_size=self.DB_BATCH_SIZE)
                 self.stdout.write(f'  Saved {len(objs):,} findings (bulk)')
         else:
-            # --nt scan: upsert individually to preserve existing findings
-            count = 0
-            for domain, items in grouped.items():
-                for item in items:
-                    data = self._build_finding_data(domain, item, scan_time)
-                    lookup = {
-                        'asset': domain,
-                        'asset_name': data['asset_name'],
-                        'source': data['source'],
-                        'name': data['name'],
-                        'type': data['type'],
-                        'url': data['url'],
-                    }
-                    defaults = {k: v for k, v in data.items() if k not in lookup}
-                    obj, _ = Finding.objects.get_or_create(**lookup, defaults=defaults)
-                    obj.scan_date = scan_time
-                    obj.last_seen = scan_time
-                    obj.save()
-                    count += 1
-            self.stdout.write(f'  Saved {count:,} findings (get_or_create)')
+            # --nt scans and failed full scans preserve existing findings.
+            count = self._upsert_findings(grouped, scan_time)
+            label = '--nt scan' if nt_option else 'partial scan'
+            self.stdout.write(f'  Saved {count:,} findings from {label} (get_or_create)')
+
+    def _upsert_findings(self, grouped, scan_time):
+        """Insert or update findings without deleting existing ones."""
+        count = 0
+        for domain, items in grouped.items():
+            for item in items:
+                data = self._build_finding_data(domain, item, scan_time)
+                lookup = {
+                    'asset': domain,
+                    'asset_name': data['asset_name'],
+                    'source': data['source'],
+                    'name': data['name'],
+                    'type': data['type'],
+                    'url': data['url'],
+                }
+                defaults = {k: v for k, v in data.items() if k not in lookup}
+                obj, _ = Finding.objects.get_or_create(**lookup, defaults=defaults)
+                obj.scan_date = scan_time
+                obj.last_seen = scan_time
+                obj.save()
+                count += 1
+        return count
 
     # -------------------------------------------------------------------------
     # Helpers

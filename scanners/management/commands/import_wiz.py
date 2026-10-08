@@ -29,6 +29,18 @@ class Command(BaseCommand):
             data += "=" * (4 - missing_padding)
         return data
 
+    def api_error_detail(self, response):
+        """Extract the human-readable reason from a failed Wiz response body"""
+        try:
+            body = response.json()
+        except ValueError:
+            return response.text[:300]
+        if isinstance(body, dict):
+            for key in ('message', 'error_description', 'error', 'code'):
+                if body.get(key):
+                    return f"{body.get(key)} ({body})" if key == 'code' else str(body[key])
+        return response.text[:300]
+
     def request_wiz_api_token(self, client_id, client_secret):
         """Retrieve an OAuth access token to be used against Wiz API"""
         headers_auth = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -47,7 +59,7 @@ class Command(BaseCommand):
             )
             response.raise_for_status()
         except requests.exceptions.HTTPError as e:
-            raise CommandError(f"Error authenticating to Wiz (4xx/5xx): {str(e)}")
+            raise CommandError(f"Error authenticating to Wiz (4xx/5xx): {str(e)} - {self.api_error_detail(response)}")
         except requests.exceptions.ConnectionError as e:
             raise CommandError(f"Network problem (DNS failure, refused connection, etc): {str(e)}")
         except requests.exceptions.Timeout as e:
@@ -84,7 +96,7 @@ class Command(BaseCommand):
             )
             result.raise_for_status()
         except requests.exceptions.HTTPError as e:
-            raise CommandError(f"Wiz-API-Error (4xx/5xx): {str(e)}")
+            raise CommandError(f"Wiz-API-Error (4xx/5xx): {str(e)} - {self.api_error_detail(result)}")
         except requests.exceptions.ConnectionError as e:
             raise CommandError(f"Network problem (DNS failure, refused connection, etc): {str(e)}")
         except requests.exceptions.Timeout as e:
@@ -196,13 +208,11 @@ class Command(BaseCommand):
                 variables['after'] = pageInfo['endCursor']
                 result = self.query_wiz_api(query, variables, dc, token)
 
-                # if page_num > 2:
-                #     break
-
                 # Check for errors
                 if 'errors' in result:
-                    self.stdout.write(self.style.WARNING(f"Error on page {page_num}: {result['errors']}"))
-                    break
+                    # A truncated result set must never reach the cleanup step,
+                    # which would delete assets that only appear on later pages.
+                    raise CommandError(f"GraphQL Error on page {page_num}: {result['errors']}")
 
                 if 'data' in result and 'applicationEndpoints' in result['data']:
                     endpoints_data = result['data']['applicationEndpoints']
@@ -210,7 +220,7 @@ class Command(BaseCommand):
                     pageInfo = endpoints_data.get('pageInfo', {})
                     self.stdout.write(f"[+] Fetched page {page_num}: {len(all_endpoints)} total endpoints...")
                 else:
-                    break
+                    raise CommandError(f"Wiz API returned no applicationEndpoints on page {page_num}")
 
         return all_endpoints
 
@@ -345,6 +355,9 @@ class Command(BaseCommand):
         # Get Wiz API credentials from settings or use defaults
         client_id = getattr(settings, 'WIZ_CLIENT_ID', '')
         client_secret = getattr(settings, 'WIZ_CLIENT_SECRET', '')
+
+        if not client_id or not client_secret:
+            raise CommandError("WIZ_CLIENT_ID and WIZ_CLIENT_SECRET must be configured in settings.py")
 
         # Authenticate and get token
         self.stdout.write("[+] Authenticating with Wiz API...")
