@@ -252,6 +252,9 @@ SNOW_INTERNAL_DOMAIN = "corp.org"
 WIZ_CLIENT_ID = ''
 WIZ_CLIENT_SECRET = ''
 
+# Optional local source IP (second NIC) for Wiz API egress; empty = default routing
+WIZ_SOURCE_IP = ''
+
 # GHLeaks API
 GHLEAKS_TOKEN = ''
 GHLEAKS_WORKING_DIR = ''

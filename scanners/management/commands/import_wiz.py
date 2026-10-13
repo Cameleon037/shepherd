@@ -9,6 +9,7 @@ from django.conf import settings
 from django.db import connection
 from project.models import Project
 from assets.models import Asset
+from .utils import build_session
 
 
 class Command(BaseCommand):
@@ -51,7 +52,7 @@ class Command(BaseCommand):
             'client_secret': client_secret
         }
         try:
-            response = requests.post(
+            response = self.session.post(
                 url="https://auth.app.wiz.io/oauth/token",
                 headers=headers_auth,
                 data=auth_payload,
@@ -88,7 +89,7 @@ class Command(BaseCommand):
         data = {"variables": variables, "query": query}
 
         try:
-            result = requests.post(
+            result = self.session.post(
                 url=f"https://api.{dc}.app.wiz.io/graphql",
                 json=data,
                 headers=headers,
@@ -358,6 +359,9 @@ class Command(BaseCommand):
 
         if not client_id or not client_secret:
             raise CommandError("WIZ_CLIENT_ID and WIZ_CLIENT_SECRET must be configured in settings.py")
+
+        # Pin Wiz egress to the second NIC when configured
+        self.session = build_session(getattr(settings, 'WIZ_SOURCE_IP', ''))
 
         # Authenticate and get token
         self.stdout.write("[+] Authenticating with Wiz API...")

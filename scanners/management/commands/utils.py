@@ -4,11 +4,13 @@ import asyncio
 import json
 import os
 import re
+import requests
 import textwrap
 
 from azure.identity import DefaultAzureCredential
 from django.conf import settings
 from openai import AsyncOpenAI
+from requests.adapters import HTTPAdapter
 
 from agents import (
     Agent,
@@ -19,6 +21,26 @@ from agents import (
     set_tracing_disabled,
     function_tool,
 )
+
+class SourceAddressAdapter(HTTPAdapter):
+    """Pin outbound sockets to a local source IP so kernel policy routing picks that NIC."""
+
+    def __init__(self, source_ip, **kwargs):
+        self.source_ip = source_ip
+        super().__init__(**kwargs)
+
+    def init_poolmanager(self, connections, maxsize, block=False, **pool_kwargs):
+        pool_kwargs['source_address'] = (self.source_ip, 0)
+        return super().init_poolmanager(connections, maxsize, block, **pool_kwargs)
+
+
+def build_session(source_ip=''):
+    """requests.Session for outbound API calls, optionally pinned to one local interface."""
+    session = requests.Session()
+    if source_ip:
+        session.mount('https://', SourceAddressAdapter(source_ip))
+    return session
+
 
 def init_ai_client():
     """Initialize and configure the AI client for Azure OpenAI."""
