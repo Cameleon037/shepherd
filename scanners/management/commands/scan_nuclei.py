@@ -7,8 +7,9 @@ import time
 from collections import deque
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+from django.db.models import Q
 from django.utils.timezone import make_aware
-from datetime import datetime
+from datetime import datetime, timedelta
 from assets.models import Asset
 from project.models import Project
 from scanners.scan_utils import resolve_uuids, add_common_scan_arguments
@@ -28,13 +29,16 @@ class Command(BaseCommand):
     NUCLEI_TIMEOUT = 7           # -timeout  per-request timeout (s)
     NUCLEI_RETRIES = 1           # -retries
     NUCLEI_MAX_HOST_ERR = 15     # -mhe skip host after N consecutive errors
-    NUCLEI_STATS_INTERVAL = 15   # -si  heartbeat interval (s)
+    NUCLEI_STATS_INTERVAL = 60   # -si  heartbeat interval (s)
     DB_BATCH_SIZE = 500          # bulk_create batch size
 
     # FP filtering: only high-confidence findings reach the DB.
     # default-login checks are deliberately kept (user decision); dos must never run on prod.
     NUCLEI_SEVERITY = 'medium,high,critical'
     NUCLEI_EXCLUDE_TAGS = 'dos,fuzz,brute-force'
+    NUCLEI_INTERESTING_KEYWORDS = (
+        'ERR', 'WRN', 'FTL', 'panic', 'error', 'Could not', 'Stats',
+    )
 
     def add_arguments(self, parser):
         parser.add_argument('--projectid', type=int, help='ID of the project to scan')
@@ -43,6 +47,13 @@ class Command(BaseCommand):
         add_common_scan_arguments(parser)
         parser.add_argument('--scope', type=str, help='Filter by scope (external, internal)', required=False)
         parser.add_argument('--new-assets', action='store_true', help='Only scan assets with empty last_scan_time')
+        parser.add_argument(
+            '--stale-days',
+            type=int,
+            metavar='DAYS',
+            help='Only scan assets never scanned or last scanned more than DAYS days ago',
+            required=False,
+        )
 
     # -------------------------------------------------------------------------
     # Main entry point
@@ -68,7 +79,8 @@ class Command(BaseCommand):
             with open(eid_path, 'r', encoding='utf-8') as f:
                 eid_count = sum(1 for _ in f)
 
-        self._log_banner(total, num_chunks, eid_count)
+        stale_days = kwargs.get('stale_days')
+        self._log_banner(total, num_chunks, eid_count, stale_days)
         scan_start = time.time()
         total_findings = 0
 
@@ -77,29 +89,21 @@ class Command(BaseCommand):
                 chunk = domain_list[i:i + self.CHUNK_SIZE]
                 chunk_idx = (i // self.CHUNK_SIZE) + 1
 
-                self.stdout.write(f'\n--- Chunk {chunk_idx}/{num_chunks} ({len(chunk):,} assets) ---')
                 chunk_start = time.time()
 
                 n_findings = self._scan_chunk(chunk, nt_option, eid_path)
                 total_findings += n_findings
 
-                # Per-chunk metrics
                 chunk_secs = time.time() - chunk_start
-                self.stdout.write(
-                    f'  Chunk done: {n_findings} findings in {chunk_secs:.0f}s '
-                    f'({chunk_secs / len(chunk):.2f}s/asset)'
-                )
-
-                # Overall progress + ETA
                 scanned = min(i + self.CHUNK_SIZE, total)
                 elapsed = time.time() - scan_start
                 avg = elapsed / scanned
                 eta = (total - scanned) * avg
+
                 self.stdout.write(
-                    f'  Progress: {scanned:,}/{total:,} | '
-                    f'{total_findings:,} findings | '
-                    f'{avg:.2f}s/asset | '
-                    f'ETA {eta / 60:.1f}min'
+                    f'Chunk {chunk_idx}/{num_chunks}: {n_findings:,} findings in {chunk_secs:.0f}s '
+                    f'({chunk_secs / len(chunk):.2f}s/asset) | '
+                    f'{scanned:,}/{total:,} | ETA {eta / 60:.1f}min'
                 )
 
             self._log_summary(total, total_findings, time.time() - scan_start)
@@ -118,6 +122,7 @@ class Command(BaseCommand):
         projectid = kwargs.get('projectid')
         scope_filter = kwargs.get('scope')
         new_assets_only = kwargs.get('new_assets')
+        stale_days = kwargs.get('stale_days')
 
         if projectid:
             try:
@@ -135,6 +140,15 @@ class Command(BaseCommand):
             domains = domains.filter(scope=scope_filter)
         if new_assets_only:
             domains = domains.filter(last_scan_time__isnull=True)
+
+        if stale_days is not None:
+            if stale_days <= 0:
+                raise CommandError('--stale-days must be a positive integer')
+
+            cutoff = make_aware(datetime.now()) - timedelta(days=stale_days)
+            domains = domains.filter(
+                Q(last_scan_time__isnull=True) | Q(last_scan_time__lt=cutoff)
+            )
 
         return domains
 
@@ -187,7 +201,7 @@ class Command(BaseCommand):
     # -------------------------------------------------------------------------
 
     def _run_nuclei(self, targets_path, results_path, nt_option, eid_path):
-        """Run nuclei with optimized flags and stream its output as heartbeat.
+        """Run nuclei with optimized flags, printing only interesting output lines.
 
         Returns (findings, scan_ok), where scan_ok means nuclei exited successfully.
         """
@@ -217,8 +231,6 @@ class Command(BaseCommand):
             cmd.append('-eid')
             cmd.append(eid_path)
 
-        self.stdout.write(f'  CMD: {" ".join(cmd)}')
-
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -229,29 +241,22 @@ class Command(BaseCommand):
             bufsize=1,                  # line-buffered
         )
 
-        # Stream output as heartbeat — always print stats/errors, throttle the rest.
-        # Keep a tail buffer so we can dump the last lines on failure.
+        # Stream output — keep a tail buffer for failure dumps, print only interesting lines.
         tail = deque(maxlen=30)
-        last_log = time.time()
         for line in proc.stdout:
             line = line.rstrip()
             if not line:
                 continue
             tail.append(line)
-            now = time.time()
-            is_important = any(kw in line for kw in (
-                'Stats', 'templates loaded', 'ERR', 'WRN', 'FTL',
-                'error', 'panic', 'Could not',
-            ))
-            if is_important or (now - last_log) >= 10:
+            if any(kw in line for kw in self.NUCLEI_INTERESTING_KEYWORDS):
                 self.stdout.write(f'  [nuclei] {line}')
-                last_log = now
 
         proc.wait()
 
         scan_ok = proc.returncode == 0
         if not scan_ok:
-            self.stderr.write(f'\n  Nuclei exited with code {proc.returncode}. Last {len(tail)} output lines:')
+            self.stderr.write(f'\n  Nuclei exited with code {proc.returncode}. CMD: {" ".join(cmd)}')
+            self.stderr.write(f'  Last {len(tail)} output lines:')
             for t in tail:
                 self.stderr.write(f'    | {t}')
 
@@ -449,30 +454,23 @@ class Command(BaseCommand):
             f.close()
         return f.name
 
-    def _log_banner(self, total, num_chunks, eid_count):
-        self.stdout.write(
-            f'\n{"=" * 60}\n'
-            f'  NUCLEI SCAN (Optimized: 8 CPUs / 32GB RAM)\n'
-            f'  Assets: {total:,} | Chunks: {num_chunks} x {self.CHUNK_SIZE:,}\n'
-            f'  Concurrency: {self.NUCLEI_CONCURRENCY} | '
-            f'Rate limit: {self.NUCLEI_RATE_LIMIT} req/s | '
-            f'Bulk size: {self.NUCLEI_BULK_SIZE}\n'
-            f'  Timeout: {self.NUCLEI_TIMEOUT}s | '
-            f'Max host errors: {self.NUCLEI_MAX_HOST_ERR} | '
-            f'Strategy: host-spray\n'
-            f'  Filters: severity {self.NUCLEI_SEVERITY} | '
+    def _log_banner(self, total, num_chunks, eid_count, stale_days=None):
+        filters = (
+            f'severity {self.NUCLEI_SEVERITY} | '
             f'exclude-tags {self.NUCLEI_EXCLUDE_TAGS} | '
-            f'time-based templates excluded: {eid_count or "none"}\n'
-            f'{"=" * 60}'
+            f'time-based templates excluded: {eid_count or "none"}'
+        )
+        if stale_days:
+            filters += f' | stale-days {stale_days}'
+
+        self.stdout.write(
+            f'NUCLEI SCAN: {total:,} assets | {num_chunks} chunks x {self.CHUNK_SIZE:,} | {filters}'
         )
 
     def _log_summary(self, total, total_findings, total_secs):
         self.stdout.write(
-            f'\n{"=" * 60}\n'
-            f'  SCAN COMPLETE\n'
-            f'  Duration: {total_secs / 60:.1f} min | Assets scanned: {total:,}\n'
-            f'  Findings: {total_findings:,} | Avg: {total_secs / total:.2f}s/asset\n'
-            f'{"=" * 60}'
+            f'SCAN COMPLETE: {total:,} assets | {total_findings:,} findings | '
+            f'{total_secs / 60:.1f} min | {total_secs / total:.2f}s/asset'
         )
 
     def update_nuclei(self):
