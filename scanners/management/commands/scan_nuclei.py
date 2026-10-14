@@ -36,9 +36,14 @@ class Command(BaseCommand):
     # default-login checks are deliberately kept (user decision); dos must never run on prod.
     NUCLEI_SEVERITY = 'medium,high,critical'
     NUCLEI_EXCLUDE_TAGS = 'dos,fuzz,brute-force'
-    NUCLEI_INTERESTING_KEYWORDS = (
-        'ERR', 'WRN', 'FTL', 'panic', 'error', 'Could not', 'Stats',
-    )
+    # Only print nuclei lines whose gologger level tag (line start) is interesting;
+    # substring matching leaks INF skip lines whose URL payloads contain "error".
+    NUCLEI_LEVEL_TAGS = ('[ERR]', '[WRN]', '[FTL]', '[PAN]')
+    NUCLEI_PANIC_PREFIXES = ('panic', 'fatal error:')
+    # Stats summary line (no level tag): "[H:MM:SS] | Templates: …"
+    NUCLEI_STATS_RE = re.compile(r'^\[\d{1,3}:\d{2}:\d{2}\] \| Templates:')
+    # For duplicate collapse: URLs/hosts differ per template, message does not.
+    NUCLEI_URL_RE = re.compile(r'https?://\S+')
 
     def add_arguments(self, parser):
         parser.add_argument('--projectid', type=int, help='ID of the project to scan')
@@ -196,6 +201,13 @@ class Command(BaseCommand):
                     except OSError:
                         pass
 
+    def _is_interesting(self, line):
+        return (
+            line.startswith(self.NUCLEI_LEVEL_TAGS)
+            or line.startswith(self.NUCLEI_PANIC_PREFIXES)
+            or bool(self.NUCLEI_STATS_RE.match(line))
+        )
+
     # -------------------------------------------------------------------------
     # Run nuclei subprocess with streamed heartbeat
     # -------------------------------------------------------------------------
@@ -241,15 +253,26 @@ class Command(BaseCommand):
             bufsize=1,                  # line-buffered
         )
 
-        # Stream output — keep a tail buffer for failure dumps, print only interesting lines.
+        # Stream output — keep a tail buffer for failure dumps, print only
+        # error/warning/panic/stats lines, collapse repeated messages.
         tail = deque(maxlen=30)
+        seen_msgs = set()
+        suppressed = 0
         for line in proc.stdout:
             line = line.rstrip()
             if not line:
                 continue
             tail.append(line)
-            if any(kw in line for kw in self.NUCLEI_INTERESTING_KEYWORDS):
-                self.stdout.write(f'  [nuclei] {line}')
+            if not self._is_interesting(line):
+                continue
+            key = self.NUCLEI_URL_RE.sub('<url>', line)
+            if key in seen_msgs:
+                suppressed += 1
+                continue
+            seen_msgs.add(key)
+            self.stdout.write(f'  [nuclei] {line}')
+        if suppressed:
+            self.stdout.write(f'  [nuclei] (suppressed {suppressed} duplicate error lines)')
 
         proc.wait()
 
