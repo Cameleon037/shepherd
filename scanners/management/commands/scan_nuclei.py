@@ -391,7 +391,8 @@ class Command(BaseCommand):
     def _build_finding_data(self, domain, finding, scan_time):
         """Build a dict of Finding fields from a nuclei JSON result."""
         info = finding.get('info', {})
-        url = finding.get('url', '') or finding.get('matched-at', '')
+        # matched-at is the exact endpoint (path included); url is only scheme://host[:port]
+        url = finding.get('matched-at', '') or finding.get('url', '')
 
         reference = info.get('reference', '')
         if isinstance(reference, list):
@@ -409,7 +410,7 @@ class Command(BaseCommand):
 
         description = info.get('description', '')
         if url:
-            description = f'{description}\n\nURL: {url}' if description else f'URL: {url}'
+            description = f'URL: {url}\n\n{description}' if description else f'URL: {url}'
 
         return {
             'asset': domain,
