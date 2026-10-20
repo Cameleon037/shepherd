@@ -90,7 +90,7 @@ touch ~/.bashrc
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
 source ~/.bashrc
 nvm install node
-npx @playwright/mcp@latest  # Enter (y) to install Playwright MCP
+npx @playwright/mcp@0.0.83  # Enter (y) to install Playwright MCP (version must match the pin in scanners/management/commands/scan_ai_scribd.py)
 ```
 
 </details>
