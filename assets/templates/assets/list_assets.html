@@ -17,15 +17,15 @@
 </div>
 {% if messages %}{% for message in messages %}<div {% if message.tags %} class="alert alert-{{ message.tags }}"{% endif %}>{{ message }}</div>{% endfor %}{% endif %}
 
-<div class="col-md-6">
-  <div class="panel panel-default">
-    <div class="panel-heading">// General Actions</div>
-    <div class="panel-body">
-      <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#AssetModal">Add Asset</button>&nbsp;
-      <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#UploadDomainsModal">Upload Assets</button>&nbsp;
-      <a class="btn btn-primary btn-xs" href="{% url 'assets:export_monitored_assets_csv' %}">Export to csv</a>&nbsp;
-      <a class="btn btn-primary btn-xs confirm" href="{% url 'assets:move_all_assets' %}">Move all assets back to suggestions</a>&nbsp;
-    </div>
+<div class="list-toolbar" role="group" aria-label="Asset inventory actions">
+  <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#AssetModal">Add asset</button>
+  <button type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#UploadDomainsModal">Upload assets</button>
+  <a class="btn btn-default btn-sm" href="{% url 'assets:export_monitored_assets_csv' %}">Export CSV</a>
+  <div class="dropdown list-toolbar-more">
+    <button type="button" class="btn btn-default btn-sm dropdown-toggle" id="asset-more-actions" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">More <span class="caret" aria-hidden="true"></span></button>
+    <ul class="dropdown-menu dropdown-menu-right" aria-labelledby="asset-more-actions">
+      <li><a class="confirm" href="{% url 'assets:move_all_assets' %}">Move all assets to suggestions</a></li>
+    </ul>
   </div>
 </div>
 
@@ -98,32 +98,27 @@
 <form id="form-selected">
   {% csrf_token %}
 
-<div class="container-fluid" style="padding-left:0; padding-right:0;">
-  <div class="row">
-    <div class="col-md-6">
-      <div class="panel panel-default">
-            <div class="panel-heading">// Selected Actions</div>
-        <div class="panel-body">
-          <button type="button" name="btnignore" id="ignore-selected" class="btn btn-primary btn-xs">Ignore selected</button>&nbsp;
-          <button type="button" name="btnmove" id="move-selected" class="btn btn-primary btn-xs">Move back to suggestions</button>&nbsp;
-          <button type="button" name="btndelete" id="delete-selected" class="btn btn-primary btn-xs">Delete selected</button>&nbsp;
-          <button type="button" id="scan-selected-assets-btn" class="btn btn-primary btn-xs">Scan selected assets</button>&nbsp;
-        </div>
-      </div>
-    </div>
+<div class="list-selection-bar" role="group" aria-label="Selected asset actions">
+  {% include "table_selection_status.html" %}
+  <div class="list-selection-actions">
+    <button type="button" id="scan-selected-assets-btn" class="btn btn-default btn-sm" data-selection-action disabled>Scan selected</button>
+    <button type="button" name="btnignore" id="ignore-selected" class="btn btn-default btn-sm" data-selection-action disabled>Ignore</button>
+    <button type="button" name="btnmove" id="move-selected" class="btn btn-default btn-sm" data-selection-action disabled>Move to suggestions</button>
+    <button type="button" name="btndelete" id="delete-selected" class="btn btn-danger btn-sm" data-selection-action disabled>Delete</button>
+    <button type="button" class="btn btn-link btn-sm" data-clear-selection disabled>Clear selection</button>
   </div>
 </div>
 
 <!-- Asset List Tabs -->
 <div class="panel panel-default">
   <div class="panel-heading">
-    // Monitored Assets
+    Monitored assets
   </div>
-  <div class="panel-body table-responsive">
-    <table id="table_list_assets" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;">
+  <div class="panel-body">
+    <table id="table_list_assets" class="table table-condensed table-striped table-bordered" width="100%" data-default-columns="value,vulns,tag,source,description,creation_time,registrant_info" data-group-columns="source,tag,owner,scope">
       <thead>
         <tr>
-          <th><input type="checkbox" name="select_all" value="1" id="select-all-items">&nbsp; Operations</th>
+          <th><input type="checkbox" name="select_all" value="1" id="select-all-items" aria-label="Select all assets on this page">&nbsp; Actions</th>
           <th>Value</th>
           <th>Vulnerabilities</th>
           <th>Tag</th>
@@ -182,42 +177,16 @@
 <script type="text/javascript" language="javascript" class="init">
 
 $(document).ready(function () {
-    // Function to initialize a DataTable with search functionality
-    function initializeDataTable(tableId, ajaxUrl, columns, ajaxData) {
-        return $(tableId).DataTable({
-            processing: true,
-            serverSide: true,
-            pageLength: 25,
-            orderCellsTop: true,
-            oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
-            order: [[1, "asc"]],
-            ajax: {
-                url: ajaxUrl,
-                dataSrc: "results",
-                type: "GET",
-                dataType: "json",
-                data: function (d) {
-                    if (typeof ajaxData === 'function') {
-                        ajaxData(d);
-                    } else if (ajaxData) {
-                        $.extend(d, ajaxData);
-                    }
-                }
-            },
-            columns: columns
-        });
-    }
-
     // Define columns for the monitored assets table
     const monitoredColumns = [
         {'data': 'uuid', 'sName': 'Operations', 'bSortable': false,
             "mRender": function (data, type, full) {
-                return '<div class="btn-group1">' +
-                    '<input type="checkbox" name="id[]" value="' + $('<div/>').text(data).html() + '">&nbsp;&nbsp;' +
-                    '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Ignore Entry" data-action="ignore" data-uuid="' + full.uuid + '" href="#">' +
+                return '<div class="table-row-actions">' +
+                    '<input type="checkbox" name="id[]" aria-label="Select asset" value="' + $('<div/>').text(data).html() + '">' +
+                    '<a class="btn btn-default btn-xs row-action" aria-label="Ignore asset" rel="tooltip" data-placement="right" data-original-title="Ignore asset" data-action="ignore" data-uuid="' + full.uuid + '" href="#">' +
                     '<span class="glyphicon glyphicon-eye-close" aria-hidden="true"></span>' +
                     '</a> ' +
-                    '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Move to Suggestions" data-action="move" data-uuid="' + full.uuid + '" data-display="' + full.value + '" href="#">' +
+                    '<a class="btn btn-default btn-xs row-action" aria-label="Move asset to suggestions" rel="tooltip" data-placement="right" data-original-title="Move to suggestions" data-action="move" data-uuid="' + full.uuid + '" data-display="' + full.value + '" href="#">' +
                     '<span class="glyphicon glyphicon-transfer" aria-hidden="true"></span>' +
                     '</a> ' +
                     '</div>';
@@ -229,10 +198,7 @@ $(document).ready(function () {
         {'data': 'value', 'sName': 'Value', 'aTargets': [ 1 ],
             "mRender": function (data, type, full) {
                 var select_url = "{% url 'assets:view_asset' uuid=0 %}".replace(0, full.uuid);
-                return '<div rel="tooltip" data-placement="left" data-original-title="Show details"><a href="'+select_url+'">'+data+'</a></div>';
-            },
-            "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
-                $("div", nTd).tooltip();
+                return '<a href="' + select_url + '">' + $('<div/>').text(data).html() + '</a>';
             },
         },
         {'data': 'vulns', 'sName': 'Vulnerabilities'},
@@ -270,98 +236,28 @@ $(document).ready(function () {
         {'data': 'ip', 'sName': 'IP',
           'render': function(data, type, row) {
             return renderTruncatedCell(data, type, { separator: ', ', maxItems: 2, className: 'ip-cell' });
-          },
-          'fnCreatedCell': function(nTd, sData, oData, iRow, iCol) {
-            initTruncatedCellTooltips(nTd);
           }
         },
         {'data': 'owner', 'sName': 'Owner',
           'render': function(data, type, row) {
             return renderTruncatedCell(data, type, { separator: ', ', maxItems: 2, className: 'owner-cell' });
-          },
-          'fnCreatedCell': function(nTd, sData, oData, iRow, iCol) {
-            initTruncatedCellTooltips(nTd);
           }
         },
         {'data': 'scope', 'sName': 'Scope'},
         {'data': 'registrant_info', 'sName': 'Registrant info',
-          'render': function(data, type, row) { return renderRegistrantInfo(data, type); },
-          'fnCreatedCell': function(nTd) { initRegistrantCellHover(nTd); }
-        }
-    ];
-
-    // Define columns for the ignored assets table
-    const ignoredColumns = [
-        {'data': 'uuid', 'sName': 'Operations', 'bSortable': false,
-            "mRender": function (data, type, full) {
-                return '<div class="btn-group1">' +
-                    '<input type="checkbox" name="id[]" value="' + $('<div/>').text(data).html() + '">&nbsp;&nbsp;' +
-                    '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Activate Entry" data-action="activate" data-uuid="' + full.uuid + '" href="#">' +
-                    '<span class="glyphicon glyphicon-eye-open" aria-hidden="true"></span>' +
-                    '</a> ' +
-                    '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Delete Asset" data-action="delete" data-uuid="' + full.uuid + '" data-display="' + full.value + '" href="#">' +
-                    '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
-                    '</a> ' +
-                    '</div>';
-            },
-            "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
-              $("a", nTd).tooltip();
-            }
-        },
-        {'data': 'value', 'sName': 'Value', 'aTargets': [ 1 ],
-            "mRender": function (data, type, full) {
-                var select_url = "{% url 'assets:view_asset' uuid=0 %}".replace(0, full.uuid);
-                return '<div rel="tooltip" data-placement="left" data-original-title="Show details"><a href="'+select_url+'">'+data+'</a></div>';
-            },
-            "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
-                $("div", nTd).tooltip();
-            },
-        },
-        {'data': 'scope', 'sName': 'Scope'},
-        {'data': 'source', 'sName': 'Source'},
-        {'data': 'description', 'sName': 'Description'},
-        {'data': 'creation_time', 'sName': 'Created',
-          'render': function(data, type, row) {
-            if (!data) return '';
-            if (window.moment) {
-              if (typeof data === 'string' && data.endsWith('Z')) {
-                return moment.utc(data).local().format('DD-MM-YYYY HH:mm');
-              }
-              return moment(data).format('DD-MM-YYYY HH:mm');
-            }
-            return data;
-          }
-        },
-        {'data': 'tag', 'sName': 'Tag',
-          'render': function(data, type, row) { return (window.renderTagBadges || renderTagBadges)(data, type); }
-        },
-        {'data': 'registrant_info', 'sName': 'Registrant info',
-          'render': function(data, type, row) { return renderRegistrantInfo(data, type); },
-          'fnCreatedCell': function(nTd) { initRegistrantCellHover(nTd); }
+          'render': function(data, type, row) { return renderRegistrantInfo(data, type); }
         }
     ];
 
     // Initialize DataTables
     var assetsListUrl = "{% url 'api:list_assets' projectid=projectid %}";
-    var monitoredTable = initializeDataTable('#table_list_assets', assetsListUrl, monitoredColumns, { selection: 'monitored' });
-    var ignoredTable = initializeDataTable('#table_list_ignored_assets', assetsListUrl, ignoredColumns, { selection: 'ignored' });
+    var monitoredTable = createServerSideTable('#table_list_assets', assetsListUrl, monitoredColumns, {
+      order: [[1, 'asc']], ajax: { data: { selection: 'monitored' } }
+    });
 
     // Find the second header row (filter row) and bind to its inputs/selects
     var $filterRowMonitored = $('#table_list_assets thead tr:eq(1)');
-    var $filterRowIgnored = $('#table_list_ignored_assets thead tr:eq(1)');
     applyDebouncedColumnSearch(monitoredTable, 'input.column-search-input', 'select.column-search-input', 400, $filterRowMonitored);
-    applyDebouncedColumnSearch(ignoredTable, 'input.column-search-input', 'select.column-search-input', 400, $filterRowIgnored);
-    // Apply the severity filter for monitoredTable
-    $('#severity-filter').on('change', function () {
-      let selectedSeverity = $(this).val();
-      monitoredTable.column(2).search(selectedSeverity).draw();
-    });
-    
-    // Apply the scope filter for monitoredTable
-    $('#scope-filter').on('change', function () {
-      let selectedScope = $(this).val();
-      monitoredTable.column(10).search(selectedScope).draw();
-    });
 
     // Initialize common standalone features
     initializeStandaloneFeatures();
@@ -385,16 +281,13 @@ $(document).ready(function () {
     // Row-level actions (ignore/move/activate/delete) via API (no page refresh)
     setupRowActions({
       apiUrl: "{% url 'api:bulk_assets' projectid=projectid %}",
-      tableInstances: [monitoredTable, ignoredTable],
+      tableInstances: [monitoredTable],
       confirmActions: ['move', 'delete']
     });
 
     // "Scan selected assets" -> store UUIDs in session and redirect to control center
     $('#scan-selected-assets-btn').on('click', function (e) {
-      var selectedUuids = [];
-      monitoredTable.$('input[type="checkbox"][name="id[]"]:checked').each(function () {
-        selectedUuids.push($(this).val());
-      });
+      var selectedUuids = getSelectedIdsFromBulkConfig({ tableInstances: [monitoredTable] });
 
       if (selectedUuids.length === 0) {
         e.preventDefault();
@@ -403,7 +296,7 @@ $(document).ready(function () {
       }
 
       var btn = $(this);
-      btn.prop('disabled', true).text('Redirecting...');
+      btn.attr('data-selection-busy', '').prop('disabled', true).text('Redirecting...');
 
       $.ajax({
         url: "{% url 'api:scans_preselect' projectid=projectid %}",
@@ -416,7 +309,8 @@ $(document).ready(function () {
         },
         error: function () {
           bootbox.alert("Failed to transfer assets. Please try again.");
-          btn.prop('disabled', false).text('Scan selected assets');
+          btn.removeAttr('data-selection-busy').text('Scan selected');
+          $('#form-selected').data('selection-update')();
         }
       });
     });

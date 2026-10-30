@@ -10,7 +10,6 @@ from project.models import Project
 from datetime import datetime
 import uuid as imported_uuid
 import dateparser
-import tldextract
 import threading
 import csv
 import re
@@ -184,27 +183,12 @@ def upload_domains_from_file(request, prj_obj, redirect_url_name, monitor_new=Fa
                     "related_project": prj_obj,
                     "value": domain,
                     "source": source,
-                    "subtype": "domain",
-                    "type": "domain",
                     "scope": "external",
                     "creation_time": make_aware(dateparser.parse(datetime.now().isoformat(sep=" ", timespec="seconds"))),
                 }
 
                 if monitor_new:
-                    defaults["monitor"] = True
-
-                # Check if Starred domain
-                if domain.startswith("*"):
-                    defaults["type"] = "starred_domain"
-                    if monitor_new:
-                        defaults["monitor"] = False
-
-                # Check if domain or subdomain
-                parsed_obj = tldextract.extract(domain)
-                if parsed_obj.subdomain:
-                    defaults["subtype"] = 'subdomain'
-                else:
-                    defaults["subtype"] = 'domain'
+                    defaults["monitor"] = not domain.startswith("*")
 
                 item_uuid = imported_uuid.uuid5(imported_uuid.NAMESPACE_DNS, f"{domain}:{prj_obj.id}")
                 sobj, created = Asset.objects.get_or_create(uuid=item_uuid, defaults=defaults)

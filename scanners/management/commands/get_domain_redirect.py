@@ -2,7 +2,6 @@ import socket
 import uuid
 import dateparser
 import requests
-import tldextract
 from urllib.parse import urlparse
 from django.core.management.base import BaseCommand
 from assets.models import Asset
@@ -40,7 +39,6 @@ class Command(BaseCommand):
 
                 # Create the asset details for the final domain
                 asset_data = {
-                    "type": "domain",
                     "scope": "external",
                     "related_project": asset.related_project,
                     "source": "redirect",
@@ -48,13 +46,6 @@ class Command(BaseCommand):
                     "active": True,
                     "creation_time": make_aware(dateparser.parse(datetime.now().isoformat(sep=" ", timespec="seconds"))),
                 }
-
-                # Check if domain or subdomain
-                parsed_obj = tldextract.extract(final_domain)
-                if parsed_obj.subdomain:
-                    asset_data["subtype"] = 'subdomain'
-                else:
-                    asset_data["subtype"] = 'domain'
 
                 # Create asset entry
                 final_domain_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"{final_domain}:{projectid}")

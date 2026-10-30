@@ -27,7 +27,10 @@ from api.schema import (
     SuccessMessageSerializer,
     BulkActionSerializer,
 )
-from api.utils import get_ordering_vars, apply_search_filter, apply_column_search, apply_column_search_multi
+from api.utils import (
+    get_ordering_vars, apply_search_filter, apply_column_search, apply_column_search_multi,
+    search_terms, annotate_vulnerabilities, get_column_search,
+)
 
 from project.models import Project
 from keywords.models import Keyword, group_keywords_by_text
@@ -82,7 +85,7 @@ def projects(request, format=None):
     ### filter by search value
     queryset = apply_search_filter(
         queryset, search_value,
-        ['projectname__icontains', 'description__istartswith'],
+        ['projectname__icontains', 'description__icontains', 'creation_time__icontains'],
         min_length=1
     )
     ### get variables
@@ -145,18 +148,18 @@ def list_suggestions(request, projectid, format=None):
         return JsonResponse({"status": True, "code": 200, "next": None, "previous": None, "count": 0, "iTotalRecords": 0, "iTotalDisplayRecords": 0, "results": []})
 
     ### get search parameters
-    search_value = request.query_params.get('columns[1][search][value]', None)
-    search_source = request.query_params.get('columns[2][search][value]', None)
-    search_tag = request.query_params.get('columns[3][search][value]', None)
-    search_description = request.query_params.get('columns[4][search][value]', None)
-    search_redirect_to = request.query_params.get('columns[5][search][value]', None)
-    search_creation_date = request.query_params.get('columns[6][search][value]', None)
-    search_monitor = request.query_params.get('columns[7][search][value]', None)
-    search_active = request.query_params.get('columns[8][search][value]', None)
-    search_ip = request.query_params.get('columns[9][search][value]', None)
-    search_owner = request.query_params.get('columns[10][search][value]', None)
-    search_scope = request.query_params.get('columns[11][search][value]', None)
-    search_registrant_info = request.query_params.get('columns[12][search][value]', None)
+    search_value = get_column_search(request.query_params, 'value', 1)
+    search_source = get_column_search(request.query_params, 'source', 2)
+    search_tag = get_column_search(request.query_params, 'tag', 3)
+    search_description = get_column_search(request.query_params, 'description', 4)
+    search_redirect_to = get_column_search(request.query_params, 'redirects_to', 5)
+    search_creation_date = get_column_search(request.query_params, 'creation_time', 6)
+    search_monitor = get_column_search(request.query_params, 'monitor', 7)
+    search_active = get_column_search(request.query_params, 'active', 8)
+    search_ip = get_column_search(request.query_params, 'ip', 9)
+    search_owner = get_column_search(request.query_params, 'owner', 10)
+    search_scope = get_column_search(request.query_params, 'scope', 11)
+    search_registrant_info = get_column_search(request.query_params, 'registrant_info', 12)
 
     ### create queryset
     if selection in ['ignored']:
@@ -177,6 +180,13 @@ def list_suggestions(request, projectid, format=None):
         queryset = queryset.filter(type='ip')
     
     ### filter by search value
+    queryset = apply_search_filter(
+        queryset, request.query_params.get('search[value]'),
+        ['value__icontains', 'source__icontains', 'tag__icontains',
+         'description__icontains', 'redirects_to__value__icontains',
+         'ipv4__icontains', 'ipv6__icontains', 'owner__icontains',
+         'scope__icontains', 'creation_time__icontains', 'registrant_info__icontains'],
+    )
     queryset = apply_column_search_multi(queryset, search_value, 'value__icontains', min_length=1)
     queryset = apply_column_search_multi(queryset, search_source, 'source__icontains', min_length=1)
     queryset = apply_column_search_multi(queryset, search_tag, 'tag__icontains', min_length=1)
@@ -261,7 +271,7 @@ def list_suggestions(request, projectid, format=None):
     if order_by_column:
         queryset = queryset.order_by(f'{order_direction}{order_by_column}')
     
-    suggestions = paginator.paginate_queryset(queryset, request)
+    suggestions = paginator.paginate_queryset(annotate_vulnerabilities(queryset), request)
     serializer = SuggestionSerializer(instance=suggestions, many=True)
     # Modify the serialized data to include the redirects_to_value
     serialized_data = serializer.data
@@ -334,19 +344,6 @@ def bulk_suggestions(request, projectid, format=None):
                 s_obj.save()
             elif action == 'monitor':
                 if s_obj.type in ['certificate', 'domain']:
-                    try:
-                        m_obj = Asset.objects.get(uuid=s_obj.uuid)
-                    except Asset.DoesNotExist:
-                        m_obj = Asset()
-                        m_obj.related_keyword = s_obj.related_keyword
-                        m_obj.related_project = s_obj.related_project
-                        m_obj.value = s_obj.value
-                        m_obj.uuid = s_obj.uuid
-                        m_obj.source = s_obj.source
-                        m_obj.creation_time = s_obj.creation_time
-                        m_obj.description = s_obj.description
-                        m_obj.link = s_obj.link
-                        m_obj.save()
                     s_obj.monitor = True
                     s_obj.save()
                 else:
@@ -420,14 +417,7 @@ def list_assets(request, projectid, format=None):
         queryset = prj.asset_set.filter(monitor=False, ignore=False)
 
     # Annotate vulnerabilities (exclude ignored findings)
-    queryset = queryset.annotate(
-        vuln_info=Count('finding', filter=Q(finding__severity='info') & Q(finding__ignore=False) & ~Q(finding__status='fixed'), distinct=True),
-        vuln_critical=Count('finding', filter=Q(finding__severity='critical') & Q(finding__ignore=False) & ~Q(finding__status='fixed'), distinct=True),
-        vuln_high=Count('finding', filter=Q(finding__severity='high') & Q(finding__ignore=False) & ~Q(finding__status='fixed'), distinct=True),
-        vuln_medium=Count('finding', filter=Q(finding__severity='medium') & Q(finding__ignore=False) & ~Q(finding__status='fixed'), distinct=True),
-        vuln_low=Count('finding', filter=Q(finding__severity='low') & Q(finding__ignore=False) & ~Q(finding__status='fixed'), distinct=True),
-        endpoint_count=Count('endpoint', distinct=True)
-    )
+    queryset = annotate_vulnerabilities(queryset).annotate(endpoint_count=Count('endpoint', distinct=True))
 
     # Only assets that have at least one endpoint (used by the Web Endpoints page)
     if has_endpoints:
@@ -445,7 +435,9 @@ def list_assets(request, projectid, format=None):
     queryset = apply_search_filter(
         queryset, search_value,
         ['value__icontains', 'description__icontains', 'source__icontains',
-         'ipv4__icontains', 'ipv6__icontains', 'owner__icontains'],
+         'tag__icontains', 'ipv4__icontains', 'ipv6__icontains', 'owner__icontains',
+         'scope__icontains', 'creation_time__icontains', 'last_scan_time__icontains',
+         'registrant_info__icontains'],
         min_length=1
     )
 
@@ -623,6 +615,11 @@ def list_dns_records(request, projectid, format=None):
     ).select_related('related_asset')
 
     ### filter by search parameters
+    queryset = apply_search_filter(
+        queryset, request.query_params.get('search[value]'),
+        ['related_asset__value__icontains', 'record_type__icontains',
+         'record_value__icontains', 'ttl__icontains', 'last_checked__icontains'],
+    )
     queryset = apply_column_search_multi(queryset, search_asset, 'related_asset__value__icontains', min_length=1)
     
     # Record type uses exact match (case-insensitive)
@@ -715,19 +712,35 @@ def list_endpoints(request, projectid, format=None):
 
     ### filter by global keyword across all endpoints of every asset
     ### supports multiple comma-separated values and ! prefix for exclusion
-    if search_global:
+    for value in (search_global, request.query_params.get('search[value]')):
         queryset = apply_column_search_multi(
             queryset,
-            search_global,
-            ['url__icontains', 'technologies__icontains', 'asset__value__icontains'],
+            value,
+            ['url__icontains', 'technologies__icontains', 'asset__value__icontains',
+             'response_size__icontains', 'date__icontains'],
             min_length=1,
         )
 
     ### filter by search parameters
-    queryset = apply_column_search_multi(queryset, search_asset, 'asset__value__icontains', min_length=1)
-    queryset = apply_column_search_multi(queryset, search_url, 'url__icontains', min_length=1)
-    queryset = apply_column_search_multi(queryset, search_technologies, 'technologies__icontains', min_length=1)
-    queryset = apply_column_search_multi(queryset, search_date, 'date__icontains', min_length=1)
+    # The endpoint panel and grouped search results have different column orders.
+    endpoint_fields = {
+        'url': 'url__icontains', 'asset_value': 'asset__value__icontains',
+        'technologies': 'technologies__icontains', 'response_size': 'response_size__icontains',
+        'date': 'date__icontains',
+    }
+    if 'columns[0][data]' in request.query_params:
+        for index in range(1, 6):
+            field = endpoint_fields.get(request.query_params.get(f'columns[{index}][data]'))
+            if field:
+                queryset = apply_column_search_multi(
+                    queryset, request.query_params.get(f'columns[{index}][search][value]'), field,
+                )
+    else:
+        # Keep the legacy API's fixed column order when no schema is supplied.
+        queryset = apply_column_search_multi(queryset, search_asset, 'asset__value__icontains', min_length=1)
+        queryset = apply_column_search_multi(queryset, search_url, 'url__icontains', min_length=1)
+        queryset = apply_column_search_multi(queryset, search_technologies, 'technologies__icontains', min_length=1)
+        queryset = apply_column_search_multi(queryset, search_date, 'date__icontains', min_length=1)
 
     ### get ordering variables
     order_by_column, order_direction = get_ordering_vars(
@@ -818,7 +831,8 @@ def list_keywords(request, projectid, format=None):
     ### filter by search value
     queryset = apply_search_filter(
         queryset, search_value,
-        ['keyword__icontains', 'description__istartswith'],
+        ['keyword__icontains', 'description__icontains', 'ktype__icontains',
+         'creation_time__icontains'],
         min_length=1
     )
 
@@ -1038,7 +1052,8 @@ def list_ports(request, projectid, format=None):
     queryset = apply_search_filter(
         queryset, search_value,
         ['port__icontains', 'banner__icontains', 'status__icontains',
-         'product__icontains', 'cpe__icontains'],
+         'asset__value__icontains', 'asset_name__icontains', 'product__icontains',
+         'cpe__icontains', 'scan_date__icontains'],
         min_length=1
     )
 
@@ -1238,7 +1253,9 @@ def list_all_findings(request, projectid, format=None):
     search_value = request.query_params.get('search[value]', None)
     queryset = apply_search_filter(
         queryset, search_value,
-        ['name__icontains', 'description__icontains', 'source__icontains'],
+        ['asset__value__icontains', 'asset_name__icontains', 'name__icontains',
+         'description__icontains', 'source__icontains', 'type__icontains',
+         'severity__icontains', 'status__icontains'],
         min_length=1
     )
 
@@ -1345,7 +1362,8 @@ def list_data_leaks(request, projectid, format=None):
     queryset = apply_search_filter(
         queryset, search_value,
         ['asset_name__icontains', 'keyword__keyword__icontains', 'source__icontains',
-         'name__icontains', 'description__icontains', 'url__icontains', 'scan_date__icontains'],
+         'name__icontains', 'description__icontains', 'url__icontains', 'scan_date__icontains',
+         'comment__icontains'],
         min_length=1
     )
 
@@ -1652,6 +1670,12 @@ def list_jobs(request, projectid, format=None):
 
     queryset = Job.objects.filter(related_project=prj).order_by('-created_at')
     queryset = queryset.annotate(username=F('user__username'))
+    queryset = apply_search_filter(
+        queryset, request.query_params.get('search[value]'),
+        ['id__icontains', 'command__icontains', 'args__icontains', 'status__icontains',
+         'user__username__icontains', 'created_at__icontains',
+         'started_at__icontains', 'finished_at__icontains'],
+    )
 
     paginator = CustomPaginator()
     jobs = paginator.paginate_queryset(queryset, request)
@@ -1774,7 +1798,8 @@ def list_screenshots(request, projectid, format=None):
     queryset = apply_search_filter(
         queryset, search_value,
         ['url__icontains', 'technologies__icontains', 'title__icontains',
-         'status_code__icontains', 'webserver__icontains', 'asset__source__icontains']
+         'status_code__icontains', 'webserver__icontains', 'asset__source__icontains',
+         'date__icontains']
     )
 
     # Ordering
@@ -1897,10 +1922,8 @@ def list_scheduled_jobs(request):
         sort_field = order_direction + order_by_column
         queryset = queryset.order_by(sort_field)
 
-    paginator = CustomPaginator()
-    jobs_page = paginator.paginate_queryset(queryset, request)
     results = []
-    for job in jobs_page:
+    for job in queryset:
         if job.interval:
             schedule = str(job.interval)
         elif job.crontab:
@@ -1917,7 +1940,15 @@ def list_scheduled_jobs(request):
             'last_run_at': job.last_run_at.isoformat() if job.last_run_at else '',
             'description': getattr(job, 'description', ''),
         })
-    return paginator.get_paginated_response(results)
+    # Search the displayed schedule/boolean strings, not only their DB components.
+    for term, excluded in search_terms(request.query_params.get('search[value]')):
+        results = [
+            row for row in results
+            if any(term.lower() in str(value).lower() for value in row.values()) != excluded
+        ]
+    paginator = CustomPaginator()
+    page = paginator.paginate_queryset(results, request)
+    return paginator.get_paginated_response(page)
 
 
 ##### ASSET SCANS ###############

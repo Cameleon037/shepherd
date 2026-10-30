@@ -1,9 +1,22 @@
 from django.db import models
 
+from .classification import classify_asset
+
+
+class AssetQuerySet(models.QuerySet):
+    def bulk_create(self, objs, *args, **kwargs):
+        # Django bulk_create bypasses Model.save().
+        objs = list(objs)
+        for asset in objs:
+            asset.set_classification()
+        return super().bulk_create(objs, *args, **kwargs)
+
 
 class Asset(models.Model):
     """Active Domains for monitoring
     """
+    objects = AssetQuerySet.as_manager()
+
     uuid = models.CharField(max_length=36, primary_key=True)
 
     value = models.CharField(max_length=2048, default='')
@@ -16,7 +29,7 @@ class Asset(models.Model):
     link = models.CharField(max_length=1024, default='', blank=True, null=True)
 
     type = models.CharField(max_length=100, default='domain')  # can be: domain, ip, url, certificate, starred_domain
-    subtype = models.CharField(max_length=100, default='')  # can be: domain, subdomain
+    subtype = models.CharField(max_length=100, default='')  # domain/subdomain for domain types; otherwise empty
     scope = models.CharField(max_length=100, default='external', blank=True, null=True)  # can be: external, internal
 
     creation_time = models.DateTimeField()  # when was it found to be created
@@ -46,6 +59,16 @@ class Asset(models.Model):
 
     class Meta:
         db_table = 'project_asset'
+
+    def set_classification(self):
+        self.type, self.subtype = classify_asset(self.value, self.type)
+
+    def save(self, *args, **kwargs):
+        # Covers forms, admin, APIs, create/get_or_create and scanner imports.
+        # Do not silently reclassify existing records on unrelated updates.
+        if self._state.adding:
+            self.set_classification()
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         return "%s - %s" % (self.value, self.source)

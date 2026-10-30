@@ -17,34 +17,24 @@
 </div>
 {% if messages %}{% for message in messages %}<div {% if message.tags %} class="alert alert-{{ message.tags }}" {% endif  %}>{{ message }}</div>{% endfor %}{% endif %}
 
-<div class="col-md-6">
-  <div class="panel panel-default">
-    <div class="panel-heading">// General Actions</div>
-    <div class="panel-body">
-      <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#SuggestionModal">Add Domain</button>&nbsp;
-      <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#UploadDomainsModal">Upload Assets</button>&nbsp;
-      <a class="btn btn-primary btn-xs" href="{% url 'assets:export' %}">Export to csv</a>&nbsp;
-      <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#ScanSuggestionsModal">Scan all suggestions</button>&nbsp;
-    </div>
-  </div>
+<div class="list-toolbar" role="group" aria-label="Suggestion actions">
+  <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#SuggestionModal">Add domain</button>
+  <button type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#UploadDomainsModal">Upload assets</button>
+  <a class="btn btn-default btn-sm" href="{% url 'assets:export' %}">Export CSV</a>
+  <button type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#ScanSuggestionsModal">Scan all suggestions</button>
 </div>
 
 <form id="form-selected">
   {% csrf_token %}
 
-  <div class="container-fluid" style="padding-left:0; padding-right:0;">
-    <div class="row">
-      <div class="col-md-6">
-        <div class="panel panel-default">
-          <div class="panel-heading">// Selected Actions</div>
-          <div class="panel-body">
-            <button type="button" name="btnmonitor" id="monitor-selected" class="btn btn-primary btn-xs">Monitor selected</button>&nbsp;
-            <button type="button" name="btnignore" id="ignore-selected" class="btn btn-primary btn-xs">Ignore selected</button>&nbsp;
-            <button type="button" name="btndelete" id="delete-selected" class="btn btn-primary btn-xs confirm">Delete selected</button>&nbsp;
-            <button type="button" id="scan-selected-suggestions-btn" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#ScanSuggestionsModal">Scan selected suggestions</button>&nbsp;
-          </div>
-        </div>
-      </div>
+  <div class="list-selection-bar" role="group" aria-label="Selected suggestion actions">
+    {% include "table_selection_status.html" with selection_hint="Selections across suggestion tabs" %}
+    <div class="list-selection-actions">
+      <button type="button" name="btnmonitor" id="monitor-selected" class="btn btn-default btn-sm" data-selection-action disabled>Monitor</button>
+      <button type="button" name="btnignore" id="ignore-selected" class="btn btn-default btn-sm" data-selection-action disabled>Ignore</button>
+      <button type="button" id="scan-selected-suggestions-btn" class="btn btn-default btn-sm" data-toggle="modal" data-target="#ScanSuggestionsModal" data-selection-action disabled>Scan selected</button>
+      <button type="button" name="btndelete" id="delete-selected" class="btn btn-danger btn-sm" data-selection-action disabled>Delete</button>
+      <button type="button" class="btn btn-link btn-sm" data-clear-selection disabled>Clear selection</button>
     </div>
   </div>
 
@@ -53,7 +43,7 @@
     <div class="panel-heading">
       // Current Suggestions
     </div>
-    <div class="panel-body table-responsive">
+    <div class="panel-body">
       <div role="tabpanel">
         <!-- Simple button group navigation -->
         <div class="suggestion-tabs">
@@ -72,7 +62,7 @@
         </div>
         <div class="tab-content">
           <div role="tabpanel" class="tab-pane fade {% if activetab == 'domain' %}in active{% endif %}" id="allDomains">
-            <table id="table_list_domain_suggestions" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;" width="100%">
+            <table id="table_list_domain_suggestions" class="table table-condensed table-striped table-bordered" width="100%" data-default-columns="value,vulns,tag,source,description,creation_time,registrant_info" data-group-columns="source,tag,monitor,active,owner,scope">
               <thead>
                 <tr>
                   <th><input type="checkbox" name="select_all" value="1" id="select-all-items-dom">&nbsp; Operations</th>
@@ -88,6 +78,7 @@
                   <th>Owner</th>
                   <th>Scope</th>
                   <th>Registrant info</th>
+                  <th>Vulnerabilities</th>
                 </tr>
                 <tr>
                   <th></th>
@@ -123,13 +114,14 @@
                     </select>
                   </th>
                   <th><input type="text" placeholder="Search Registrant (! = exclude)" class="column-search-input form-control input-sm" data-column="12" title="Prepend ! to exclude, e.g. !henkel.com"></th>
+                  <th></th>
                 </tr>
               </thead>
             </table>
           </div>
 
           <div role="tabpanel" class="tab-pane fade {% if activetab == 'subdomain' %}in active{% endif %}" id="secondLevelDomains">
-            <table id="table_list_second_level_domain_suggestions" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;" width="100%">
+            <table id="table_list_second_level_domain_suggestions" class="table table-condensed table-striped table-bordered" width="100%" data-default-columns="value,vulns,tag,source,description,creation_time,registrant_info" data-group-columns="source,tag,monitor,active,owner,scope">
               <thead>
                 <tr>
                   <th><input type="checkbox" name="select_all" value="1" id="select-all-items-sub">&nbsp; Operations</th>
@@ -145,6 +137,7 @@
                   <th>Owner</th>
                   <th>Scope</th>
                   <th>Registrant info</th>
+                  <th>Vulnerabilities</th>
                 </tr>
                 <tr>
                   <th></th>
@@ -180,13 +173,14 @@
                     </select>
                   </th>
                   <th><input type="text" placeholder="Search Registrant (! = exclude)" class="column-search-input form-control input-sm" data-column="12" title="Prepend ! to exclude, e.g. !henkel.com"></th>
+                  <th></th>
                 </tr>
               </thead>
             </table>
           </div>
 
           <div role="tabpanel" class="tab-pane fade {% if activetab == 'starreddomain' %}in active{% endif %}" id="starredDomains">
-            <table id="table_list_starreddomain_suggestions" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;" width="100%">
+            <table id="table_list_starreddomain_suggestions" class="table table-condensed table-striped table-bordered" width="100%" data-default-columns="value,vulns,tag,source,description,creation_time,registrant_info" data-group-columns="source,tag,monitor,active,owner,scope">
               <thead>
                 <tr>
                   <th><input type="checkbox" name="select_all" value="1" id="select-all-items-starred">&nbsp; Operations</th>
@@ -202,6 +196,7 @@
                   <th>Owner</th>
                   <th>Scope</th>
                   <th>Registrant info</th>
+                  <th>Vulnerabilities</th>
                 </tr>
                 <tr>
                   <th></th>
@@ -237,13 +232,14 @@
                     </select>
                   </th>
                   <th><input type="text" placeholder="Search Registrant (! = exclude)" class="column-search-input form-control input-sm" data-column="12" title="Prepend ! to exclude, e.g. !henkel.com"></th>
+                  <th></th>
                 </tr>
               </thead>
             </table>
           </div>
 
           <div role="tabpanel" class="tab-pane fade {% if activetab == 'ipaddress' %}in active{% endif %}" id="sipaddress">
-            <table id="table_list_ipaddress_suggestions" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;" width="100%">
+            <table id="table_list_ipaddress_suggestions" class="table table-condensed table-striped table-bordered" width="100%" data-default-columns="value,vulns,tag,source,description,creation_time,registrant_info" data-group-columns="source,tag,monitor,active,owner,scope">
               <thead>
                 <tr>
                   <th><input type="checkbox" name="select_all" value="1" id="select-all-items-ip">&nbsp; Operations</th>
@@ -256,6 +252,8 @@
                   <th>Active</th>
                   <th>Owner</th>
                   <th>Scope</th>
+                  <th>Registrant info</th>
+                  <th>Vulnerabilities</th>
                 </tr>
                 <tr>
                   <th></th>
@@ -288,6 +286,8 @@
                       <option value="internal">Internal</option>
                     </select>
                   </th>
+                  <th><input type="text" placeholder="Search Registrant (! = exclude)" class="column-search-input form-control input-sm"></th>
+                  <th></th>
                 </tr>
               </thead>
             </table>
@@ -429,32 +429,11 @@
 <script type="text/javascript" language="javascript" class="init">
 
   $(document).ready(function () {
-    function initializeDataTable(tableId, ajaxUrl, ajaxData) {
-      return $(tableId).DataTable({
-        processing: true,
-        serverSide: true,
-        pageLength: 25,
-        orderCellsTop: true,
-        oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
-        order: [[1, "asc"]],
-        ajax: {
-          url: ajaxUrl,
-          dataSrc: "results",
-          type: "GET",
-          dataType: "json",
-          data: function (d) {
-            if (typeof ajaxData === 'function') {
-              ajaxData(d);
-            } else if (ajaxData) {
-              $.extend(d, ajaxData);
-            }
-          }
-        },
-        columns: [
+    var suggestionColumns = [
           {
             'data': 'uuid', 'sName': 'Operations', 'aTargets': [0], 'bSortable': false,
             "mRender": function (data, type, full) {
-              return '<div class="btn-group1">' +
+              return '<div class="table-row-actions">' +
                 '<input type="checkbox" name="id[]" value="' + $('<div/>').text(data).html() + '">&nbsp;&nbsp;' +
                 '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Monitor Entry" data-action="monitor" data-uuid="' + full.uuid + '" href="#">' +
                 '<span class="glyphicon glyphicon-eye-open" aria-hidden="true"></span>' +
@@ -496,108 +475,34 @@
           { 'data': 'ip', 'sName': 'IP', 'aTargets': [9],
             'render': function(data, type, row) {
               return renderTruncatedCell(data, type, { separator: ', ', maxItems: 2, className: 'ip-cell' });
-            },
-            'fnCreatedCell': function(nTd, sData, oData, iRow, iCol) {
-              initTruncatedCellTooltips(nTd);
             }
           },
           { 'data': 'owner', 'sName': 'Owner', 'aTargets': [10],
             'render': function(data, type, row) {
               return renderTruncatedCell(data, type, { separator: ', ', maxItems: 2, className: 'owner-cell' });
-            },
-            'fnCreatedCell': function(nTd, sData, oData, iRow, iCol) {
-              initTruncatedCellTooltips(nTd);
             }
           },
           { 'data': 'scope', 'sName': 'Scope', 'aTargets': [11] },
           { 'data': 'registrant_info', 'sName': 'Registrant info', 'aTargets': [12],
-            'render': function(data, type, row) { return renderRegistrantInfo(data, type); },
-            'fnCreatedCell': function(nTd) { initRegistrantCellHover(nTd); }
-          }
-        ]
-      });
-    }
-
-    // IP table columns (no IP or redirect columns)
-    function initializeIPDataTable(tableId, ajaxUrl, ajaxData) {
-      return $(tableId).DataTable({
-        processing: true,
-        serverSide: true,
-        pageLength: 25,
-        orderCellsTop: true,
-        oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
-        order: [[1, "asc"]],
-        ajax: {
-          url: ajaxUrl,
-          dataSrc: "results",
-          type: "GET",
-          dataType: "json",
-          data: function (d) {
-            if (typeof ajaxData === 'function') {
-              ajaxData(d);
-            } else if (ajaxData) {
-              $.extend(d, ajaxData);
-            }
-          }
-        },
-        columns: [
-          {
-            'data': 'uuid', 'sName': 'Operations', 'aTargets': [0], 'bSortable': false,
-            "mRender": function (data, type, full) {
-              return '<div class="btn-group1">' +
-                '<input type="checkbox" name="id[]" value="' + $('<div/>').text(data).html() + '">&nbsp;&nbsp;' +
-                '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Monitor Entry" data-action="monitor" data-uuid="' + full.uuid + '" href="#">' +
-                '<span class="glyphicon glyphicon-eye-open" aria-hidden="true"></span>' +
-                '</a> ' +
-                '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Ignore Entry" data-action="ignore" data-uuid="' + full.uuid + '" href="#">' +
-                '<span class="glyphicon glyphicon-eye-close" aria-hidden="true"></span>' +
-                '</a> ' +
-                '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Delete Entry" data-action="delete" data-uuid="' + full.uuid + '" data-display="' + full.value + '" href="#">' +
-                '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
-                '</a> ' +
-                '</div>';
-            },
-            "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
-              $("a", nTd).tooltip();
-            }
+            'render': function(data, type, row) { return renderRegistrantInfo(data, type); }
           },
-          { 'data': 'value', 'sName': 'Value', 'aTargets': [1] },
-          { 'data': 'source', 'sName': 'Source', 'aTargets': [2] },
-          { 'data': 'tag', 'sName': 'Tag', 'aTargets': [3],
-            'render': function(data, type, row) {
-              return typeof window.renderTagBadges === 'function' ? window.renderTagBadges(data, type) : (data || '');
-            }
-          },
-          { 'data': 'description', 'sName': 'Description', 'aTargets': [4] },
-          { 'data': 'creation_time', 'sName': 'Created', 'aTargets': [5],
-            'render': function(data, type, row) {
-              if (!data) return '';
-              if (window.moment) {
-                return moment(data).format('DD-MM-YYYY HH:mm');
-              }
-              return data;
-            }
-          },
-          { 'data': 'monitor', 'sName': 'Monitor', 'aTargets': [6] },
-          { 'data': 'active', 'sName': 'Active', 'aTargets': [7] },
-          { 'data': 'owner', 'sName': 'Owner', 'aTargets': [8],
-            'render': function(data, type, row) {
-              return renderTruncatedCell(data, type, { separator: ', ', maxItems: 2, className: 'owner-cell' });
-            },
-            'fnCreatedCell': function(nTd, sData, oData, iRow, iCol) {
-              initTruncatedCellTooltips(nTd);
-            }
-          },
-          { 'data': 'scope', 'sName': 'Scope', 'aTargets': [9] }
-        ]
+          { 'data': 'vulns', 'sName': 'Vulnerabilities', 'orderable': false, 'searchable': false }
+    ];
+    var ipColumns = suggestionColumns.filter(function(column) {
+      return ['ip', 'redirects_to'].indexOf(column.data) === -1;
+    });
+    function createSuggestionsTable(selector, vtype, columns) {
+      return createServerSideTable(selector, suggestionsListUrl, columns || suggestionColumns, {
+        order: [[1, 'asc']], ajax: { data: { selection: 'visible', vtype: vtype } }
       });
     }
 
     var suggestionsListUrl = "{% url 'api:list_suggestions' projectid=projectid %}";
-    var domTable = initializeDataTable('#table_list_domain_suggestions', suggestionsListUrl, { selection: 'visible', vtype: 'all' });
-    var subTable = initializeDataTable('#table_list_second_level_domain_suggestions', suggestionsListUrl, { selection: 'visible', vtype: 'second_level_domain' });
-    var starredTable = initializeDataTable('#table_list_starreddomain_suggestions', suggestionsListUrl, { selection: 'visible', vtype: 'starred_domain' });
-    var ipTable = initializeIPDataTable('#table_list_ipaddress_suggestions', suggestionsListUrl, { selection: 'visible', vtype: 'ip' });
+    var domTable = createSuggestionsTable('#table_list_domain_suggestions', 'all');
+    var subTable = createSuggestionsTable('#table_list_second_level_domain_suggestions', 'second_level_domain');
+    var starredTable = createSuggestionsTable('#table_list_starreddomain_suggestions', 'starred_domain');
+    var ipTable = createSuggestionsTable('#table_list_ipaddress_suggestions', 'ip', ipColumns);
+    var suggestionTables = [domTable, subTable, starredTable, ipTable];
 
     function applySearch(table, tableId) {
       // Find the second header row (filter row) and bind to its inputs/selects
@@ -624,7 +529,7 @@
       formSelector: '#form-selected',
       apiUrl: "{% url 'api:bulk_suggestions' projectid=projectid %}",
       checkboxName: 'id[]',
-      tableInstances: [domTable, subTable, starredTable, ipTable],
+      tableInstances: suggestionTables,
       buttons: [
         { name: 'btnmonitor', action: 'monitor', confirm: false },
         { name: 'btnignore', action: 'ignore', confirm: false },
@@ -635,7 +540,7 @@
     // Row-level actions (monitor/ignore/delete) via API (no page refresh)
     setupRowActions({
       apiUrl: "{% url 'api:bulk_suggestions' projectid=projectid %}",
-      tableInstances: [domTable, subTable, starredTable, ipTable],
+      tableInstances: suggestionTables,
       confirmActions: ['delete']
     });
 
@@ -644,20 +549,7 @@
 
     // When "Scan selected suggestions" is clicked, set flag and open modal
     $('#scan-selected-suggestions-btn').on('click', function (e) {
-      // Collect checked checkboxes from all tables
-      var selectedUuids = [];
-      domTable.$('input[type="checkbox"][name="id[]"]:checked').each(function () {
-        selectedUuids.push($(this).val());
-      });
-      subTable.$('input[type="checkbox"][name="id[]"]:checked').each(function () {
-        selectedUuids.push($(this).val());
-      });
-      starredTable.$('input[type="checkbox"][name="id[]"]:checked').each(function () {
-        selectedUuids.push($(this).val());
-      });
-      ipTable.$('input[type="checkbox"][name="id[]"]:checked').each(function () {
-        selectedUuids.push($(this).val());
-      });
+      var selectedUuids = getSelectedIdsFromBulkConfig({ tableInstances: suggestionTables });
 
       if (selectedUuids.length === 0) {
         e.preventDefault();
@@ -676,24 +568,14 @@
 
     // On modal form submit, if scanSelectedSuggestions, add selected UUIDs as hidden inputs
     $('#scan-suggestions-form').on('submit', function (e) {
+      $(this).find('input[name="uuid[]"]').remove();
       if (scanSelectedSuggestions) {
-        // Remove any previous uuid[] hidden inputs
-        $(this).find('input[name="uuid[]"]').remove();
-
-        // Collect checked checkboxes from all tables
-        var selectedUuids = [];
-        domTable.$('input[type="checkbox"][name="id[]"]:checked').each(function () {
-          selectedUuids.push($(this).val());
-        });
-        subTable.$('input[type="checkbox"][name="id[]"]:checked').each(function () {
-          selectedUuids.push($(this).val());
-        });
-        starredTable.$('input[type="checkbox"][name="id[]"]:checked').each(function () {
-          selectedUuids.push($(this).val());
-        });
-        ipTable.$('input[type="checkbox"][name="id[]"]:checked').each(function () {
-          selectedUuids.push($(this).val());
-        });
+        var selectedUuids = getSelectedIdsFromBulkConfig({ tableInstances: suggestionTables });
+        if (!selectedUuids.length) {
+          e.preventDefault();
+          bootbox.alert('Please select at least one suggestion to scan.');
+          return;
+        }
 
         // Add as hidden inputs
         for (var i = 0; i < selectedUuids.length; i++) {
@@ -715,10 +597,7 @@
       // Clear all search inputs
       $('.column-search-input').val('');
       // Reset search for all tables
-      domTable.columns().search('').draw();
-      subTable.columns().search('').draw();
-      starredTable.columns().search('').draw();
-      ipTable.columns().search('').draw();
+      suggestionTables.forEach(function(table) { table.columns().search('').draw(); });
     });
 
     // ========== Upload Assets Modal ==========

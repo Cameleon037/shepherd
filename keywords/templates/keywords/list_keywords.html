@@ -2,21 +2,6 @@
 {% load static %}
 
 {% block header %}
-<style>
-.scrollable-panel {
-    max-height: 300px;
-    overflow-y: auto;
-}
-.keyword-editor-row .btn-remove {
-    color: #c9302c;
-    cursor: pointer;
-    padding: 4px 8px;
-}
-.keyword-editor-row .btn-remove:hover {
-    background: var(--bg-hover);
-    border-radius: 3px;
-}
-</style>
 {% endblock %}
 
 {% block content %}
@@ -33,19 +18,10 @@
 
 {% if messages %}{% for message in messages %}<div {% if message.tags %} class="alert alert-{{ message.tags }}"{% endif %}>{{ message }}</div>{% endfor %}{% endif %}
 
-<div class="container-fluid" style="padding-left:0; padding-right:0;">
-  <div class="row">
-    <div class="col-md-6">
-      <div class="panel panel-default">
-        <div class="panel-heading">// General Actions</div>
-        <div class="panel-body">
-            <button type="button" class="btn btn-primary btn-xs" id="btn-manage-keywords">Manage Keywords</button>&nbsp;
-            <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#ScanKeywordsModal">Scan keywords</button>&nbsp;
-            <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#UploadRansomlookSuppliersModal">Upload RansomLook Suppliers</button>&nbsp;
-        </div>
-      </div>
-    </div>
-  </div>
+<div class="list-toolbar" role="group" aria-label="Keyword actions">
+  <button type="button" class="btn btn-primary btn-sm" id="btn-manage-keywords">Manage keywords</button>
+  <button type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#ScanKeywordsModal">Scan keywords</button>
+  <button type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#UploadRansomlookSuppliersModal">Upload RansomLook suppliers</button>
 </div>
 
 
@@ -54,15 +30,15 @@
     // Keywords
   </div>
   <div class="panel-body">
-    <table id="table_list_keywords" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;">
-    <thead>
+    <table id="table_list_keywords" class="table table-condensed table-striped table-bordered" width="100%" data-group-columns="enabled">
+    <thead><tr>
         <th>Keyword</th>
         <th>Types</th>
         <th>Enabled</th>
         <th>Description</th>
         <th>Created</th>
         <th>Operations</th>
-    </thead>
+    </tr></thead>
     </table>
     </div>
 </div>
@@ -72,14 +48,14 @@
     // Suppliers
   </div>
   <div class="panel-body">
-    <table id="table_suppliers" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;">
-    <thead>
+    <table id="table_suppliers" class="table table-condensed table-striped table-bordered" width="100%" data-group-columns="enabled">
+    <thead><tr>
         <th>Supplier</th>
         <th>Enabled</th>
         <th>Description</th>
         <th>Created</th>
         <th>Operations</th>
-    </thead>
+    </tr></thead>
     </table>
   </div>
 </div>
@@ -248,7 +224,6 @@
 $(document).ready( function () {
     var keywordsTable = $('#table_list_keywords').DataTable({
         processing: true, serverSide: true, pageLength: 25, select: true,
-        oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
         order: [[ 0, "asc" ]], // Sort by Keyword (column index 0)
         ajax: {
             processing: true,
@@ -285,9 +260,7 @@ $(document).ready( function () {
                 },
             },
             {'data': 'description', 'sName': 'Description', 'aTargets': [ 3 ], 'bSortable': false,
-                'render': function (data, type) {
-                    return type === 'display' ? escapeHtml(data) : data;
-                },
+                'render': function (data, type) { return renderTruncatedCell(data, type, { maxLength: 60 }); },
             },
             {'data': 'creation_time', 'sName': 'Created', 'aTargets': [ 4 ], 'bSortable': false,
               'render': function(data, type, row) {
@@ -305,7 +278,7 @@ $(document).ready( function () {
                 'bSortable': false,
                 "mRender": function (data, type, full) {
                     var delete_url = "{% url 'keywords:delete_keyword' keywordid=0 %}".replace(0, full.id);
-                    return '<div class="btn-group1">' +
+                    return '<div class="table-row-actions">' +
                         '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Delete Keyword" data-action="delete" data-url="'+delete_url+'" data-display="'+escapeHtml(full.keyword)+'" href="#">' +
                         '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
                         '</a> ' +
@@ -319,7 +292,6 @@ $(document).ready( function () {
     });
     var suppliersTable = $('#table_suppliers').DataTable({
         processing: true, serverSide: true, pageLength: 25, select: true,
-        oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
         order: [[ 0, "asc" ]], // Sort by Supplier (column index 0)
         ajax: {
             processing: true,
@@ -349,9 +321,7 @@ $(document).ready( function () {
                 },
             },
             {'data': 'description', 'sName': 'Description', 'aTargets': [ 2 ],
-                'render': function (data, type) {
-                    return type === 'display' ? escapeHtml(data) : data;
-                },
+                'render': function (data, type) { return renderTruncatedCell(data, type, { maxLength: 60 }); },
             },
             {'data': 'creation_time', 'sName': 'Created', 'aTargets': [ 3 ],
               'render': function(data, type, row) {
@@ -369,7 +339,7 @@ $(document).ready( function () {
                 'bSortable': false,
                 "mRender": function (data, type, full) {
                     var delete_url = "{% url 'keywords:delete_keyword' keywordid=0 %}".replace(0, full.id);
-                    return '<div class="btn-group1">' +
+                    return '<div class="table-row-actions">' +
                         '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Delete Supplier" data-action="delete" data-url="'+delete_url+'" data-display="'+escapeHtml(full.keyword)+'" href="#">' +
                         '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
                         '</a> ' +

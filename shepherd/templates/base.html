@@ -36,7 +36,7 @@
     {% block header %}{% endblock %}
   </head>
 
-  <body>
+  <body data-asset-details-url="{% url 'assets:view_asset' uuid='__UUID__' %}">
 
     <nav class="navbar navbar-inverse navbar-fixed-top">
       <div class="container-fluid">
@@ -107,6 +107,25 @@
         </div>
     </div>
 
+    <div class="modal fade table-cell-details-modal" id="table-cell-details-modal" tabindex="-1" role="dialog" aria-labelledby="table-cell-details-title">
+      <div class="modal-dialog" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+            <h4 class="modal-title" id="table-cell-details-title">Cell details</h4>
+          </div>
+          <div class="modal-body">
+            <pre id="table-cell-details-content" class="table-cell-details-content"></pre>
+          </div>
+          <div class="modal-footer">
+            <span id="table-cell-copy-status" class="table-cell-copy-status" role="status" aria-live="polite"></span>
+            <button type="button" class="btn btn-default" id="copy-table-cell-details">Copy</button>
+            <button type="button" class="btn btn-primary" data-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Bootstrap core JavaScript
     ================================================== -->
     <!-- Placed at the end of the document so the pages load faster -->
@@ -126,44 +145,6 @@
     -->
     <script>
         $.fn.DataTable.ext.pager.numbers_length = 14;
-    </script>
-
-    <script type="text/javascript">
-      // Debounced column search for DataTables
-      function applyDebouncedColumnSearch(table, inputSelector = 'input.column-search-input', selectSelector = 'select.column-search-input', delay = 400, $scope) {
-        var debounceTimers = {};
-        var $inputs = $scope ? $scope.find(inputSelector) : $(inputSelector);
-        var $selects = $scope ? $scope.find(selectSelector) : $(selectSelector);
-      
-        // Improved column index detection that works with multiple header rows
-        function getColumnIndex(element) {
-          var $element = $(element);
-          var $th = $element.closest('th');
-          if ($th.length) {
-            return $th.index();
-          }
-          // Fallback: find the column by looking at the table structure
-          var $row = $element.closest('tr');
-          if ($row.length) {
-            return $element.index();
-          }
-          return 0;
-        }
-      
-        $inputs.on('keyup', function () {
-          let columnIndex = getColumnIndex(this);
-          let input = this;
-          clearTimeout(debounceTimers[columnIndex]);
-          debounceTimers[columnIndex] = setTimeout(function () {
-            table.column(columnIndex).search(input.value).draw();
-          }, delay);
-        });
-        
-        $selects.on('change', function () {
-          let columnIndex = getColumnIndex(this);
-          table.column(columnIndex).search(this.value).draw();
-        });
-      }
     </script>
 
     {% block javascript %}{% endblock %}

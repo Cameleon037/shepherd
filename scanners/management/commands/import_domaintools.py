@@ -169,7 +169,6 @@ class Command(BaseCommand):
             sugg = {
                 "related_keyword": kw,
                 "related_project": prj,
-                "type": 'domain',
                 "value": item['domain'],
                 "source": 'domaintools',
                 "scope": 'external',
@@ -178,13 +177,6 @@ class Command(BaseCommand):
                 "creation_time": make_aware(dateparser.parse(datetime.now().isoformat(sep=" ", timespec="seconds"))),
                 "last_seen_time": make_aware(dateparser.parse(datetime.now().isoformat(sep=" ", timespec="seconds"))),
             }
-            # Check if domain or subdomain
-            parsed_obj = tldextract.extract(item['domain'])
-            if parsed_obj.subdomain:
-                sugg["subtype"] = 'subdomain'
-            else:
-                sugg["subtype"] = 'domain'
-
             # Create suggestion entry
             item_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"{item['domain']}:{prj.id}")
             sobj, created = Asset.objects.get_or_create(uuid=item_uuid, defaults=sugg)
@@ -230,7 +222,6 @@ class Command(BaseCommand):
 
                 # Create a new asset
                 domain = ".".join([parsed_obj.domain, parsed_obj.suffix])
-                sugg["subtype"] = 'domain'
                 sugg["value"] = domain
                 domain_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"{domain}:{prj.id}")
                 sobj, created = Asset.objects.get_or_create(uuid=domain_uuid, defaults=sugg)

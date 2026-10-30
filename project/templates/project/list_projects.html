@@ -37,18 +37,9 @@
     </div>
 </div>
 
-<div class="container-fluid" style="padding-left:0; padding-right:0;">
-  <div class="row">
-    <div class="col-md-6">
-      <div class="panel panel-default">
-        <div class="panel-heading">// General Actions</div>
-        <div class="panel-body">
-          <button type="button" class="btn btn-primary btn-xs" onclick="location.href='{% url 'projects:unselect_project' %}'">Unselect Project</button>&nbsp;
-       	  <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#ProjectModal">Add Project</button><br/><br/>
-        </div>
-      </div>
-    </div>
-  </div>
+<div class="list-toolbar" role="group" aria-label="Project actions">
+  <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#ProjectModal">Add project</button>
+  <a class="btn btn-default btn-sm" href="{% url 'projects:unselect_project' %}">Unselect project</a>
 </div>
 
 <div class="panel panel-default">
@@ -56,14 +47,14 @@
     // Projects
   </div>
   <div class="panel-body">
-    <table id="table_list_projects" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;">
-    <thead>
+    <table id="table_list_projects" class="table table-condensed table-striped table-bordered" width="100%" data-group-columns="projectname">
+    <thead><tr>
         <th>ID</th>
         <th>Name</th>
         <th>Description</th>
         <th>Created</th>
         <th>Operations</th>
-    </thead>
+    </tr></thead>
     </table>
   </div>
 </div>
@@ -96,7 +87,6 @@
 $(document).ready( function () {
     var pTable = $('#table_list_projects').DataTable({
         processing: true, serverSide: true, pageLength: 25, select: true,
-        oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
         order: [[ 0, "asc" ]],
         ajax: {
             processing: true,
@@ -133,7 +123,7 @@ $(document).ready( function () {
                 'bSortable': false,
                 "mRender": function (data, type, full) {
                     var delete_url = "{% url 'projects:delete_project' projectid=0 %}".replace(0, full.id);
-                    return '<div class="btn-group1">' +
+                    return '<div class="table-row-actions">' +
                       '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Delete Entry" data-action="delete" data-url="'+delete_url+'" data-display="'+full.projectname+'" href="#">' +
                       '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
                       '</a> ' +

@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from django.http import JsonResponse, HttpResponse
 from django.core.paginator import Paginator as DjangoPaginator
 from django.utils.functional import cached_property
+from api.utils import apply_table_grouping
 
 class APICustomPaginator(DjangoPaginator):
 
@@ -37,6 +38,7 @@ class CustomPaginator(PageNumberPagination):
             return 25
 
     def paginate_queryset(self, queryset, request, view=None):
+        queryset = apply_table_grouping(queryset, request.query_params.get('group_by'))
         page_size = self.get_page_size(request)
         # Ensure queryset is ordered to avoid UnorderedObjectListWarning
         if hasattr(queryset, 'ordered') and not queryset.ordered:

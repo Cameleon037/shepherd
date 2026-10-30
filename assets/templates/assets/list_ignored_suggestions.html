@@ -20,18 +20,13 @@
 <form id="form-selected">
     {% csrf_token %}
 
-<div class="container-fluid" style="padding-left:0; padding-right:0;">
-    <div class="row">
-        <div class="col-md-6">
-            <div class="panel panel-default">
-                <div class="panel-heading">// Selected Actions</div>
-                <div class="panel-body">
-                    <button type="button" name="btnmove" id="move-selected" class="btn btn-primary btn-xs">Suggest selected</button>&nbsp;
-                    <button type="button" name="btndelete" id="delete-selected" class="btn btn-primary btn-xs">Delete selected</button>
-                </div>
-            </div>
-        </div>
-    </div>
+<div class="list-selection-bar" role="group" aria-label="Selected ignored asset actions">
+  {% include "table_selection_status.html" %}
+  <div class="list-selection-actions">
+    <button type="button" name="btnmove" id="move-selected" class="btn btn-default btn-sm" data-selection-action disabled>Move to suggestions</button>
+    <button type="button" name="btndelete" id="delete-selected" class="btn btn-danger btn-sm" data-selection-action disabled>Delete</button>
+    <button type="button" class="btn btn-link btn-sm" data-clear-selection disabled>Clear selection</button>
+  </div>
 </div>
 
 
@@ -42,7 +37,7 @@
     </div>
     <div class="panel-body">
 
-    <table id="table_list_ignored_suggestions" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;">
+    <table id="table_list_ignored_suggestions" class="table table-condensed table-striped table-bordered" width="100%" data-default-columns="value,vulns,tag,source,description,creation_time,registrant_info" data-group-columns="source,tag">
         <thead>
         <tr>
           <th><input type="checkbox" name="select_all" value="1" id="select-all-items">&nbsp; Operations</th>
@@ -50,6 +45,9 @@
           <th>Source</th>
           <th>Description</th>
           <th>Created</th>
+          <th>Tag</th>
+          <th>Registrant info</th>
+          <th>Vulnerabilities</th>
         </tr>
         <tr>
           <th></th>
@@ -57,6 +55,9 @@
           <th><input type="text" placeholder="Search Source" class="column-search-input form-control input-sm"></th>
           <th><input type="text" placeholder="Search Description" class="column-search-input form-control input-sm"></th>
           <th><input type="text" placeholder="Search Created" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Tag" class="column-search-input form-control input-sm"></th>
+          <th><input type="text" placeholder="Search Registrant (! = exclude)" class="column-search-input form-control input-sm"></th>
+          <th></th>
         </tr>
         </thead>
     </table>
@@ -75,7 +76,6 @@ $(document).ready( function () {
     var pTable = $('#table_list_ignored_suggestions').DataTable({
         processing: true, serverSide: true, pageLength: 25, select: true,
         orderCellsTop: true,
-        oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
         order: [[ 4, "desc" ]],
         ajax: {
             processing: true,
@@ -92,7 +92,7 @@ $(document).ready( function () {
             {'data': 'uuid', 'sName': 'Operations', 'aTargets': [ 0 ],
                 'bSortable': false,
                 "mRender": function (data, type, full) {
-                    return '<div class="btn-group1">' +
+                    return '<div class="table-row-actions">' +
                         '<input type="checkbox" name="id[]" value="' + $('<div/>').text(data).html() + '">&nbsp;&nbsp;' +
                         '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Move to Suggestions" data-action="move" data-uuid="' + full.uuid + '" href="#">' +
                         '<span class="glyphicon glyphicon-transfer" aria-hidden="true"></span>' +
@@ -125,6 +125,9 @@ $(document).ready( function () {
                 return data;
               }
             },
+            { 'data': 'tag', 'sName': 'Tag', 'render': renderTagBadges },
+            { 'data': 'registrant_info', 'sName': 'Registrant info', 'render': renderRegistrantInfo },
+            { 'data': 'vulns', 'sName': 'Vulnerabilities', 'orderable': false, 'searchable': false },
         ]
     });
 

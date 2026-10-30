@@ -20,18 +20,13 @@
 <form id="form-selected-findings">
   {% csrf_token %}
 
-<div class="container-fluid" style="padding-left:0; padding-right:0;">
-  <div class="row">
-    <div class="col-md-6">
-      <div class="panel panel-default">
-        <div class="panel-heading">// Selected Actions</div>
-        <div class="panel-body">
-          <button type="button" name="btnignore" id="toggle-ignore-selected-findings" class="btn btn-primary btn-xs">Toggle ignore status for selected</button>&nbsp;
-          <button type="button" name="btndelete" id="delete-selected-findings" class="btn btn-primary btn-xs confirm">Delete selected</button>&nbsp;
-          <button type="button" name="btnreport" id="report-selected-findings" class="btn btn-primary btn-xs confirm">Report selected (Nucleus)</button>&nbsp;
-        </div>
-      </div>
-    </div>
+<div class="list-selection-bar" role="group" aria-label="Selected finding actions">
+  {% include "table_selection_status.html" %}
+  <div class="list-selection-actions">
+    <button type="button" name="btnignore" id="toggle-ignore-selected-findings" class="btn btn-default btn-sm" data-selection-action disabled>Toggle ignore</button>
+    <button type="button" name="btnreport" id="report-selected-findings" class="btn btn-default btn-sm" data-selection-action disabled>Report to Nucleus</button>
+    <button type="button" name="btndelete" id="delete-selected-findings" class="btn btn-danger btn-sm" data-selection-action disabled>Delete</button>
+    <button type="button" class="btn btn-link btn-sm" data-clear-selection disabled>Clear selection</button>
   </div>
 </div>
 
@@ -40,7 +35,7 @@
   <div class="panel-heading">
     // Findings
   </div>
-  <div class="panel-body table-responsive">
+  <div class="panel-body">
     <div class="form-group" style="margin-bottom:10px;">
             <label for="reported-filter">Reported Status:</label>
             <select id="reported-filter" class="form-control input-sm" style="width:auto; display:inline-block;">
@@ -56,7 +51,7 @@
                 <option value="all">All</option>
             </select>
     </div>
-    <table id="table_list_findings" class="table table-condensed table-striped table-bordered findings-table" style="font-size: 0.9em;">
+    <table id="table_list_findings" class="table table-condensed table-striped table-bordered" width="100%" data-default-columns="asset_name,name,description,source,severity,status,scan_date" data-group-columns="asset_name,type,source,severity,status">
       <thead>
         <tr>
           <th><input type="checkbox" name="select_all" value="1" id="select-all-findings">&nbsp; Operations</th>
@@ -145,7 +140,6 @@ $(document).ready( function () {
     var findingsTable = $('#table_list_findings').DataTable({
         processing: true, serverSide: true, pageLength: 25,
         orderCellsTop: true,
-        oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
         order: [[ 6, "desc" ]],  // Sort by severity (column 6) descending - most critical first
         ajax: {
             processing: true,
@@ -179,7 +173,7 @@ $(document).ready( function () {
                     var ignore_url = "{% url 'api:toggle_finding_ignore' projectid=projectid findingid='__ID__' %}".replace('__ID__', full.id);
                     var delete_url = "{% url 'api:delete_finding' projectid=projectid findingid='__ID__' %}".replace('__ID__', full.id);
                     var nucleus_url = "{% url 'api:report_finding' projectid=projectid findingid='__ID__' %}".replace('__ID__', full.id);
-                    return '<div class="btn-group1">' +
+                    return '<div class="table-row-actions">' +
                         '<input type="checkbox" name="id[]" value="' + $('<div/>').text(data).html() + '">&nbsp;&nbsp;' +
                         '<a class="btn btn-xs toggle-ignore-finding" rel="tooltip" data-placement="right" data-original-title="Toggle ignore status" data-display="' + full.name + '" href="' + ignore_url + '">' +
                             '<span class="glyphicon glyphicon-eye-close" aria-hidden="true"></span>' +
@@ -202,10 +196,7 @@ $(document).ready( function () {
             {'data': 'asset_name', 'sName': 'Asset Name', 'aTargets': [ 1 ],
                 "mRender": function (data, type, full) {
                     var select_url = "{% url 'assets:view_asset' uuid=0 %}".replace(0, full.asset);
-                    return '<div rel="tooltip" data-placement="left" data-original-title="Show details"><a href="'+select_url+'">'+data+'</a></div>';
-                },
-                "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
-                    $("div", nTd).tooltip();
+                    return '<a href="' + select_url + '">' + $('<div/>').text(data).html() + '</a>';
                 },
             },
             {'data': 'name', 'sName': 'Vulnerability Name', 'aTargets': [ 2 ]},
@@ -232,9 +223,7 @@ $(document).ready( function () {
                 'aTargets': [7],
                 'render': function(data, type, row) {
                     var label = (data === 'fixed') ? 'Fixed' : 'Open';
-                    var cls = (data === 'fixed') ? 'info' : 'high';
-                    var html = '<span class="severity-badge severity-' + cls + '">' + label + '</span>';
-                    return type === 'display' ? html : (data || '');
+                    return type === 'display' ? label : (data || '');
                 }
             },
             {'data': 'scan_date', 'sName': 'Scan Date', 'aTargets': [ 8 ],
@@ -289,7 +278,6 @@ $(document).ready( function () {
 
     // Initialize all common DataTable features
     initializeCommonDataTableFeatures(findingsTable, {
-        useBulkActionsApi: true,
         hasNucleus: true,
         hasCommentModal: true,
         commentUrlTemplate: "{% url 'api:update_finding_comment' projectid=projectid findingid='__ID__' %}",

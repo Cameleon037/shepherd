@@ -11,7 +11,6 @@ from assets.models import Asset
 from project.models import Project
 from scanners.scan_utils import resolve_uuids, add_common_scan_arguments
 from findings.models import Finding
-import tldextract
 
 class Command(BaseCommand):
     help = 'Trigger a Subfinder scan against all starred domains suggestions in a specific project and stores the new domains as suggestions'
@@ -82,7 +81,6 @@ class Command(BaseCommand):
                     # Create the asset details
                     sugg = {
                         "related_project": prj,
-                        "type": 'domain',
                         "value": subfinder_domain_name,
                         "source": 'subfinder',
                         "scope": 'external',
@@ -91,13 +89,6 @@ class Command(BaseCommand):
                         "creation_time": make_aware(dateparser.parse(datetime.now().isoformat(sep=" ", timespec="seconds"))),
                         "last_seen_time": make_aware(dateparser.parse(datetime.now().isoformat(sep=" ", timespec="seconds"))),
                     }
-                    # Check if domain or subdomain
-                    parsed_obj = tldextract.extract(subfinder_domain_name)
-                    if parsed_obj.subdomain:
-                        sugg["subtype"] = 'subdomain'
-                    else:
-                        sugg["subtype"] = 'domain'
-
                     # Create suggestion entry
                     subfinder_domain_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"{subfinder_domain_name}:{prj.id}")
                     sobj, created = Asset.objects.get_or_create(uuid=subfinder_domain_uuid, related_project=prj, defaults=sugg)

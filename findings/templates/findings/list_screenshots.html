@@ -2,19 +2,6 @@
 {% load static %}
 
 {% block header %}
-<style>
-/* Enlarge screenshot on hover */
-#table_list_httpx_results img {
-    transition: transform 0.2s ease;
-    cursor: zoom-in;
-}
-#table_list_httpx_results img:hover {
-    transform: scale(2.5);
-    z-index: 10;
-    position: relative;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-}
-</style>
 {% endblock %}
 
 {% block content %}
@@ -28,18 +15,22 @@
     </div>
 </div>
 
-<div class="panel panel-default">
-    <div class="panel-heading">// General Actions</div>
-    <div class="panel-body">
-      <a class="btn btn-primary btn-xs confirm" href="{% url 'findings:export_technologies_csv' %}">Export to csv</a>&nbsp;
-      <button type="button" id="scan-selected-assets-btn" class="btn btn-primary btn-xs">Scan selected assets</button>&nbsp;
-    </div>
+<div class="list-toolbar" role="group" aria-label="Screenshot actions">
+  <a class="btn btn-default btn-sm" href="{% url 'findings:export_technologies_csv' %}">Export CSV</a>
+</div>
+<form id="form-selected-screenshots">
+<div class="list-selection-bar" role="group" aria-label="Selected screenshot asset actions">
+  {% include "table_selection_status.html" with selection_hint="Unique assets on this page" %}
+  <div class="list-selection-actions">
+    <button type="button" id="scan-selected-assets-btn" class="btn btn-default btn-sm" data-selection-action disabled>Scan selected</button>
+    <button type="button" class="btn btn-link btn-sm" data-clear-selection disabled>Clear selection</button>
+  </div>
 </div>
 
 <div class="panel panel-default">
     <div class="panel-heading">// HTTPX Screenshots</div>
-    <div class="panel-body table-responsive">
-        <table id="table_list_httpx_results" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;">
+    <div class="panel-body">
+        <table id="table_list_httpx_results" class="table table-condensed table-striped table-bordered" width="100%" data-group-columns="technologies,status_code,webserver,asset_source">
             <thead>
                 <tr>
                     <th><input type="checkbox" name="select_all" value="1" id="select-all-screenshots">&nbsp; Scan</th>
@@ -67,6 +58,7 @@
         </table>
     </div>
 </div>
+</form>
 {% endspaceless %}
 {% endblock %}
 
@@ -74,28 +66,6 @@
 <script src="{% static 'js/bootbox.min.js' %}"></script>
 <script type="text/javascript" language="javascript" class="init">
 $(document).ready(function () {
-    function initializeDataTable(tableId, ajaxUrl, columns) {
-        return $(tableId).DataTable({
-            processing: true,
-            serverSide: true,
-            pageLength: 25,
-            orderCellsTop: true,
-            oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
-            order: [[1, "asc"]], // Default order by URL column
-            ajax: {
-                url: ajaxUrl,
-                dataSrc: function(json) {
-                    // Support both {data: [...]} and {results: [...]} and fallback to [] if undefined
-                    return json.data || json.results || [];
-                },
-                type: "GET",
-                dataType: "json"
-            },
-            columns: columns
-        });
-    }
-
-    var assetViewUrl = "{% url 'assets:view_asset' uuid='__UUID__' %}";
     const httpxColumns = [
         {
             data: 'asset',
@@ -111,8 +81,8 @@ $(document).ready(function () {
             data: 'url',
             sName: 'URL',
             render: function (data, type, row) {
-                var text = $('<div/>').text(data).html();
-                return row.asset ? '<a href="' + assetViewUrl.replace('__UUID__', row.asset) + '">' + text + '</a>' : text;
+                if (type !== 'display' || !data) return data || '';
+                return $('<a>', { href: data, text: data, target: '_blank', rel: 'noopener noreferrer' })[0].outerHTML;
             }
         },
         {
@@ -122,7 +92,7 @@ $(document).ready(function () {
             render: function (data, type, row) {
                 if (!data) return '<span class="text-muted">No screenshot</span>';
                 var href = (row.url || '').replace(/"/g, '&quot;');
-                return '<a href="' + href + '" target="_blank" rel="noopener"><img src="data:image/png;base64,' + data + '" alt="Screenshot" style="max-width:200px; max-height:120px;" /></a>';
+                return '<a href="' + href + '" target="_blank" rel="noopener"><img src="data:image/png;base64,' + data + '" alt="Screenshot" /></a>';
             }
         },
         { data: 'technologies', sName: 'Technologies' },
@@ -144,10 +114,11 @@ $(document).ready(function () {
         { data: 'asset_source', sName: 'Asset Source' }
     ];
 
-    var httpxTable = initializeDataTable(
+    var httpxTable = createServerSideTable(
         '#table_list_httpx_results',
         "{% url 'api:list_screenshots' projectid=projectid %}",
-        httpxColumns
+        httpxColumns,
+        { order: [[1, 'asc']], ajax: { dataSrc: function(json) { return json.data || json.results || []; } } }
     );
 
     // Find the second header row (filter row) and bind to its inputs/selects
@@ -159,12 +130,7 @@ $(document).ready(function () {
 
     // "Scan selected assets" -> store asset UUIDs in session and redirect to control center
     $('#scan-selected-assets-btn').on('click', function (e) {
-      var selectedUuids = [];
-      httpxTable.$('input[type="checkbox"][name="id[]"]:checked').each(function () {
-        selectedUuids.push($(this).val());
-      });
-      // Deduplicate asset UUIDs (multiple screenshots can belong to the same asset)
-      selectedUuids = selectedUuids.filter(function (v, i, a) { return a.indexOf(v) === i; });
+      var selectedUuids = getSelectedIdsFromBulkConfig({ tableInstances: [httpxTable] });
 
       if (selectedUuids.length === 0) {
         e.preventDefault();
@@ -173,7 +139,7 @@ $(document).ready(function () {
       }
 
       var btn = $(this);
-      btn.prop('disabled', true).text('Redirecting...');
+      btn.attr('data-selection-busy', '').prop('disabled', true).text('Redirecting...');
 
       $.ajax({
         url: "{% url 'api:scans_preselect' projectid=projectid %}",
@@ -186,7 +152,8 @@ $(document).ready(function () {
         },
         error: function () {
           bootbox.alert("Failed to transfer assets. Please try again.");
-          btn.prop('disabled', false).text('Scan selected assets');
+          btn.removeAttr('data-selection-busy').text('Scan selected');
+          $('#form-selected-screenshots').data('selection-update')();
         }
       });
     });

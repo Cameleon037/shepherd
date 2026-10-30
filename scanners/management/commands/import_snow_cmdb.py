@@ -184,8 +184,6 @@ class Command(BaseCommand):
                 asset_data = {
                     "related_keyword": None,  # No keyword for internal assets
                     "related_project": prj,
-                    "type": 'domain',
-                    "subtype": 'subdomain',
                     "value": fqdn,
                     "source": 'servicenow_cmdb',
                     "scope": 'internal',

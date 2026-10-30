@@ -34,7 +34,18 @@ def _format_registrant_info_display(registrant_info):
     return ' • '.join(parts) if parts else '—'
 
 
+def _format_vulnerability_counts(obj):
+    return ''.join(
+        f'<span class="label label-{label}">{getattr(obj, "vuln_" + severity, 0)}</span>'
+        for severity, label in (
+            ('critical', 'default'), ('high', 'danger'), ('medium', 'warning'),
+            ('low', 'success'), ('info', 'primary'),
+        )
+    )
+
+
 class SuggestionSerializer(serializers.ModelSerializer):
+    vulns = serializers.SerializerMethodField()
     ip = serializers.SerializerMethodField()
     registrant_info_display = serializers.SerializerMethodField()
 
@@ -44,6 +55,9 @@ class SuggestionSerializer(serializers.ModelSerializer):
 
     def get_registrant_info_display(self, obj):
         return _format_registrant_info_display(obj.registrant_info)
+
+    def get_vulns(self, obj):
+        return _format_vulnerability_counts(obj)
 
     def get_ip(self, obj):
         ips = []
@@ -85,7 +99,7 @@ class AssetSerializer(serializers.ModelSerializer):
         return getattr(obj, 'endpoint_count', 0)
 
     def get_vulns(self, obj):
-        return '<span class="label label-default">'+str(obj.vuln_critical)+'</span><span class="label label-danger">'+str(obj.vuln_high)+'</span><span class="label label-warning">'+str(obj.vuln_medium)+'</span><span class="label label-success">'+str(obj.vuln_low)+'</span><span  class="label label-primary">'+str(obj.vuln_info)+'</span>'
+        return _format_vulnerability_counts(obj)
 
     def get_ip(self, obj):
         ips = []
@@ -151,4 +165,3 @@ class EndpointSerializer(serializers.ModelSerializer):
     
     def get_asset_uuid(self, obj):
         return obj.asset.uuid if obj.asset else None
-        

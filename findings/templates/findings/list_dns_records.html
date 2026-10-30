@@ -17,11 +17,8 @@
 </div>
 {% if messages %}{% for message in messages %}<div {% if message.tags %} class="alert alert-{{ message.tags }}"{% endif %}>{{ message }}</div>{% endfor %}{% endif %}
 
-<div class="panel panel-default">
-    <div class="panel-heading">// General Actions</div>
-    <div class="panel-body">
-      <a class="btn btn-primary btn-xs" href="{% url 'findings:export_dns_records_csv' %}">Export to csv</a>&nbsp;
-    </div>
+<div class="list-toolbar" role="group" aria-label="DNS record actions">
+  <a class="btn btn-default btn-sm" href="{% url 'findings:export_dns_records_csv' %}">Export CSV</a>
 </div>
 
 <!-- DNS Records List -->
@@ -29,11 +26,11 @@
   <div class="panel-heading">
     // DNS Records for Monitored Assets ({{ total_records }} total)
   </div>
-  <div class="panel-body table-responsive">
-    <table id="table_list_dns_records" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;">
+   <div class="panel-body">
+    <table id="table_list_dns_records" class="table table-condensed table-striped table-bordered" width="100%" data-group-columns="asset_value,record_type">
       <thead>
         <tr>
-          <th><input type="checkbox" name="select_all" value="1" id="select-all-dns-records">&nbsp; Operations</th>
+          <th>Actions</th>
           <th>Asset</th>
           <th>Record Type</th>
           <th>Record Value</th>
@@ -74,26 +71,12 @@
 {% block javascript %}
 <script type="text/javascript" language="javascript" class="init">
 $(document).ready(function() {
-    // Function to initialize a DataTable with server-side processing
-    function initializeDataTable(tableId, ajaxUrl) {
-        return $(tableId).DataTable({
-            processing: true,
-            serverSide: true,
-            pageLength: 25,
-            orderCellsTop: true,
-            oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
-            order: [[5, "desc"]], // Sort by last checked date
-            ajax: {
-                url: ajaxUrl,
-                dataSrc: "results",
-                type: "GET",
-                dataType: "json"
-            },
-            columns: [
+    var dnsColumns = [
                 {
                     'data': 'id', 'sName': 'Operations', 'aTargets': [0], 'bSortable': false,
                     "mRender": function (data, type, full) {
-                        return '<input type="checkbox" name="id[]" value="' + data + '">';
+                        var assetUrl = "{% url 'assets:view_asset' uuid='PLACEHOLDER' %}".replace('PLACEHOLDER', full.asset_uuid);
+                        return '<a class="btn btn-default btn-xs" href="' + assetUrl + '" aria-label="View asset details" title="View asset details"><span class="glyphicon glyphicon-new-window" aria-hidden="true"></span></a>';
                     }
                 },
                 {
@@ -113,9 +96,6 @@ $(document).ready(function() {
                     'data': 'record_value', 'sName': 'Record Value', 'aTargets': [3],
                     'render': function(data, type, row) {
                         return renderTruncatedCell(data, type, { separator: ', ', maxItems: 2, className: 'record-value-cell' });
-                    },
-                    'fnCreatedCell': function(nTd, sData, oData, iRow, iCol) {
-                        initTruncatedCellTooltips(nTd);
                     }
                 },
                 {
@@ -137,34 +117,15 @@ $(document).ready(function() {
                         return data;
                     }
                 }
-            ]
-        });
-    }
+    ];
 
     // Initialize the DNS records table
-    var dnsTable = initializeDataTable('#table_list_dns_records', "{% url 'api:list_dns_records' projectid=projectid %}");
+    var dnsTable = createServerSideTable('#table_list_dns_records', "{% url 'api:list_dns_records' projectid=projectid %}", dnsColumns, { order: [[5, 'desc']] });
 
     // Find the second header row (filter row) and bind to its inputs/selects
     var $filterRow = $('#table_list_dns_records thead tr:eq(1)');
     applyDebouncedColumnSearch(dnsTable, 'input.column-search-input', 'select.column-search-input', 400, $filterRow);
 
-    // Select all functionality
-    $('#select-all-dns-records').on('change', function() {
-        var isChecked = $(this).prop('checked');
-        dnsTable.$('input[name="id[]"]').prop('checked', isChecked);
-    });
-
-    // Individual checkbox change (using event delegation for dynamically loaded content)
-    $(document).on('change', 'input[name="id[]"]', function() {
-        var totalCheckboxes = dnsTable.$('input[name="id[]"]').length;
-        var checkedCheckboxes = dnsTable.$('input[name="id[]"]:checked').length;
-        $('#select-all-dns-records').prop('checked', totalCheckboxes === checkedCheckboxes);
-    });
-
-    // Initialize tooltips (using event delegation for dynamically loaded content)
-    $(document).on('mouseenter', '[rel="tooltip"]', function() {
-        $(this).tooltip();
-    });
 });
 </script>
 {% endblock %}

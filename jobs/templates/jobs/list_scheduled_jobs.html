@@ -17,17 +17,8 @@
 
 {% if messages %}{% for message in messages %}<div {% if message.tags %} class="alert alert-{{ message.tags }}"{% endif %}>{{ message }}</div>{% endfor %}{% endif %}
 
-<div class="container-fluid" style="padding-left:0; padding-right:0;">
-<div class="col-md-6">
-  <div class="panel panel-default">
-    <div class="panel-heading">// General Actions</div>
-    <div class="panel-body">
-          <button type="button" class="btn btn-primary btn-xs" onclick="location.href='/admin/django_celery_beat/periodictask/'">
-            Edit scheduled jobs
-          </button>    
-    </div>
-  </div>
-</div>
+<div class="list-toolbar" role="group" aria-label="Scheduled job actions">
+  <a class="btn btn-primary btn-sm" href="/admin/django_celery_beat/periodictask/">Edit scheduled jobs</a>
 </div>
 
 <div class="panel panel-default">
@@ -35,7 +26,7 @@
     // Scheduled Jobs
   </div>
   <div class="panel-body">
-    <table id="table_list_scheduled_jobs" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;">
+    <table id="table_list_scheduled_jobs" class="table table-condensed table-striped table-bordered" width="100%" data-group-columns="task,schedule,enabled">
       <thead>
         <tr>
           <th>Name</th>
@@ -70,24 +61,6 @@
 <script src="{% static 'js/bootbox.min.js' %}"></script>
 <script type="text/javascript" language="javascript" class="init">
 $(document).ready(function () {
-    function initializeDataTable(tableId, ajaxUrl, columns) {
-        return $(tableId).DataTable({
-            processing: true,
-            serverSide: true,
-            pageLength: 25,
-            orderCellsTop: true,
-            oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
-            order: [[0, "asc"]],
-            ajax: {
-                url: ajaxUrl,
-                dataSrc: "results",
-                type: "GET",
-                dataType: "json"
-            },
-            columns: columns
-        });
-    }
-
     const scheduledJobColumns = [
         { 'data': 'name', 'sName': 'Name', 'orderable': true },
         { 'data': 'task', 'sName': 'Task', 'orderable': true },
@@ -112,7 +85,7 @@ $(document).ready(function () {
         { 'data': 'description', 'sName': 'Description', 'orderable': true }
     ];
 
-    var scheduledJobTable = initializeDataTable(
+    var scheduledJobTable = createServerSideTable(
         '#table_list_scheduled_jobs',
         "{% url 'api:list_scheduled_jobs' %}", // Scheduled jobs JSON endpoint
         scheduledJobColumns

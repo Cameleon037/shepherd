@@ -2,42 +2,6 @@
 {% load static %}
 
 {% block header %}
-<style>
-.dashboard-stat {
-    text-align: center;
-    padding: 15px;
-}
-.dashboard-stat .value {
-    font-size: 1.8em;
-    font-weight: bold;
-    display: block;
-}
-.dashboard-stat .label {
-    font-size: 0.85em;
-    color: #777;
-}
-.severity-badge { font-size: 0.85em; }
-.severity-critical { background-color: #a94442; color: #fff; }
-.severity-high { background-color: #d9534f; color: #fff; }
-.severity-medium { background-color: #f0ad4e; color: #333; }
-.severity-low { background-color: #5bc0de; color: #333; }
-.severity-info { background-color: #5cb85c; color: #fff; }
-.stacked-bar-container { margin-bottom: 20px; }
-.stacked-bar-row { margin-bottom: 12px; display: flex; align-items: center; }
-.stacked-bar-label { min-width: 120px; font-size: 0.9em; font-weight: bold; padding-right: 10px; }
-.stacked-bar-wrapper { flex: 1; height: 24px; background-color: #f5f5f5; border: 1px solid #ddd; position: relative; display: flex; }
-.stacked-bar-segment { height: 100%; display: inline-block; }
-.stacked-bar-segment-critical { background-color: #a94442; }
-.stacked-bar-segment-high { background-color: #d9534f; }
-.stacked-bar-segment-medium { background-color: #f0ad4e; }
-.stacked-bar-segment-low { background-color: #5bc0de; }
-.stacked-bar-segment-info { background-color: #5cb85c; }
-.stacked-bar-segment-unknown { background-color: #777; }
-.stacked-bar-value { min-width: 60px; text-align: right; padding-left: 10px; font-size: 0.9em; font-weight: bold; }
-.stacked-bar-legend { margin-top: 15px; font-size: 0.85em; }
-.stacked-bar-legend-item { display: inline-block; margin-right: 15px; }
-.stacked-bar-legend-color { display: inline-block; width: 16px; height: 16px; margin-right: 5px; vertical-align: middle; }
-</style>
 {% endblock %}
 
 {% block content %}

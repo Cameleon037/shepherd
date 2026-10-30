@@ -1,4 +1,61 @@
-from django.db.models import Q
+from django.db.models import Count, Q
+
+
+TABLE_GROUP_FIELDS = {
+    'assets.asset': {'value': 'value', 'source': 'source', 'tag': 'tag', 'scope': 'scope',
+                     'owner': 'owner', 'monitor': 'monitor', 'active': 'active', 'endpoint_count': 'endpoint_count'},
+    'findings.finding': {'asset_name': 'asset_name', 'name': 'name', 'type': 'type',
+                         'source': 'source', 'severity': 'severity', 'status': 'status',
+                         'keyword': 'keyword__keyword'},
+    'findings.dnsrecord': {'asset_value': 'related_asset__value', 'record_type': 'record_type'},
+    'findings.port': {'asset_name': 'asset_name', 'port': 'port'},
+    'findings.screenshot': {'technologies': 'technologies', 'status_code': 'status_code',
+                            'webserver': 'webserver', 'asset_source': 'asset__source'},
+    'findings.endpoint': {'asset_value': 'asset__value', 'technologies': 'technologies'},
+    'jobs.job': {'command': 'command', 'status': 'status', 'username': 'user__username'},
+    'keywords.keyword': {'keyword': 'keyword', 'ktype': 'ktype', 'enabled': 'enabled'},
+    'project.project': {'projectname': 'projectname'},
+}
+
+
+def apply_table_grouping(rows, group_by):
+    """Keep complete groups contiguous before pagination, retaining row ordering.
+
+    Allow only known display fields, never arbitrary ORM paths from the request.
+    List responses (grouped keywords and schedules) use a stable in-memory sort.
+    """
+    if not group_by:
+        return rows
+    if isinstance(rows, list):
+        if group_by not in ('keyword', 'enabled', 'name', 'task', 'schedule'):
+            return rows
+        return sorted(rows, key=lambda row: str(row.get(group_by) or ''))
+    field = TABLE_GROUP_FIELDS.get(rows.model._meta.label_lower, {}).get(group_by)
+    if not field or (field == 'endpoint_count' and field not in rows.query.annotations):
+        return rows
+    ordering = [name for name in rows.query.order_by if name.lstrip('-') != field]
+    return rows.order_by(field, *ordering, 'pk')
+
+
+def annotate_vulnerabilities(queryset):
+    """Count visible, open findings identically for assets and suggestions."""
+    return queryset.annotate(**{
+        f'vuln_{severity}': Count(
+            'finding', filter=Q(finding__severity=severity, finding__ignore=False) & ~Q(finding__status='fixed'),
+            distinct=True,
+        )
+        for severity in ('critical', 'high', 'medium', 'low', 'info')
+    })
+
+
+def get_column_search(query_params, field, fallback_index):
+    """Resolve column searches by field, retaining the legacy API index fallback."""
+    if 'columns[0][data]' in query_params:
+        for key, value in query_params.items():
+            if key.startswith('columns[') and key.endswith('[data]') and value == field:
+                return query_params.get(key[:-6] + '[search][value]')
+        return None
+    return query_params.get(f'columns[{fallback_index}][search][value]')
 
 
 def get_ordering_vars(query_params, default_column=None, default_direction=''):
@@ -27,50 +84,18 @@ def get_ordering_vars(query_params, default_column=None, default_direction=''):
 
 
 def apply_search_filter(queryset, search_value, field_paths, min_length=1):
-    """
-    Apply global search filter to queryset with support for negative search (fields starting with !).
-    
-    Args:
-        queryset: Django queryset to filter
-        search_value: Search string (if starts with !, it's a negative search)
-        field_paths: List of Django field paths (e.g., ["value__icontains", "description__icontains"])
-        min_length: Minimum length of search value to apply filter (default: 1)
-    
-    Returns:
-        Filtered queryset
-    
-    Examples:
-        # Global search across multiple fields
-        queryset = apply_search_filter(queryset, "test", [
-            "value__icontains", "description__icontains", "source__icontains"
-        ])
-        
-        # Negative search (exclude)
-        queryset = apply_search_filter(queryset, "!test", ["value__icontains", "description__icontains"])
-    """
-    if not search_value:
-        return queryset
-    
-    # Check for negative search
-    is_negative = search_value.startswith('!')
-    if is_negative:
-        search_value = search_value[1:]  # Remove the !
-    
-    # Check length after stripping the ! prefix
-    if not search_value or len(search_value) < min_length:
-        return queryset
-    
-    # Build Q objects for global search across multiple fields
-    q_objects = Q()
-    for field_path in field_paths:
-        q_objects |= Q(**{field_path: search_value})
-    
-    if is_negative:
-        queryset = queryset.exclude(q_objects)
-    else:
-        queryset = queryset.filter(q_objects)
-    
-    return queryset
+    """Match each comma-separated term across any field; ! excludes a term."""
+    return apply_column_search_multi(queryset, search_value, field_paths, min_length=min_length)
+
+
+def search_terms(search_value, delimiter=',', min_length=1):
+    """Yield (term, excluded) using the shared table search syntax."""
+    for segment in (search_value or '').split(delimiter):
+        segment = segment.strip()
+        excluded = segment.startswith('!')
+        term = segment[1:].strip() if excluded else segment
+        if term and len(term) >= min_length:
+            yield term, excluded
 
 
 def apply_column_search(queryset, search_value, field_path, min_length=1):
@@ -129,13 +154,7 @@ def apply_column_search_multi(queryset, search_value, field_path, delimiter=',',
     if not search_value:
         return queryset
     field_paths = field_path if isinstance(field_path, (list, tuple)) else [field_path]
-    segments = [s.strip() for s in search_value.split(delimiter) if s.strip()]
-    for segment in segments:
-        is_negative = segment.startswith('!')
-        if is_negative:
-            segment = segment[1:].strip()
-        if not segment or len(segment) < min_length:
-            continue
+    for segment, is_negative in search_terms(search_value, delimiter, min_length):
         field_q = Q()
         for fp in field_paths:
             field_q |= Q(**{fp: segment})

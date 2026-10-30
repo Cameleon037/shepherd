@@ -20,25 +20,12 @@
 <form id="form-selected">
   {% csrf_token %}
 
-<div class="container-fluid" style="padding-left:0; padding-right:0;">
-    <div class="row">
-        <div class="col-md-6">
-            <div class="panel panel-default">
-                <div class="panel-heading">// Selected Actions</div>
-                <div class="panel-body">
-                    <button type="button" name="btndelete" id="ignore-selected" class="btn btn-primary btn-xs confirm">Delete selected</button>&nbsp;
-                </div>
-            </div>
-        </div>
-        <!-- <div class="col-md-6">
-            <div class="panel panel-default">
-                <div class="panel-heading">// General Actions</div>
-                <div class="panel-body">
-                    <button type="button" class="btn btn-primary btn-xs" data-toggle="modal" data-target="#SuggestionModal">Scan Assets (coming soon)</button>&nbsp;
-                </div>
-            </div>
-        </div> -->
-    </div>
+<div class="list-selection-bar" role="group" aria-label="Selected port actions">
+  {% include "table_selection_status.html" %}
+  <div class="list-selection-actions">
+    <button type="button" name="btndelete" id="delete-selected-ports" class="btn btn-danger btn-sm" data-selection-action disabled>Delete</button>
+    <button type="button" class="btn btn-link btn-sm" data-clear-selection disabled>Clear selection</button>
+  </div>
 </div>
 
 <!-- Asset List Tabs -->
@@ -47,7 +34,7 @@
     // Open ports
   </div>
   <div class="panel-body">
-    <table id="table_list_ports" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;">
+    <table id="table_list_ports" class="table table-condensed table-striped table-bordered" width="100%" data-group-columns="asset_name,port">
         <thead>
             <tr>
                 <th><input type="checkbox" name="select_all" value="1" id="select-all-items-dom">&nbsp; Operations</th>
@@ -67,7 +54,6 @@
             </tr>
         </thead>
   </table>
-  <div id="selected-count">0 row(s) selected</div>
   </div>
 </div>
 
@@ -85,7 +71,6 @@ $(document).ready(function () {
         serverSide: true,
         pageLength: 25,
         orderCellsTop: true,
-        oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>" },
         order: [[1, "asc"]],
         ajax: {
             url: "{% url 'api:list_ports' projectid=projectid %}",
@@ -100,7 +85,7 @@ $(document).ready(function () {
                 "mRender": function (data, type, full) {
                     var delete_url_template = "{% url 'api:delete_port' projectid=projectid portid='__PORT__' %}";
                     var delete_url = delete_url_template.replace('__PORT__', data);
-                    return '<div class="btn-group1">' +
+                    return '<div class="table-row-actions">' +
                         '<input type="checkbox" name="id[]" value="' + $('<div/>').text(data).html() + '">&nbsp;&nbsp;' +
                         '<a href="#" class="btn btn-xs confirm" rel="tooltip" data-placement="right" ' +
                             'data-original-title="Delete Port" data-display="' + $('<div/>').text(full.asset_name || data).html() + '" ' +
@@ -168,19 +153,6 @@ $(document).ready(function () {
         ]
     });
 
-    // Custom functionality: Update selected count
-    function updateSelectedCount() {
-        var count = $('#table_list_ports tbody input[type="checkbox"]:checked').length;
-        $('#selected-count').text(count + " row(s) selected");
-    }
-
-    // Update the count of selected rows after the table is drawn
-    portTable.on('draw', function () {
-        updateSelectedCount();
-    });
-
-    // Bind updateSelectedCount to checkbox changes
-    $(document).on('change', '#table_list_ports input[type="checkbox"]', updateSelectedCount);
 });
 </script>
 {% endblock%}

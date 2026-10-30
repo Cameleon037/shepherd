@@ -2,10 +2,6 @@
 {% load static %}
 
 {% block header %}
-<style>
-#table_list_projects tbody tr.selected td {background-color:#B0BED9}
-#table_list_projects tbody tr.odd.selected td {background-color:#acbad4}
-</style>
 {% endblock %}
 
 {% block content %}
@@ -16,7 +12,7 @@
         </div>
         <div class="media-body">
             <h2 class="media-heading">🧾 Job</h2><span class="text-muted">ID: {{ j_obj.id }}</span>
-            <a id="delete-job" href="#" class="btn btn-xs" rel="tooltip" data-placement="right" data-original-title="Delete Job (kills process if running)" data-href="{% url 'api:delete_job' projectid=projectid job_id=j_obj.id %}">
+            <a id="delete-job" href="#" class="btn btn-danger btn-xs" aria-label="Delete job (kills process if running)" rel="tooltip" data-placement="right" data-original-title="Delete Job (kills process if running)" data-href="{% url 'api:delete_job' projectid=projectid job_id=j_obj.id %}">
                 <span class="glyphicon glyphicon-trash" aria-hidden="true"></span>
             </a>
         </div>
@@ -25,11 +21,7 @@
 {% if messages %}{% for message in messages %}<div {% if message.tags %} class="alert alert-{{ message.tags }}"{% endif %}>{{ message }}</div>{% endfor %}{% endif %}
 <div>
     <h4>Details</h4>
-    <table id="klammer" class="table table-condensed">
-        <tbody>
-            <tr>
-                <td>
-        <table id="asset_details" class="table table-condensed table-bordered" style="font-size: 0.9em;">
+        <table class="table table-condensed table-bordered">
         <tbody>
             <tr>
                 <td>Command:</td><td>{{ j_obj.command }}</td>
@@ -48,29 +40,11 @@
             </tr>
         </tbody>
         </table>
-                </td>
-                <td>
-        <table id="port_details" class="table table-condensed table-bordered" style="font-size: 0.9em;">
-            <tbody>
-            {% for port in asset.port_set.all %}
-            <tr>
-                <td>Port</td><td>{{ port.port }}</td>
-                <td>Banner</td><td>{{ port.banner }}</td>
-                <td>Product</td><td>{{ port.product }}</td>
-                <td>Last Scan</td><td>{{ port.scan_date }}</td>
-            </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-                </td>
-            </tr>
-        </tbody>
-    </table>
 </div>
 
 <div>
     <h4>Command output</h4>
-    <div id="job-output" style="max-height: 400px; overflow: auto; border: 1px solid #ddd; padding: 10px; background: #fafafa;">
+    <div id="job-output" class="job-output">
         {{ j_obj.output|linebreaksbr }}
     </div>
 </div>

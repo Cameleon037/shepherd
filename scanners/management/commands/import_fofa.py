@@ -5,7 +5,6 @@ import json
 import dateparser
 from datetime import datetime, timezone
 import uuid
-import tldextract
 import base64
 
 from project.models import Project
@@ -85,7 +84,6 @@ class Command(BaseCommand):
             sugg = {
                 "related_keyword": kw,
                 "related_project": prj,
-                "type": 'ip',
                 "value": ip_str,
                 "source": 'fofa',
                 "scope": 'external',
@@ -94,7 +92,6 @@ class Command(BaseCommand):
                 "creation_time": make_aware(dateparser.parse(datetime.now().isoformat(sep=" ", timespec="seconds"))),
                 "last_seen_time": make_aware(dateparser.parse(datetime.now().isoformat(sep=" ", timespec="seconds"))),
             }
-            sugg["subtype"] = 'host'
             item_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"{ip_str}:{prj.id}")
             sobj, created = Asset.objects.get_or_create(uuid=item_uuid, defaults=sugg)
 

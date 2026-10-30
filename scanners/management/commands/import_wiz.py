@@ -280,30 +280,11 @@ class Command(BaseCommand):
 
         description = ", ".join(description_parts) if description_parts else ""
 
-        # Determine asset type and subtype
-        asset_type = 'domain'
-        asset_subtype = 'subdomain'
-        
-        # Check if it's an IP address
-        if '.' in asset_value and all(part.isdigit() for part in asset_value.split('.')):
-            asset_type = 'ip'
-            asset_subtype = 'ip'
-        else:
-            # Check if it's a domain/subdomain
-            if '.' in asset_value:
-                parts = asset_value.split('.')
-                if len(parts) > 2:
-                    asset_subtype = 'subdomain'
-                else:
-                    asset_subtype = 'domain'
-
         # Prepare asset data
         asset_data = {
             "related_project": project,
             "value": asset_value,
             "source": source_name,
-            "type": asset_type,
-            "subtype": asset_subtype,
             "scope": "external",
             "description": description,
             # "raw": endpoint,

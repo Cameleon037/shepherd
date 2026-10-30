@@ -23,10 +23,10 @@
     // Jobs
   </div>
   <div class="panel-body">
-    <table id="table_list_jobs" class="table table-condensed table-striped table-bordered" style="font-size: 0.9em;">
+    <table id="table_list_jobs" class="table table-condensed table-striped table-bordered" width="100%" data-group-columns="command,status,username">
       <thead>
         <tr>
-          <th><input type="checkbox" name="select_all" value="1" id="select-all-jobs">&nbsp; Operations</th>
+          <th>Actions</th>
           <th>Command</th>
           <th>Start time</th>
           <th>Finished at</th>
@@ -46,7 +46,6 @@
   </div>
 </div>
 
-</form> <!-- close selection form -->
 
 
 {% endspaceless%}
@@ -57,32 +56,12 @@
 <script type="text/javascript" language="javascript" class="init">
 
 $(document).ready(function () {
-    // Function to initialize a DataTable with search functionality
-    function initializeDataTable(tableId, ajaxUrl, columns) {
-        return $(tableId).DataTable({
-            processing: true,
-            serverSide: true,
-            pageLength: 25,
-            orderCellsTop: true,
-            oLanguage: { sProcessing: "<img src='{% static 'img/loading.gif' %}'>", },
-            order: [[1, "asc"]],
-            ajax: {
-                url: ajaxUrl,
-                dataSrc: "results",
-                type: "GET",
-                dataType: "json"
-            },
-            columns: columns
-        });
-    }
-
     // Define columns for the monitored assets table
     const jobColumns = [
         {'data': 'id', 'sName': 'Operations', 'bSortable': false,
             "mRender": function (data, type, full) {
                 var delete_url = "{% url 'api:delete_job' projectid=projectid job_id='__ID__' %}".replace('__ID__', data);
-                return '<div class="btn-group1">' +
-                    '<input type="checkbox" name="id[]" value="' + $('<div/>').text(data).html() + '">' +
+                return '<div class="table-row-actions">' +
                     '<a class="btn btn-xs confirm" rel="tooltip" data-placement="right" data-original-title="Delete Job (kills process if running)" data-display="' + $('<div/>').text(full.command).html() + '" data-href="' + delete_url + '" href="#" data-method="DELETE">' +
                         '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
                     '</a>' +
@@ -130,14 +109,13 @@ $(document).ready(function () {
     ];
 
     // Initialize DataTables
-    var jobTable = initializeDataTable('#table_list_jobs', "{% url 'api:list_jobs' projectid=projectid %}", jobColumns);
+    var jobTable = createServerSideTable('#table_list_jobs', "{% url 'api:list_jobs' projectid=projectid %}", jobColumns, { order: [[1, 'asc']] });
 
     // Find the second header row (filter row) and bind to its inputs/selects
     var $filterRow = $('#table_list_jobs thead tr:eq(1)');
     applyDebouncedColumnSearch(jobTable, 'input.column-search-input', 'select.column-search-input', 400, $filterRow);
 
     // Initialize common standalone features
-    setupStandaloneSelectAll('#select-all-jobs', '#table_list_jobs');
     setupConfirmDialog(jobTable);
 });
 </script>

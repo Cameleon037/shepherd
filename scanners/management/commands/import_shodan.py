@@ -5,7 +5,6 @@ import json
 import dateparser
 from datetime import datetime, timezone
 import uuid
-import tldextract
 
 from project.models import Project
 from keywords.models import Keyword
@@ -184,7 +183,6 @@ class Command(BaseCommand):
                     sugg = {
                         "related_keyword": kw,
                         "related_project": prj,
-                        "type": 'domain',
                         "value": hostname,
                         "source": 'shodan',
                         "scope": 'external',
@@ -193,13 +191,6 @@ class Command(BaseCommand):
                         "creation_time": make_aware(dateparser.parse(datetime.now().isoformat(sep=" ", timespec="seconds"))),
                         "last_seen_time": make_aware(dateparser.parse(datetime.now().isoformat(sep=" ", timespec="seconds"))),
                     }
-                    # Check if domain or subdomain
-                    parsed_obj = tldextract.extract(hostname)
-                    if parsed_obj.subdomain:
-                        sugg["subtype"] = 'subdomain'
-                    else:
-                        sugg["subtype"] = 'domain'
-
                     item_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"{hostname}:{prj.id}")
                     sobj, created = Asset.objects.get_or_create(uuid=item_uuid, defaults=sugg)
 
@@ -216,20 +207,6 @@ class Command(BaseCommand):
                     matched_hostnames += 1
                     if self.verbosity >= 2:
                         self.stdout.write(f"    [{'new' if created else 'seen'}] {hostname} -> {item.get('ip_str')}:{item.get('port')}")
-
-                    # Add 2nd level domain if hostname is a subdomain
-                    # if parsed_obj.subdomain:
-                    #     domain = ".".join([parsed_obj.domain, parsed_obj.suffix])
-                    #     sugg["finding_subtype"] = 'domain'
-                    #     sugg["value"] = domain
-                    #     domain_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"{domain}:{prj.id}")
-                    #     sobj, created = Asset.objects.get_or_create(uuid=domain_uuid, defaults=sugg)
-                    #     if not created:
-                    #         if 'shodan' not in sobj.source:
-                    #             sobj.source = sobj.source + ", shodan"
-                    #         sobj.last_seen_time = make_aware(dateparser.parse(datetime.now().isoformat(sep=" ", timespec="seconds")))
-                    #         sobj.save()
-                    #     suggestion_count += 1
 
             self.stdout.write(f"[+] page {page}: {len(items)} match(es), {page_hostnames} hostname(s) matched '{keyword}'")
 
