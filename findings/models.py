@@ -38,6 +38,20 @@ class Finding(models.Model):
     ignore = models.BooleanField(default=False)
     comment = models.TextField(default='', blank=True, null=True)
 
+    # Lifecycle: open findings are visible in the main windows; 'fixed' rows are
+    # kept for history (set by scanners when a covering scan/probe no longer
+    # reproduces them). Findings are never deleted by scanners — deletion is a
+    # manual action only.
+    STATUS_OPEN = 'open'
+    STATUS_FIXED = 'fixed'
+    STATUS_CHOICES = [(STATUS_OPEN, 'Open'), (STATUS_FIXED, 'Fixed')]
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_OPEN)
+    fixed_date = models.DateTimeField(null=True, blank=True, default=None)
+
+    # nuclei template id that originally produced this finding; used by
+    # scan_nuclei --check to re-probe the exact vulnerability
+    template_id = models.CharField(max_length=255, default='', blank=True)
+
     # Severity fields
     severity = models.CharField(max_length=50, default='', null=True)
     cve = models.CharField(max_length=1024, default='', null=True)
@@ -49,7 +63,7 @@ class Finding(models.Model):
     # Time related fields
     scan_date = models.DateTimeField(null=True)
     first_seen = models.DateTimeField(auto_now_add=True)
-    last_seen = models.DateTimeField(auto_now=True)
+    last_seen = models.DateTimeField(null=True, blank=True)
     last_reported = models.DateTimeField(blank=True, null=True)
 
     reported = models.BooleanField(default=False)

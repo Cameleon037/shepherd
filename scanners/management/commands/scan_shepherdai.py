@@ -48,7 +48,6 @@ class Command(BaseCommand):
                 continue
 
             self.stdout.write(f"[+] Analyzing domain: {asset.value}")
-            Finding.objects.filter(asset=asset, source="shepherdai").delete()
             findings = asyncio.run(self._analyze_asset(asset.value, context["json_blob"]))
             self._store_findings(asset, findings)
 
@@ -162,7 +161,7 @@ class Command(BaseCommand):
             )
 
         existing_findings = serialize_queryset(
-            Finding.objects.filter(asset=asset).order_by("-scan_date")[:10],
+            Finding.objects.filter(asset=asset).exclude(status=Finding.STATUS_FIXED).order_by("-scan_date")[:10],
             ["name", "severity", "description", "reported", "scan_date"],
         )
 
@@ -202,16 +201,21 @@ class Command(BaseCommand):
                     continue
 
         self.stdout.write("[WARNING] Could not parse AI response as JSON.")
-        return {"findings": []}
+        return None
 
     def _store_findings(self, asset, findings):
-        payload = findings or {}
+        if findings is None:
+            # Parse failure: nothing was proven about the asset, so existing
+            # findings stay open — absence marking is skipped.
+            return None
+        payload = findings
         results = payload.get("findings", [])
         if not isinstance(results, list):
             self.stdout.write("[WARNING] AI returned invalid findings list.")
-            return
+            return None
 
         self.stdout.write(f"[+] New findings identified: {len(results)}")
+        created_ids = []
         for finding in results:
             name = finding.get("name")
             if not name:
@@ -247,5 +251,23 @@ class Command(BaseCommand):
                 reported=False,
             )
 
+            created_ids.append(finding_obj.id)
+
             self.stdout.write(f"    - Stored finding: {finding_obj.name} ({severity_raw})")
+
+        # A full AI re-analysis covers the asset: open rows of this source that
+        # this run did not re-identify are fixed — never deleted (comments,
+        # ignore flags and reporting history stay on the row).
+        fixed = Finding.objects.filter(
+            asset=asset,
+            source="shepherdai",
+            ignore=False,
+            status=Finding.STATUS_OPEN,
+        ).exclude(id__in=created_ids).update(
+            status=Finding.STATUS_FIXED,
+            fixed_date=make_aware(datetime.now()),
+        )
+        self.stdout.write(f"[i] Marked {fixed} prior shepherdai findings as fixed (no deletions)")
+
+        return created_ids
 

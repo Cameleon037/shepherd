@@ -59,6 +59,19 @@ class Command(BaseCommand):
             help='Only scan assets never scanned or last scanned more than DAYS days ago',
             required=False,
         )
+        parser.add_argument(
+            '--check',
+            action='store_true',
+            help='Re-probe open findings with the exact nuclei template that found them; '
+                 'mark those that no longer reproduce as fixed',
+        )
+        parser.add_argument(
+            '--check-severity',
+            type=str,
+            default='high,critical',
+            metavar='LIST',
+            help='Comma-separated severities of open findings to re-probe (default: high,critical)',
+        )
 
     # -------------------------------------------------------------------------
     # Main entry point
@@ -67,6 +80,12 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         if kwargs.get('update'):
             self.update_nuclei()
+            return
+
+        if kwargs.get('check'):
+            if kwargs.get('nt'):
+                raise CommandError('--check cannot be combined with --nt')
+            self._check_findings(**kwargs)
             return
 
         domains = self._get_domains_to_scan(**kwargs)
@@ -305,47 +324,53 @@ class Command(BaseCommand):
         return findings, scan_ok
 
     # -------------------------------------------------------------------------
-    # Save findings to DB
-    #   Full successful scan → delete old + bulk_create (fast for large result sets)
-    #   Failed full scan     → get_or_create (preserves old findings, avoids duplicates)
-    #   --nt scan            → get_or_create (preserves existing findings)
+    # Save findings to DB — findings are never deleted by scanners.
+    #   Full successful scan → upsert results, then mark open nuclei findings
+    #                          that the scan did not reproduce as 'fixed'
+    #   Failed full scan     → upsert only (partial coverage proves nothing)
+    #   --nt scan            → upsert only (only new templates ran)
     # -------------------------------------------------------------------------
 
     def _save_findings(self, findings, chunk, scan_time, nt_option, scan_ok):
-        if not nt_option:
-            # Full scan: cleanup is only safe when nuclei completed successfully.
-            if scan_ok:
-                uuids = [a.uuid for a in chunk]
-                deleted, _ = Finding.objects.filter(asset__uuid__in=uuids, source='nuclei').delete()
-                if deleted:
-                    self.stdout.write(f'  Deleted {deleted:,} old findings')
-
-        if not findings:
-            return
-
         domain_map = {a.value: a for a in chunk}
         grouped = self._group_findings_by_domain(findings, domain_map)
 
         if not nt_option and scan_ok:
-            # Successful full scan: old findings were already deleted; bulk-insert fresh findings.
-            seen = set()
-            objs = []
-            for domain, items in grouped.items():
-                for item in items:
-                    data = self._build_finding_data(domain, item, scan_time)
-                    key = (data['asset_name'], data['source'], data['name'], data['type'], data['url'])
-                    if key not in seen:
-                        seen.add(key)
-                        objs.append(Finding(**data))
-
-            if objs:
-                Finding.objects.bulk_create(objs, batch_size=self.DB_BATCH_SIZE)
-                self.stdout.write(f'  Saved {len(objs):,} findings (bulk)')
+            # Successful full scan: reconcile — upsert results, then mark
+            # non-reproduced open nuclei findings as fixed. Never delete.
+            count = self._upsert_findings(grouped, scan_time)
+            fixed = self._mark_absent_findings(chunk, scan_time, source='nuclei')
+            self.stdout.write(f'  Saved {count:,} findings | {fixed} marked fixed (no deletions)')
+        elif not findings:
+            return
         else:
-            # --nt scans and failed full scans preserve existing findings.
+            # --nt and failed full scans preserve existing findings (partial
+            # coverage proves nothing: absence must NOT mark fixed).
             count = self._upsert_findings(grouped, scan_time)
             label = '--nt scan' if nt_option else 'partial scan'
             self.stdout.write(f'  Saved {count:,} findings from {label} (get_or_create)')
+
+    def _mark_absent_findings(self, chunk, scan_time, source):
+        """Mark open findings of `source` on these assets as fixed.
+
+        Only safe when the run's template set fully covered detection
+        (successful full scans): _upsert_findings just wrote scan_date=scan_time
+        for every reproduced finding, so open rows still carrying an older
+        scan_date were not seen and count as fixed. Rows are never deleted.
+        """
+        objs = list(Finding.objects.filter(
+            asset__in=chunk,
+            source=source,
+            ignore=False,
+            status=Finding.STATUS_OPEN,
+        ).exclude(scan_date=scan_time))
+        for obj in objs:
+            obj.status = Finding.STATUS_FIXED
+            obj.fixed_date = scan_time
+        if objs:
+            Finding.objects.bulk_update(
+                objs, ['status', 'fixed_date'], batch_size=self.DB_BATCH_SIZE)
+        return len(objs)
 
     def _upsert_findings(self, grouped, scan_time):
         """Insert or update findings without deleting existing ones."""
@@ -365,6 +390,12 @@ class Command(BaseCommand):
                 obj, _ = Finding.objects.get_or_create(**lookup, defaults=defaults)
                 obj.scan_date = scan_time
                 obj.last_seen = scan_time
+                if data.get('template_id'):
+                    obj.template_id = data['template_id']
+                if obj.status == Finding.STATUS_FIXED:
+                    # Regression: a previously fixed finding was re-detected.
+                    obj.status = Finding.STATUS_OPEN
+                    obj.fixed_date = None
                 obj.save()
                 count += 1
         return count
@@ -419,6 +450,7 @@ class Command(BaseCommand):
             'name': info.get('name', 'Unknown'),
             'type': finding.get('type', ''),
             'url': url,
+            'template_id': finding.get('template-id', ''),
             'description': description,
             'solution': solution,
             'reference': reference,
@@ -431,6 +463,181 @@ class Command(BaseCommand):
             'scan_date': scan_time,
             'last_seen': scan_time,
         }
+
+    # -------------------------------------------------------------------------
+    # --check mode: re-probe open nuclei findings with their recorded template
+    # -------------------------------------------------------------------------
+
+    def _check_findings(self, **kwargs):
+        """Re-probe open nuclei findings with the exact template that found them.
+
+        Each finding is re-tested by re-running its stored template_id against
+        its stored URL — never a full rescan of the target. Reproduced findings
+        stay open with scan_date/last_seen refreshed; findings not reproduced by
+        a successful probe run are marked fixed. Findings whose template run
+        fails stay open (a failed probe proves nothing). No inserts, no deletes,
+        and Asset.last_scan_time stays untouched (a probe run is not a scan).
+        """
+        raw_sev = kwargs.get('check_severity') or 'high,critical'
+        sevs = [s.strip().lower() for s in raw_sev.split(',') if s.strip()]
+        if not sevs:
+            raise CommandError('--check-severity must list at least one severity')
+
+        findings = Finding.objects.filter(
+            source='nuclei',
+            ignore=False,
+            status=Finding.STATUS_OPEN,
+            severity__in=sevs,
+            asset__monitor=True,
+            asset__ignore=False,
+        )
+
+        projectid = kwargs.get('projectid')
+        if projectid:
+            try:
+                project = Project.objects.get(id=projectid)
+            except Project.DoesNotExist:
+                raise CommandError(f"Project with ID {projectid} does not exist.")
+            findings = findings.filter(asset__related_project=project)
+
+        scope_filter = kwargs.get('scope')
+        if scope_filter:
+            findings = findings.filter(asset__scope__iexact=scope_filter)
+
+        uuid_list = resolve_uuids(kwargs)
+        if uuid_list:
+            findings = findings.filter(asset__uuid__in=uuid_list)
+
+        legacy = findings.filter(template_id='').count()
+        if legacy:
+            self.stdout.write(
+                f'[i] {legacy} open findings have no template_id and cannot be re-probed '
+                f'(they update on the next full nuclei scan)'
+            )
+        findings = findings.exclude(template_id='')
+
+        by_template = {}
+        for f in findings.iterator(chunk_size=1000):
+            by_template.setdefault(f.template_id, []).append(f)
+
+        check_time = make_aware(datetime.now())
+        probed = present = fixed = failed_runs = 0
+
+        for template_id, items in sorted(by_template.items()):
+            for i in range(0, len(items), self.CHUNK_SIZE):
+                batch = items[i:i + self.CHUNK_SIZE]
+                urls = sorted({f.url for f in batch if f.url})
+                if not urls:
+                    continue
+                targets_path = None
+                try:
+                    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as tf:
+                        targets_path = tf.name
+                        for url in urls:
+                            tf.write(f'{url}\n')
+
+                    results, ok = self._run_nuclei_for_template(template_id, targets_path)
+                    if not ok:
+                        failed_runs += 1
+                        continue
+
+                    # The probe re-runs the recorded template against the recorded
+                    # matched-at URL, so any reproduction returns that same URL.
+                    seen = {
+                        (r.get('template-id', ''), r.get('matched-at') or r.get('url', ''))
+                        for r in results
+                    }
+                    still_present, now_fixed = [], []
+                    for f in batch:
+                        if (f.template_id, f.url) in seen:
+                            f.scan_date = check_time
+                            f.last_seen = check_time
+                            still_present.append(f)
+                        else:
+                            f.status = Finding.STATUS_FIXED
+                            f.fixed_date = check_time
+                            now_fixed.append(f)
+
+                    if still_present:
+                        Finding.objects.bulk_update(
+                            still_present, ['scan_date', 'last_seen'], batch_size=self.DB_BATCH_SIZE)
+                    if now_fixed:
+                        Finding.objects.bulk_update(
+                            now_fixed, ['status', 'fixed_date'], batch_size=self.DB_BATCH_SIZE)
+
+                    probed += len(batch)
+                    present += len(still_present)
+                    fixed += len(now_fixed)
+                except Exception as e:
+                    self.stderr.write(f'  ERROR checking template {template_id}: {e}')
+                finally:
+                    if targets_path and os.path.exists(targets_path):
+                        try:
+                            os.unlink(targets_path)
+                        except OSError:
+                            pass
+
+        self.stdout.write(
+            f'CHECK COMPLETE: {probed:,} findings probed across {len(by_template):,} templates | '
+            f'{present:,} still present | {fixed:,} marked fixed | {failed_runs} template runs failed'
+        )
+
+    def _run_nuclei_for_template(self, template_id, targets_path):
+        """Run one nuclei template (nuclei -id <template-id>) against a URL list.
+
+        Deliberately minimal: only the recorded template runs against the
+        recorded URLs — no full template set, no -severity, no -exclude-tags,
+        no -ss. Returns (results, ok). On any nuclei failure ok=False (and an
+        empty result list); the caller must then leave findings untouched so a
+        missing/renamed template never produces false fixes.
+        """
+        results_path = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.json') as rf:
+                results_path = rf.name
+
+            cmd = [
+                'nuclei',
+                '-id', template_id,
+                '-l', targets_path,
+                '-je', results_path,
+                '-c', '25',
+                '-rl', str(self.NUCLEI_RATE_LIMIT),
+                '-timeout', str(self.NUCLEI_TIMEOUT),
+                '-retries', str(self.NUCLEI_RETRIES),
+                '-duc',
+                '-nc',
+            ]
+            proc = subprocess.run(
+                cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
+            if proc.returncode != 0:
+                self.stderr.write(
+                    f'  [skip] template {template_id} run failed (exit {proc.returncode}); '
+                    f'findings left open'
+                )
+                return [], False
+
+            results = []
+            if os.path.exists(results_path) and os.path.getsize(results_path) > 0:
+                with open(results_path, 'r', encoding='utf-8', errors='replace') as f:
+                    content = f.read().strip()
+                    if content:
+                        parsed = json.loads(content)
+                        if isinstance(parsed, list):
+                            results = parsed
+                        else:
+                            self.stderr.write(
+                                f'  [skip] template {template_id} results file held no JSON array; '
+                                f'findings left open'
+                            )
+                            return [], False
+            return results, True
+        finally:
+            if results_path and os.path.exists(results_path):
+                try:
+                    os.unlink(results_path)
+                except OSError:
+                    pass
 
     def _time_based_template_ids(self):
         """Write IDs of time-based (duration) templates to a temp file; return its path.

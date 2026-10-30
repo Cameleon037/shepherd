@@ -45,7 +45,7 @@ def dashboard(request):
 
     # Findings (via asset's related_project)
     # Exclude findings that are ignored OR findings related to ignored domains
-    findings = Finding.objects.filter(asset__related_project_id=project_id).exclude(ignore=True).exclude(asset__ignore=True)
+    findings = Finding.objects.filter(asset__related_project_id=project_id).exclude(ignore=True).exclude(asset__ignore=True).exclude(status='fixed')
     context['num_findings'] = findings.count()
     context['findings_by_severity'] = list(
         findings.values('severity')
@@ -112,7 +112,7 @@ def dashboard(request):
     # Count only non-ignored findings from non-ignored domains
     context['most_vulnerable_assets'] = list(
         assets.filter(ignore=False)
-        .annotate(finding_count=Count('finding', filter=Q(finding__ignore=False) & Q(finding__asset__ignore=False)))
+        .annotate(finding_count=Count('finding', filter=Q(finding__ignore=False) & Q(finding__asset__ignore=False) & ~Q(finding__status='fixed')))
         .filter(finding_count__gt=0)
         .order_by('-finding_count')[:10]
         .values('uuid', 'value', 'finding_count')

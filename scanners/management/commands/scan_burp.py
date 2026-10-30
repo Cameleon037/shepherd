@@ -501,6 +501,7 @@ class Command(BaseCommand):
                 'solution': remediation,
                 'vulnerabilityDetails': f"Confidence: {confidence}",
                 'scan_date': scan_time,
+                'last_seen': scan_time,
                 'raw': issue,
             }
 
@@ -517,6 +518,7 @@ class Command(BaseCommand):
                 obj.solution = remediation
                 obj.vulnerabilityDetails = f"Confidence: {confidence}"
                 obj.scan_date = scan_time
+                obj.last_seen = scan_time
                 obj.raw = issue
                 obj.save()
                 updated_count += 1

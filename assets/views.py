@@ -435,7 +435,7 @@ def view_asset(request, uuid):
         'asset': a_obj,
         'ports': a_obj.port_set.all().order_by('port'),
         'screenshots': Screenshot.objects.filter(asset=a_obj).order_by('-date'),
-        'findings': a_obj.finding_set.filter(ignore=False).order_by('-severity', '-scan_date', '-id'),
+        'findings': a_obj.finding_set.filter(ignore=False, status='open').order_by('-severity', '-scan_date', '-id'),
         'ignored_findings': a_obj.finding_set.filter(ignore=True).order_by('-severity', '-scan_date', '-id'),
         'dns_records': dns_records,
         'endpoints': endpoints,

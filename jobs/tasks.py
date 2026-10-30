@@ -24,6 +24,7 @@ get_dns_records --projectid 1
 scan_nmap --projectid 1
 scan_httpx --projectid 1
 scan_nuclei --projectid 1 --nt
+scan_nuclei --projectid 1 --check --scope external
 
 # Readjustment
 scan_nuclei --update
@@ -209,6 +210,13 @@ def scan_nuclei_update_task():
     args = '--update'
     run_job(command, args, None, user=scheduler_user)
     return "scan_nuclei --update completed"
+
+@shared_task
+def check_findings_task():
+    command = 'scan_nuclei'
+    args = f'--projectid {project_id} --check --scope external'
+    run_job(command, args, project_id, user=scheduler_user)
+    return "scan_nuclei --check completed"
 
 @shared_task
 def scan_httpx_missing_screenshots_task():

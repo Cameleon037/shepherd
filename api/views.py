@@ -421,11 +421,11 @@ def list_assets(request, projectid, format=None):
 
     # Annotate vulnerabilities (exclude ignored findings)
     queryset = queryset.annotate(
-        vuln_info=Count('finding', filter=Q(finding__severity='info') & Q(finding__ignore=False), distinct=True),
-        vuln_critical=Count('finding', filter=Q(finding__severity='critical') & Q(finding__ignore=False), distinct=True),
-        vuln_high=Count('finding', filter=Q(finding__severity='high') & Q(finding__ignore=False), distinct=True),
-        vuln_medium=Count('finding', filter=Q(finding__severity='medium') & Q(finding__ignore=False), distinct=True),
-        vuln_low=Count('finding', filter=Q(finding__severity='low') & Q(finding__ignore=False), distinct=True),
+        vuln_info=Count('finding', filter=Q(finding__severity='info') & Q(finding__ignore=False) & ~Q(finding__status='fixed'), distinct=True),
+        vuln_critical=Count('finding', filter=Q(finding__severity='critical') & Q(finding__ignore=False) & ~Q(finding__status='fixed'), distinct=True),
+        vuln_high=Count('finding', filter=Q(finding__severity='high') & Q(finding__ignore=False) & ~Q(finding__status='fixed'), distinct=True),
+        vuln_medium=Count('finding', filter=Q(finding__severity='medium') & Q(finding__ignore=False) & ~Q(finding__status='fixed'), distinct=True),
+        vuln_low=Count('finding', filter=Q(finding__severity='low') & Q(finding__ignore=False) & ~Q(finding__status='fixed'), distinct=True),
         endpoint_count=Count('endpoint', distinct=True)
     )
 
@@ -1183,7 +1183,9 @@ def bulk_ports(request, projectid, format=None):
 @extend_schema(
     tags=['Findings'],
     summary='List findings',
-    description='DataTables-backed list of security findings for a project.',
+    description="DataTables-backed list of security findings for a project. "
+                "The 'status' query parameter filters by finding status "
+                "('open', 'fixed' or 'all'; default 'open' hides fixed findings).",
     parameters=DATATABLES_PARAMETERS + [SELECTION_PARAMETER],
     responses={200: FindingSerializer(many=True)},
 )
@@ -1227,6 +1229,11 @@ def list_all_findings(request, projectid, format=None):
     if severity_param is not None and severity_param != "":
         queryset = queryset.filter(severity__iexact=severity_param)
 
+    # Filter by finding status if provided (default: hide fixed findings)
+    status_param = request.query_params.get('status', 'open')
+    if status_param not in ('all', ''):
+        queryset = queryset.filter(status=status_param)
+
     # Get search parameters
     search_value = request.query_params.get('search[value]', None)
     queryset = apply_search_filter(
@@ -1241,9 +1248,15 @@ def list_all_findings(request, projectid, format=None):
     search_description = request.query_params.get('columns[4][search][value]', None)
     search_source = request.query_params.get('columns[5][search][value]', None)
     search_severity = request.query_params.get('columns[6][search][value]', None)
-    search_scan_date = request.query_params.get('columns[7][search][value]', None)
-    search_last_reported = request.query_params.get('columns[8][search][value]', None)
-    search_comment = request.query_params.get('columns[9][search][value]', None)
+    search_status = request.query_params.get('columns[7][search][value]', None)
+
+    # The status dropdown is bound as a column search too; 'all' means no
+    # status filtering, not a literal match against the word 'all'.
+    if search_status in ('all', ''):
+        search_status = None
+    search_scan_date = request.query_params.get('columns[8][search][value]', None)
+    search_last_reported = request.query_params.get('columns[9][search][value]', None)
+    search_comment = request.query_params.get('columns[10][search][value]', None)
 
     ### filter by column-specific search values
     queryset = apply_column_search_multi(queryset, search_domain_name, 'asset_name__icontains', min_length=1)
@@ -1252,6 +1265,7 @@ def list_all_findings(request, projectid, format=None):
     queryset = apply_column_search_multi(queryset, search_description, 'description__icontains', min_length=1)
     queryset = apply_column_search_multi(queryset, search_source, 'source__icontains', min_length=1)
     queryset = apply_column_search_multi(queryset, search_severity, 'severity__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_status, 'status__icontains', min_length=1)
     queryset = apply_column_search_multi(queryset, search_scan_date, 'scan_date__icontains', min_length=1)
     queryset = apply_column_search_multi(queryset, search_last_reported, 'last_reported__icontains', min_length=1)
     queryset = apply_column_search_multi(queryset, search_comment, 'comment__icontains', min_length=1)

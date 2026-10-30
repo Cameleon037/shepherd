@@ -66,6 +66,7 @@
           <th>Description</th>
           <th>Source</th>
           <th>Severity</th>
+          <th>Status</th>
           <th>Scan Date</th>
           <th>Last Reported</th>
           <th>Comment</th>
@@ -85,6 +86,13 @@
               <option value="medium">Medium</option>
               <option value="high">High</option>
               <option value="critical">Critical</option>
+            </select>
+          </th>
+          <th>
+            <select id="status-filter" class="column-search-input form-control input-sm">
+              <option value="open" selected>Open</option>
+              <option value="fixed">Fixed</option>
+              <option value="all">All</option>
             </select>
           </th>
           <th><input type="text" placeholder="Search Scan Date" class="column-search-input form-control input-sm"></th>
@@ -158,6 +166,10 @@ $(document).ready( function () {
                 if (severityFilter !== undefined && severityFilter !== "") {
                     d.severity = severityFilter;
                 }
+                var statusFilter = $('#status-filter').val();
+                if (statusFilter !== undefined && statusFilter !== "") {
+                    d.status = statusFilter;
+                }
             }
         },
         columns: [
@@ -214,7 +226,18 @@ $(document).ready( function () {
                     return type === 'display' ? html : data;
                 }
             },
-            {'data': 'scan_date', 'sName': 'Scan Date', 'aTargets': [ 7 ],
+            {
+                'data': 'status',
+                'sName': 'Status',
+                'aTargets': [7],
+                'render': function(data, type, row) {
+                    var label = (data === 'fixed') ? 'Fixed' : 'Open';
+                    var cls = (data === 'fixed') ? 'info' : 'high';
+                    var html = '<span class="severity-badge severity-' + cls + '">' + label + '</span>';
+                    return type === 'display' ? html : (data || '');
+                }
+            },
+            {'data': 'scan_date', 'sName': 'Scan Date', 'aTargets': [ 8 ],
                 'render': function(data, type, row) {
                 if (!data) return '';
                 // Use moment.js for formatting if available
@@ -225,7 +248,7 @@ $(document).ready( function () {
                 return data;
                 }
             },
-            {'data': 'last_reported', 'sName': 'Last reported', 'aTargets': [ 8 ],
+            {'data': 'last_reported', 'sName': 'Last reported', 'aTargets': [ 9 ],
                 'render': function(data, type, row) {
                 if (!data) return '';
                 // Use moment.js for formatting if available
@@ -236,7 +259,7 @@ $(document).ready( function () {
                 return data;
                 }
             },
-            {'data': 'comment', 'sName': 'Comment', 'aTargets': [ 9 ]},
+            {'data': 'comment', 'sName': 'Comment', 'aTargets': [ 10 ]},
         ]
     });
 
@@ -247,6 +270,11 @@ $(document).ready( function () {
 
     // Apply the severity filter (server-side)
     $('#severity-filter').on('change', function () {
+        findingsTable.ajax.reload();
+    });
+
+    // Server-side status filter
+    $('#status-filter').on('change', function () {
         findingsTable.ajax.reload();
     });
 
