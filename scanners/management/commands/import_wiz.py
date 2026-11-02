@@ -150,7 +150,9 @@ class Command(BaseCommand):
             contentType
             screenshotUrl
           }
-          exposureLevel
+          # exposureLevel is non-nullable in Wiz's schema; some endpoints have
+          # null exposureLevel server-side, which nulls the whole page and is
+          # only reported in extensions.valueCompletion. We never consume it.
           scanSources
           issueAnalytics {
             informationalSeverityCount
@@ -238,7 +240,11 @@ class Command(BaseCommand):
                     endpoints_data = result['data']['applicationEndpoints']
                     nodes = endpoints_data.get('nodes')
                     if not isinstance(nodes, list):
-                        raise CommandError(f"Wiz API returned invalid 'nodes' on page {page_num}: {nodes!r}")
+                        # Wiz hides field-level failures in extensions.valueCompletion
+                        raise CommandError(
+                            f"Wiz API returned invalid 'nodes' on page {page_num}: {nodes!r} "
+                            f"extensions: {result.get('extensions')!r}"
+                        )
                     all_endpoints.extend(nodes)
                     pageInfo = endpoints_data.get('pageInfo', {})
                     self.stdout.write(f"[+] Fetched page {page_num}: {len(all_endpoints)} total endpoints...")
