@@ -103,7 +103,18 @@ class Command(BaseCommand):
         except requests.exceptions.Timeout as e:
             raise CommandError(f"Request timed out: {str(e)}")
 
-        return result.json()
+        try:
+            body = result.json()
+        except ValueError:
+            raise CommandError(
+                f"Wiz API returned non-JSON body (HTTP {result.status_code}): {result.text[:300]!r}"
+            )
+        if not isinstance(body, dict):
+            # e.g. a proxy returning an empty 200 with body "null"
+            raise CommandError(
+                f"Wiz API returned unexpected JSON body (HTTP {result.status_code}): {result.text[:300]!r}"
+            )
+        return body
 
     def fetch_all_endpoints(self, dc, token):
         """Fetch all application endpoints from Wiz using pagination"""
@@ -191,9 +202,12 @@ class Command(BaseCommand):
             raise CommandError(f"GraphQL Error: {result['errors']}")
 
         # Get first page of results
-        if 'data' in result and 'applicationEndpoints' in result['data']:
+        if isinstance(result.get('data'), dict) and 'applicationEndpoints' in result['data']:
             endpoints_data = result['data']['applicationEndpoints']
-            all_endpoints.extend(endpoints_data.get('nodes', []))
+            nodes = endpoints_data.get('nodes')
+            if not isinstance(nodes, list):
+                raise CommandError(f"Wiz API returned invalid 'nodes' on page 1: {nodes!r}")
+            all_endpoints.extend(nodes)
 
             total_count = endpoints_data.get('totalCount', 'unknown')
             self.stdout.write(f"[+] Total endpoints available: {total_count}")
@@ -205,6 +219,11 @@ class Command(BaseCommand):
 
             while pageInfo.get('hasNextPage', False):
                 page_num += 1
+                if not pageInfo.get('endCursor'):
+                    raise CommandError(
+                        f"Wiz API reports more pages but no endCursor after page {page_num - 1}; "
+                        "cursor likely expired mid-scan"
+                    )
                 # Fetch next page
                 variables['after'] = pageInfo['endCursor']
                 result = self.query_wiz_api(query, variables, dc, token)
@@ -215,9 +234,12 @@ class Command(BaseCommand):
                     # which would delete assets that only appear on later pages.
                     raise CommandError(f"GraphQL Error on page {page_num}: {result['errors']}")
 
-                if 'data' in result and 'applicationEndpoints' in result['data']:
+                if isinstance(result.get('data'), dict) and 'applicationEndpoints' in result['data']:
                     endpoints_data = result['data']['applicationEndpoints']
-                    all_endpoints.extend(endpoints_data.get('nodes', []))
+                    nodes = endpoints_data.get('nodes')
+                    if not isinstance(nodes, list):
+                        raise CommandError(f"Wiz API returned invalid 'nodes' on page {page_num}: {nodes!r}")
+                    all_endpoints.extend(nodes)
                     pageInfo = endpoints_data.get('pageInfo', {})
                     self.stdout.write(f"[+] Fetched page {page_num}: {len(all_endpoints)} total endpoints...")
                 else:
