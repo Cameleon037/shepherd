@@ -6,7 +6,7 @@ import threading
 from django.db.models import Q
 
 from assets.models import Asset
-from jobs.utils import run_job
+from jobs.utils import run_job, reap_stale_jobs
 from scanners.scan_utils import write_uuids_file
 
 
@@ -39,6 +39,8 @@ def filter_assets_for_project(project_id, filters):
 
 
 def run_scan_jobs(project_id, user, selected_uuids, scan_new_assets, scans):
+    # Clear any stranded 'running' rows / orphaned browsers from earlier runs.
+    reap_stale_jobs()
     selected_uuids = [str(uuid) for uuid in (selected_uuids or [])]
     threads = []
     triggered_messages = []

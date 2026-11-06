@@ -1,5 +1,5 @@
 from celery import shared_task
-from jobs.utils import run_job
+from jobs.utils import run_job, reap_stale_jobs
 from django.contrib.auth import get_user_model
 
 try:
@@ -179,6 +179,8 @@ def scan_playwright_task():
 @shared_task
 def scan_feroxbuster_task():
     command = 'scan_feroxbuster'
+    # Katana/feroxbuster buffer their tool output: the wrapper is silent while the
+    # tool runs, so they need the long idle allowance like nuclei/httpx.
     args = f'--projectid {project_id} --scope external'
     run_job(command, args, project_id, user=scheduler_user)
     return "scan_feroxbuster completed"
@@ -224,3 +226,10 @@ def scan_httpx_missing_screenshots_task():
     args = f'--projectid {project_id} --missing-screenshots --scope external'
     run_job(command, args, project_id, user=scheduler_user)
     return "scan_httpx --missing-screenshots completed"
+
+@shared_task
+def reap_stale_jobs_task():
+    """Flip stranded running jobs to failed and reclaim orphaned Chromium.
+    Register a django_celery_beat PeriodicTask for this (see plan); the launch
+    and Jobs-page hooks also clear orphans without it."""
+    return f"reaped {reap_stale_jobs()} stale jobs"

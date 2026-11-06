@@ -1,5 +1,9 @@
 import asyncio
 import base64
+import os
+import signal
+import threading
+import time
 from urllib.parse import urlparse
 from django.core.management.base import BaseCommand, CommandError
 from django.utils.timezone import make_aware
@@ -11,6 +15,21 @@ from scanners.tech_detect import detect_technologies
 from findings.models import Screenshot
 from django.conf import settings
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError, Error as PlaywrightError
+
+from jobs.utils import _descendant_browser_pids
+
+# Bounds so a single page that spins a Chromium renderer cannot freeze an entire
+# batch (and thus the whole scan). A wedged browser is force-killed, not waited on.
+BROWSER_LAUNCH_TIMEOUT = 120
+CLOSE_TIMEOUT = 15
+BATCH_WALL_BUDGET = 20 * 60
+# After a Playwright call blows its per-URL timeout we try to cancel it; if it is
+# still running this long later the renderer is wedged (an in-flight Playwright
+# call on a dead renderer is not cancellable) and the browser gets killed.
+CANCEL_GRACE = 5
+# How long to wait for a killed browser to release its in-flight calls before the
+# batch is abandoned rather than waited on.
+STUCK_RELEASE_GRACE = 30
 
 
 class Command(BaseCommand):
@@ -141,16 +160,35 @@ class Command(BaseCommand):
             end_idx = min(start_idx + batch_size, len(playwright_urls))
             batch_urls = playwright_urls[start_idx:end_idx]
             
-            # Run the async function for this batch
-            batch_results = asyncio.run(self.capture_screenshots(
-                batch_urls,
-                max_concurrent=max_concurrent,
-                timeout=timeout,
-                viewport_width=viewport_width,
-                viewport_height=viewport_height,
-                headless=headless
-            ))
-            
+            # Run the async function for this batch under a wall-clock watchdog: if a
+            # wedged browser stalls the batch, the watchdog SIGKILLs the browser
+            # processes from a separate thread (independent of the event loop), which
+            # unblocks the awaiting tasks so the scan proceeds to the next batch.
+            watchdog = threading.Timer(BATCH_WALL_BUDGET, self._force_kill_browsers)
+            watchdog.daemon = True
+            watchdog.start()
+            try:
+                batch_results = asyncio.run(self.capture_screenshots(
+                    batch_urls,
+                    max_concurrent=max_concurrent,
+                    timeout=timeout,
+                    viewport_width=viewport_width,
+                    viewport_height=viewport_height,
+                    headless=headless
+                ))
+            except Exception as e:
+                self.stdout.write(self.style.WARNING(
+                    f"Batch {batch_num + 1} aborted: {e}; marking {len(batch_urls)} URLs failed."))
+                self._force_kill_browsers()
+                batch_results = [
+                    {"url": u, "screenshot_base64": "", "title": "", "webserver": "",
+                     "host_ip": "", "status_code": "0", "response_body": f"batch aborted: {e}",
+                     "technologies": "", "failed": True}
+                    for u in batch_urls
+                ]
+            finally:
+                watchdog.cancel()
+
             # Save results to DB immediately to free memory
             batch_success, batch_failed = self._save_results_to_db(batch_results)
             total_success += batch_success
@@ -162,7 +200,6 @@ class Command(BaseCommand):
             
             # Small delay between batches to let resources recover
             if batch_num < total_batches - 1:
-                import time
                 time.sleep(2)
         
         self.stdout.write(f"\nFinal summary: {total_success} successful, {total_failed} failed")
@@ -221,16 +258,31 @@ class Command(BaseCommand):
         results = []
 
         async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=headless,
-                args=[
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-accelerated-2d-canvas',
-                    '--disable-gpu',
+            try:
+                browser = await asyncio.wait_for(
+                    p.chromium.launch(
+                        headless=headless,
+                        args=[
+                            '--no-sandbox',
+                            '--disable-setuid-sandbox',
+                            '--disable-dev-shm-usage',
+                            '--disable-accelerated-2d-canvas',
+                            '--disable-gpu',
+                        ]
+                    ),
+                    timeout=BROWSER_LAUNCH_TIMEOUT,
+                )
+            except Exception as e:
+                # Cannot screenshot this batch at all; fail its URLs and move on.
+                self.stdout.write(self.style.WARNING(f"Browser launch failed/timed out: {e}"))
+                self._force_kill_browsers()
+                return [
+                    {"url": u, "screenshot_base64": "", "title": "", "webserver": "",
+                     "host_ip": "", "status_code": "0",
+                     "response_body": "browser launch failed/timed out", "technologies": "",
+                     "failed": True}
+                    for u in urls
                 ]
-            )
 
             async def capture_single_url(url):
                 """Capture screenshot for a single URL"""
@@ -358,61 +410,103 @@ class Command(BaseCommand):
 
             # Wrap each task in a timeout to prevent indefinite hangs
             task_timeout = (timeout / 1000.0) + 10
-            
-            async def capture_with_timeout(url):
-                """Wrap capture_single_url with a timeout to prevent hangs"""
-                try:
-                    return await asyncio.wait_for(
-                        capture_single_url(url),
-                        timeout=task_timeout
-                    )
-                except asyncio.TimeoutError:
-                    return {
-                        "url": url,
-                        "screenshot_base64": "",
-                        "title": "",
-                        "webserver": "",
-                        "host_ip": "",
-                        "status_code": "0",
-                        "response_body": f"Task timeout exceeded ({task_timeout}s)",
-                        "technologies": "",
-                        "failed": True,
-                    }
-                except Exception as e:
-                    return {
-                        "url": url,
-                        "screenshot_base64": "",
-                        "title": "",
-                        "webserver": "",
-                        "host_ip": "",
-                        "status_code": "0",
-                        "response_body": f"Task wrapper error: {str(e)}",
-                        "technologies": "",
-                        "failed": True,
-                    }
-            
-            tasks = [capture_with_timeout(url) for url in urls]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            # Filter out exceptions and convert to list
-            processed_results = []
-            for i, result in enumerate(results):
-                if isinstance(result, Exception):
-                    processed_results.append({
-                        "url": urls[i],
-                        "screenshot_base64": "",
-                        "title": "",
-                        "webserver": "",
-                        "host_ip": "",
-                        "status_code": "0",
-                        "response_body": f"Exception: {str(result)}",
-                        "technologies": "",
-                        "failed": True,
-                    })
-                else:
-                    processed_results.append(result)
 
-            await browser.close()
+            def failed_result(url, reason):
+                return {
+                    "url": url,
+                    "screenshot_base64": "",
+                    "title": "",
+                    "webserver": "",
+                    "host_ip": "",
+                    "status_code": "0",
+                    "response_body": reason,
+                    "technologies": "",
+                    "failed": True,
+                }
+
+            # A renderer stuck spinning never answers, and an in-flight Playwright
+            # call on it is *uncancellable*: asyncio.wait_for sits in 'cancelling'
+            # forever and the batch never finishes (prod job 1006 froze this way).
+            # Detect that case and release it with an OS-level browser kill.
+            wedged = []
+
+            async def capture_with_timeout(url):
+                """Per-URL timeout that cannot itself be wedged by cancellation."""
+                inner = asyncio.ensure_future(capture_single_url(url))
+                # We may deliberately abandon this task; consume its exception so the
+                # interpreter doesn't log "Future exception was never retrieved".
+                inner.add_done_callback(lambda t: None if t.cancelled() else t.exception())
+                done, _ = await asyncio.wait({inner}, timeout=task_timeout)
+                if not done:
+                    inner.cancel()
+                    done, _ = await asyncio.wait({inner}, timeout=CANCEL_GRACE)
+                    if not done:
+                        wedged.append(url)
+                        self.stdout.write(self.style.WARNING(
+                            f"Uncancellable Playwright call for {url}; killing this batch's browser"))
+                        self._force_kill_browsers()
+                    return failed_result(url, f"Task timeout exceeded ({task_timeout}s)")
+                try:
+                    return inner.result()
+                except Exception as e:
+                    return failed_result(url, f"Task wrapper error: {str(e)}")
+
+            results = [None] * len(urls)
+            slot_by_task = {}
+            pending = set()
+            for i, u in enumerate(urls):
+                task = asyncio.ensure_future(capture_with_timeout(u))
+                slot_by_task[task] = (i, u)
+                pending.add(task)
+
+            release_deadline = None
+            while pending:
+                done, pending = await asyncio.wait(pending, timeout=1.0,
+                                                   return_when=asyncio.FIRST_COMPLETED)
+                for task in done:
+                    i, u = slot_by_task[task]
+                    try:
+                        results[i] = task.result()
+                    except Exception as e:
+                        results[i] = failed_result(u, f"Exception: {str(e)}")
+                if wedged and release_deadline is None:
+                    release_deadline = time.monotonic() + STUCK_RELEASE_GRACE
+                if release_deadline is not None and time.monotonic() > release_deadline:
+                    # The kill did not release them (not ours to kill): give up on
+                    # this batch instead of freezing the whole scan.
+                    self.stdout.write(self.style.WARNING(
+                        f"Browser kill released nothing; abandoning {len(pending)} task(s) of this batch."))
+                    self._force_kill_browsers(include_driver=True)
+                    for task in pending:
+                        i, u = slot_by_task[task]
+                        results[i] = failed_result(u, "Abandoned: wedged browser could not be terminated")
+                    pending = set()
+
+            processed_results = [
+                results[i] if results[i] is not None else failed_result(u, 'No result')
+                for i, u in enumerate(urls)
+            ]
+
+            try:
+                await asyncio.wait_for(browser.close(), timeout=CLOSE_TIMEOUT)
+            except Exception:
+                # A renderer stuck spinning keeps the browser alive; Playwright
+                # cannot tear it down, so kill it at the OS level.
+                self._force_kill_browsers()
 
         return processed_results
+
+    def _force_kill_browsers(self, include_driver=False):
+        """SIGKILL the browser processes this scan process spawned (descendant walk of
+        our own pid — Chromium runs in its own session, so killpg of our group misses
+        it). Needed because Playwright can neither reap nor cancel a renderer stuck
+        spinning. include_driver also kills Playwright's node driver: the last resort
+        when killing the browser alone did not release the in-flight calls."""
+        pids = _descendant_browser_pids(os.getpid(), extra_names=('node',) if include_driver else ())
+        for p in pids:
+            try:
+                os.kill(p, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+        return pids
 

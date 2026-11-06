@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import socket
 import ssl
 import subprocess
@@ -16,6 +17,16 @@ from project.models import Project
 from scanners.scan_utils import resolve_uuids, add_common_scan_arguments
 from scanners.tech_detect import detect_technologies
 
+
+# Katana's own bounds (flag names verified against the local katana binary):
+# -ct caps the crawl duration per target, -timeout caps a single request.
+KATANA_CRAWL_DURATION = '10m'
+KATANA_REQUEST_TIMEOUT = '8'
+
+# Where katana writes its -store-response copies. Bodies are already returned on
+# stdout as JSONL and stored on Endpoint.response_body, so this on-disk copy is
+# only needed while katana runs — a temp dir keeps it out of the repo/OneDrive tree.
+KATANA_RESPONSE_DIR_PREFIX = 'katana_response_'
 
 class Command(BaseCommand):
     help = 'Run Katana crawler on web assets: ensure ports exist (nmap if needed), crawl with Katana, store Endpoints.'
@@ -169,8 +180,14 @@ class Command(BaseCommand):
                 f.write(u + '\n')
             list_path = f.name
 
+        # Without -store-response-dir katana drops the response copies in the current
+        # working directory (repo root -> katana_response/, synced by OneDrive).
+        resp_dir = tempfile.mkdtemp(prefix=KATANA_RESPONSE_DIR_PREFIX)
+
         try:
-            cmd = [katana_path, '-list', list_path, '-jsonl', '-store-response']
+            cmd = [katana_path, '-list', list_path, '-jsonl', '-store-response',
+                   '-store-response-dir', resp_dir,
+                   '-ct', KATANA_CRAWL_DURATION, '-timeout', KATANA_REQUEST_TIMEOUT]
 
             result = subprocess.run(
                 cmd,
@@ -211,3 +228,6 @@ class Command(BaseCommand):
                 os.unlink(list_path)
             except OSError:
                 pass
+            # Response bodies already live on Endpoint.response_body; the on-disk
+            # copies are only wanted while katana is running.
+            shutil.rmtree(resp_dir, ignore_errors=True)

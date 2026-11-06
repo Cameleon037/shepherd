@@ -4,13 +4,18 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseForbidden
 from jobs.models import Job
+from jobs.utils import reap_stale_jobs
 from django.views.decorators.csrf import csrf_exempt
 
 @login_required
 def jobs(request):
     if not request.user.has_perm('jobs.view_job'):
         return HttpResponseForbidden("You do not have permission.")
-    
+
+    # Reap stranded 'running' rows (dead pid / over max runtime) so the list is
+    # accurate without waiting for a periodic task.
+    reap_stale_jobs()
+
     context = {'projectid': request.session['current_project']['prj_id']}
 
     return render(request, 'jobs/list_jobs.html', context)

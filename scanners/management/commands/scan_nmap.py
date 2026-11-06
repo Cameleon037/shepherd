@@ -37,8 +37,12 @@ class Command(BaseCommand):
     def resolve_domain_to_ip(self, domain):
         """Resolve domain name to IP address using DNS A record"""
         try:
-            # Try A record first (IPv4)
-            answers = dns.resolver.resolve(domain, 'A')
+            # Try A record first (IPv4) with a bounded resolver so a dead/unreachable
+            # DNS server cannot hang the scan.
+            resolver = dns.resolver.Resolver(configure=True)
+            resolver.timeout = 3
+            resolver.lifetime = 6
+            answers = resolver.resolve(domain, 'A')
             return str(answers[0])
         except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.resolver.Timeout):
             try:
@@ -122,7 +126,9 @@ class Command(BaseCommand):
         '5101,5190,5357,5432,5631,5666,5800,5900,6000-6001,6646,7070,8000,'
         '8008-8009,8080-8081,8443,8888,9100,9999-10000,32768,49152-49157'
     )
-    NMAP_ARGS = '-Pn -sC -sV -T4 --version-light'
+    NMAP_ARGS = ('-Pn -sC -sV -T4 --version-light --max-rtt-timeout 1000ms '
+                 '--min-rtt-timeout 100ms --initial-rtt-timeout 1000ms --max-retries 1 '
+                 '--host-timeout 5m --script-timeout 2m')
 
     def nmap_scan_ip(self, ip_address, domains_for_ip):
         """Scan a single IP address and distribute results to all domains that point to it"""
