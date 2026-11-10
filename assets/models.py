@@ -1,7 +1,5 @@
 from django.db import models
 
-from .classification import classify_asset
-
 
 class AssetQuerySet(models.QuerySet):
     def bulk_create(self, objs, *args, **kwargs):
@@ -30,6 +28,7 @@ class Asset(models.Model):
 
     type = models.CharField(max_length=100, default='domain')  # can be: domain, ip, url, certificate, starred_domain
     subtype = models.CharField(max_length=100, default='')  # domain/subdomain for domain types; otherwise empty
+    category = models.CharField(max_length=100, default='', blank=True)  # functional class, see assets.utils.classify_category()
     scope = models.CharField(max_length=100, default='external', blank=True, null=True)  # can be: external, internal
 
     creation_time = models.DateTimeField()  # when was it found to be created
@@ -61,7 +60,11 @@ class Asset(models.Model):
         db_table = 'project_asset'
 
     def set_classification(self):
+        # Imported here: assets.utils imports this module, so a module-level
+        # import would be circular.
+        from .utils import classify_asset, classify_category
         self.type, self.subtype = classify_asset(self.value, self.type)
+        self.category = classify_category(self.value, self.type)
 
     def save(self, *args, **kwargs):
         # Covers forms, admin, APIs, create/get_or_create and scanner imports.

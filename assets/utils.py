@@ -13,6 +13,100 @@ import dateparser
 import threading
 import csv
 import re
+from ipaddress import ip_address
+from urllib.parse import urlsplit
+
+import tldextract
+
+
+# Use the bundled public suffix list: asset creation must not need network access.
+_extract_domain = tldextract.TLDExtract(suffix_list_urls=(), cache_dir=None)
+
+
+def classify_asset(value, asset_type=None):
+    """Return the asset type and domain subtype without changing its value.
+
+    Certificate names can also be valid hostnames, so explicit certificate
+    context is preserved. Only domains and wildcard domains have a subtype;
+    wildcard labels are excluded when identifying the underlying base domain.
+    """
+    value = value.strip()
+    if asset_type == 'certificate' or value.startswith('-----BEGIN CERTIFICATE-----'):
+        return 'certificate', ''
+
+    address = value[1:-1] if value.startswith('[') and value.endswith(']') else value
+    try:
+        ip_address(address)
+        return 'ip', ''
+    except ValueError:
+        pass
+
+    # Include scheme-relative URLs and host/path values from imports.
+    if any(marker in value for marker in ('://', '/', '?', '#')):
+        parsed = urlsplit(value if '://' in value or value.startswith('//') else '//' + value)
+        if parsed.hostname:
+            return 'url', ''
+
+    wildcard = '*' in value
+    hostname = '.'.join(label for label in value.split('.') if label != '*')
+    domain = _extract_domain(hostname.lower().rstrip('.'))
+    subtype = 'subdomain' if domain.subdomain else 'domain'
+    return ('starred_domain' if wildcard else 'domain'), subtype
+
+
+_SERVICE_MAIL_LABEL_RE = re.compile(
+    r'^_(dmarc|dmarv|adsp|spf|dkim|domainkeys?|amazonses|submission|smtp'
+    r'|autodiscover|imap|imaps)[0-9]*$|^_?mta-sts$|^domainkeys?$'
+)
+_MAIL_SERVER_LABEL_RE = re.compile(
+    r'^(mail|webmail|email|mailjet|acumbamail|smtp|smtpout|pop|imap|imaps|mx'
+    r'|relay|autodiscover|send|m[1-9]|em)[0-9]*$'
+)
+_SERVICE_VALIDATION_LABEL_RE = re.compile(
+    r'^_(acme-challenge|pki-validation|dnsauth|esaauth|oktaverification'
+    r'|aemverification|github-challenge(-[a-z0-9-]+)?|gitlab-pages-verification-code'
+    r'|domainconnect|cpanel-dcv-test-record|cf-custom-hostname|validation-persist)$'
+    r'|^asuid$|^_?[0-9a-f]{32,64}$'
+)
+_SERVICE_DISCOVERY_LABEL_RE = re.compile(
+    r'^_(sips?|sipfederationtls|h323cs|h323ls|turns?|stuns?|xmpp-server'
+    r'|caldavs?|carddavs?|dep_ws_mutex)$'
+)
+_WWW_LABEL_RE = re.compile(r'^_?www[0-9]*$')
+_NUMERIC_LABEL_RE = re.compile(r'^[0-9]+$')
+
+
+def classify_category(value, asset_type=None):
+    """Return the functional category of a hostname value ('' = uncategorized).
+
+    Categories naming a non-browsable DNS service artifact carry the 'service_'
+    prefix so consumers can exclude them with category__startswith='service';
+    real hosts (incl. mail servers) keep un-prefixed categories. Structural
+    assets (ip/url/certificate) get no category. DNS labels are matched against
+    the zone-file evidence in docs/lists/dns_zone_files_11_2026.txt; wildcard
+    labels are ignored like in classify_asset().
+    """
+    if asset_type in ('ip', 'url', 'certificate'):
+        return ''
+    hostname = '.'.join(l for l in value.strip().lower().rstrip('.').split('.')
+                        if l and l != '*')
+    if not hostname:
+        return ''
+    labels = hostname.split('.')
+    if any(_SERVICE_VALIDATION_LABEL_RE.match(l) for l in labels):
+        return 'service_validation'
+    if any(_SERVICE_MAIL_LABEL_RE.match(l) for l in labels):
+        return 'service_mail'
+    if any(_SERVICE_DISCOVERY_LABEL_RE.match(l) for l in labels):
+        return 'service_discovery'
+    if any(_MAIL_SERVER_LABEL_RE.match(l) for l in labels):
+        return 'mail_server'
+    if _WWW_LABEL_RE.match(labels[0]):
+        return 'www'
+    extracted = _extract_domain(hostname)
+    if extracted.subdomain and _NUMERIC_LABEL_RE.match(extracted.subdomain.split('.')[0]):
+        return 'numeric_subdomain'
+    return ''
 
 
 def export_assets_csv(project_id, monitored_only=False, scope='external'):
@@ -49,7 +143,7 @@ def export_assets_csv(project_id, monitored_only=False, scope='external'):
     writer = csv.writer(response)
     # Write header
     writer.writerow([
-        'UUID', 'Value', 'Related Project', 'Related Keyword', 'Type', 'Subtype',
+        'UUID', 'Value', 'Related Project', 'Related Keyword', 'Type', 'Subtype', 'Category',
         'Source', 'Description', 'Link', 'Creation Time', 'Active', 'Ignore', 'Monitor', 'Redirects To', 'Scope',
         'IPv4', 'IPv6', 'Owner'
     ])
@@ -62,6 +156,7 @@ def export_assets_csv(project_id, monitored_only=False, scope='external'):
             asset.related_keyword.keyword if asset.related_keyword else '',
             asset.type,
             asset.subtype,
+            asset.category,
             asset.source,
             asset.description,
             asset.link,

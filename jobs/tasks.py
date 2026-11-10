@@ -233,3 +233,10 @@ def reap_stale_jobs_task():
     Register a django_celery_beat PeriodicTask for this (see plan); the launch
     and Jobs-page hooks also clear orphans without it."""
     return f"reaped {reap_stale_jobs()} stale jobs"
+
+@shared_task
+def sort_assets_task():
+    command = 'sort_assets'
+    args = ''
+    run_job(command, args, project_id, user=scheduler_user)
+    return "sort_assets completed"
