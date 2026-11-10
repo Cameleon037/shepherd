@@ -64,7 +64,7 @@
           <button type="button" class="list-filter-btn is-sub" aria-pressed="false" data-group="service" data-filter="service_discovery" hidden>Service discovery <span class="tab-count">{{ filter_counts.service_discovery }}</span></button>
         </div>
       </div>
-            <table id="table_list_suggestions" class="table table-condensed table-striped table-bordered" width="100%" data-default-columns="value,category,vulns,tag,source,description,creation_time,registrant_info" data-group-columns="source,tag,monitor,active,owner,scope,category">
+            <table id="table_list_suggestions" class="table table-condensed table-striped table-bordered" width="100%" data-default-columns="value,vulns,tag,source,description,creation_time,registrant_info" data-group-columns="source,tag,monitor,active,owner,scope,category">
               <thead>
                 <tr>
                   <th><input type="checkbox" name="select_all" value="1" id="select-all-items-dom">&nbsp; Operations</th>
@@ -86,7 +86,7 @@
                 <tr>
                   <th></th>
                   <th><input type="text" placeholder="Search Value" class="column-search-input form-control input-sm" data-column="1"></th>
-                  <th></th>
+                  <th><input type="text" placeholder="Search Category" class="column-search-input form-control input-sm" data-column="2"></th>
                   <th><input type="text" placeholder="Search Source" class="column-search-input form-control input-sm" data-column="3"></th>
                   <th><input type="text" placeholder="Search Tag" class="column-search-input form-control input-sm" data-column="4"></th>
                   <th><input type="text" placeholder="Search Description" class="column-search-input form-control input-sm" data-column="5"></th>
@@ -279,7 +279,7 @@
             }
           },
           { 'data': 'value', 'sName': 'Value', 'aTargets': [1] },
-          { 'data': 'category', 'sName': 'Category', 'aTargets': [2], 'searchable': false },
+          { 'data': 'category', 'sName': 'Category', 'aTargets': [2] },
           { 'data': 'source', 'sName': 'Source', 'aTargets': [3] },
           { 'data': 'tag', 'sName': 'Tag', 'aTargets': [4],
             'render': function(data, type, row) {

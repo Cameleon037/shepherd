@@ -149,6 +149,7 @@ def list_suggestions(request, projectid, format=None):
 
     ### get search parameters
     search_value = get_column_search(request.query_params, 'value', 1)
+    search_category = get_column_search(request.query_params, 'category', 13)
     search_source = get_column_search(request.query_params, 'source', 2)
     search_tag = get_column_search(request.query_params, 'tag', 3)
     search_description = get_column_search(request.query_params, 'description', 4)
@@ -178,6 +179,7 @@ def list_suggestions(request, projectid, format=None):
          'scope__icontains', 'creation_time__icontains', 'registrant_info__icontains'],
     )
     queryset = apply_column_search_multi(queryset, search_value, 'value__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_category, 'category__icontains', min_length=1)
     queryset = apply_column_search_multi(queryset, search_source, 'source__icontains', min_length=1)
     queryset = apply_column_search_multi(queryset, search_tag, 'tag__icontains', min_length=1)
     queryset = apply_column_search_multi(queryset, search_description, 'description__icontains', min_length=1)
@@ -389,6 +391,7 @@ def list_assets(request, projectid, format=None):
     search_value = request.query_params.get('search[value]', None)
     search_columns = {
         'value': get_column_search(request.query_params, 'value', 1),
+        'category': get_column_search(request.query_params, 'category', 13),
         'vulns': get_column_search(request.query_params, 'vulns', 2),
         'tag': get_column_search(request.query_params, 'tag', 3),
         'source': get_column_search(request.query_params, 'source', 4),
@@ -436,6 +439,7 @@ def list_assets(request, projectid, format=None):
 
     ### filter by column-specific search values
     queryset = apply_column_search_multi(queryset, search_columns['value'], 'value__icontains')
+    queryset = apply_column_search_multi(queryset, search_columns['category'], 'category__icontains')
     
     if search_columns['vulns']:
         # Map severity keywords to annotated fields

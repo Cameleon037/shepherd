@@ -88,18 +88,21 @@ class TablePresentationTests(SimpleTestCase):
 
     def test_default_columns_for_findings_assets_and_suggestions(self):
         defaults = {
-            'assets/list_assets.html': 'value,category,vulns,tag,source,description,creation_time,registrant_info',
-            'assets/list_suggestions.html': 'value,category,vulns,tag,source,description,creation_time,registrant_info',
+            'assets/list_assets.html': 'value,vulns,tag,source,description,creation_time,registrant_info',
+            'assets/list_suggestions.html': 'value,vulns,tag,source,description,creation_time,registrant_info',
             'assets/list_ignored_suggestions.html': 'value,vulns,tag,source,description,creation_time,registrant_info',
             'findings/list_findings.html': 'asset_name,name,description,source,severity,status,scan_date',
         }
         for template, expected in defaults.items():
             with self.subTest(template=template):
-                _, parser = self.render(template)
+                html, parser = self.render(template)
                 tables = [attrs for tag, attrs in parser.elements if tag == 'table']
                 self.assertEqual(len(tables), len(self.tables[template]))
                 for table in tables:
                     self.assertEqual(table.get('data-default-columns'), expected)
+                if template in ('assets/list_assets.html', 'assets/list_suggestions.html'):
+                    # Category is opt-in but gets a filter-row search box once enabled.
+                    self.assertEqual(html.count('placeholder="Search Category"'), 1)
 
     def test_shared_details_dialog_and_styles(self):
         for template in self.tables:

@@ -50,6 +50,7 @@ class AssetQuerySet(models.QuerySet):
         objs = list(objs)
         for asset in objs:
             asset.set_classification()
+            asset.apply_auto_ignore()
         return super().bulk_create(objs, *args, **kwargs)
 
 
@@ -109,11 +110,18 @@ class Asset(models.Model):
         self.type, self.subtype = classify_asset(self.value, self.type)
         self.category = classify_category(self.value, self.type)
 
+    def apply_auto_ignore(self):
+        # Reverse-DNS zone names are DNS artifacts, not scannable hosts.
+        if self.category == 'service_reverse_dns':
+            self.monitor = False
+            self.ignore = True
+
     def save(self, *args, **kwargs):
         # Covers forms, admin, APIs, create/get_or_create and scanner imports.
         # Do not silently reclassify existing records on unrelated updates.
         if self._state.adding:
             self.set_classification()
+            self.apply_auto_ignore()
         return super().save(*args, **kwargs)
 
     def __str__(self):

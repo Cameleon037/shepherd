@@ -27,7 +27,13 @@ class Command(BaseCommand):
             if asset.category != old_category:
                 recategorized += 1
             if (asset.type, asset.subtype, asset.category) != (old_type, old_subtype, old_category):
-                asset.save(update_fields=['type', 'subtype', 'category'])
+                if asset.category == 'service_reverse_dns' and old_category != 'service_reverse_dns':
+                    # auto-ignore newly detected reverse-DNS zones (state pattern of
+                    # assets.utils.ignore_asset()); never re-ignore: rows the user moved
+                    # back keep ignore=False because their category no longer changes.
+                    asset.ignore = True
+                    asset.monitor = False
+                asset.save(update_fields=['type', 'subtype', 'category', 'ignore', 'monitor'])
             category_counts[asset.category or '(uncategorized)'] = \
                 category_counts.get(asset.category or '(uncategorized)', 0) + 1
 

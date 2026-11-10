@@ -81,7 +81,9 @@ def classify_category(value, asset_type=None):
 
     Categories naming a non-browsable DNS service artifact carry the 'service_'
     prefix so consumers can exclude them with category__startswith='service';
-    real hosts (incl. mail servers) keep un-prefixed categories. Structural
+    real hosts (incl. mail servers) keep un-prefixed categories. Zone names
+    ending in in-addr.arpa/ip6.arpa are 'service_reverse_dns' and get
+    auto-ignored (assets.models.Asset.apply_auto_ignore()). Structural
     assets (ip/url/certificate) get no category. DNS labels are matched against
     the zone-file evidence in docs/lists/dns_zone_files_11_2026.txt; wildcard
     labels are ignored like in classify_asset().
@@ -92,6 +94,8 @@ def classify_category(value, asset_type=None):
                         if l and l != '*')
     if not hostname:
         return ''
+    if hostname.endswith('in-addr.arpa') or hostname.endswith('ip6.arpa'):
+        return 'service_reverse_dns'
     labels = hostname.split('.')
     if any(_SERVICE_VALIDATION_LABEL_RE.match(l) for l in labels):
         return 'service_validation'
