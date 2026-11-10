@@ -34,7 +34,7 @@ from api.utils import (
 
 from project.models import Project
 from keywords.models import Keyword, group_keywords_by_text
-from assets.models import Asset
+from assets.models import Asset, asset_filter_query
 from jobs.models import Job
 from jobs.utils import kill_job_process_tree
 from findings.models import DNSRecord
@@ -167,18 +167,8 @@ def list_suggestions(request, projectid, format=None):
     else:
         queryset = prj.asset_set.filter(ignore=False)  # Do not display ignored suggestions
 
-    if vtype in ['all']:
-        # Show all types - no filter
-        pass
-    elif vtype in ['domain']:
-        queryset = queryset.filter(type='domain')
-    elif vtype in ['starred_domain']:
-        queryset = queryset.filter(type=vtype)
-    elif vtype in ['second_level_domain']:
-        queryset = queryset.filter(type='domain', subtype='domain')
-    elif vtype in ['ip']:
-        queryset = queryset.filter(type='ip')
-    
+    queryset = queryset.filter(asset_filter_query(vtype))
+
     ### filter by search value
     queryset = apply_search_filter(
         queryset, request.query_params.get('search[value]'),
@@ -377,6 +367,7 @@ def list_assets(request, projectid, format=None):
 
     selection = request.query_params.get('selection', 'monitored')
     has_endpoints = request.query_params.get('has_endpoints', None)
+    vtype = request.query_params.get('vtype', 'all')
 
     paginator = CustomPaginator()
     ### check if project exists
@@ -397,17 +388,17 @@ def list_assets(request, projectid, format=None):
     ### get search parameters
     search_value = request.query_params.get('search[value]', None)
     search_columns = {
-        'value': request.query_params.get('columns[1][search][value]', None),
-        'vulns': request.query_params.get('columns[2][search][value]', None),
-        'tag': request.query_params.get('columns[3][search][value]', None),
-        'source': request.query_params.get('columns[4][search][value]', None),
-        'description': request.query_params.get('columns[5][search][value]', None),
-        'last_scan_time': request.query_params.get('columns[6][search][value]', None),
-        'creation_time': request.query_params.get('columns[7][search][value]', None),
-        'ip': request.query_params.get('columns[8][search][value]', None),
-        'owner': request.query_params.get('columns[9][search][value]', None),
-        'scope': request.query_params.get('columns[10][search][value]', None),
-        'registrant_info': request.query_params.get('columns[11][search][value]', None),
+        'value': get_column_search(request.query_params, 'value', 1),
+        'vulns': get_column_search(request.query_params, 'vulns', 2),
+        'tag': get_column_search(request.query_params, 'tag', 3),
+        'source': get_column_search(request.query_params, 'source', 4),
+        'description': get_column_search(request.query_params, 'description', 5),
+        'last_scan_time': get_column_search(request.query_params, 'last_scan_time', 6),
+        'creation_time': get_column_search(request.query_params, 'creation_time', 7),
+        'ip': get_column_search(request.query_params, 'ip', 8),
+        'owner': get_column_search(request.query_params, 'owner', 9),
+        'scope': get_column_search(request.query_params, 'scope', 10),
+        'registrant_info': get_column_search(request.query_params, 'registrant_info', 11),
     }
 
     ### create queryset
@@ -415,6 +406,8 @@ def list_assets(request, projectid, format=None):
         queryset = prj.asset_set.filter(monitor=True, ignore=False)
     else:
         queryset = prj.asset_set.filter(monitor=False, ignore=False)
+
+    queryset = queryset.filter(asset_filter_query(vtype))
 
     # Annotate vulnerabilities (exclude ignored findings)
     queryset = annotate_vulnerabilities(queryset).annotate(endpoint_count=Count('endpoint', distinct=True))

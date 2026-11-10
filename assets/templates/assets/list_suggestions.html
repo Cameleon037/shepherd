@@ -28,7 +28,7 @@
   {% csrf_token %}
 
   <div class="list-selection-bar" role="group" aria-label="Selected suggestion actions">
-    {% include "table_selection_status.html" with selection_hint="Selections across suggestion tabs" %}
+    {% include "table_selection_status.html" %}
     <div class="list-selection-actions">
       <button type="button" name="btnmonitor" id="monitor-selected" class="btn btn-default btn-sm" data-selection-action disabled>Monitor</button>
       <button type="button" name="btnignore" id="ignore-selected" class="btn btn-default btn-sm" data-selection-action disabled>Ignore</button>
@@ -38,35 +38,38 @@
     </div>
   </div>
 
-  <!-- Suggestion Tabs -->
   <div class="panel panel-default">
     <div class="panel-heading">
       // Current Suggestions
     </div>
     <div class="panel-body">
-      <div role="tabpanel">
-        <!-- Simple button group navigation -->
-        <div class="suggestion-tabs">
-          <button type="button" class="suggestion-tab-btn {% if activetab == 'domain' %}active{% endif %}" data-target="#allDomains" data-toggle="tab" role="tab" aria-controls="allDomains" aria-selected="{% if activetab == 'domain' %}true{% else %}false{% endif %}">
-            All <span class="tab-count">{{ all_count }}</span>
-          </button>
-          <button type="button" class="suggestion-tab-btn {% if activetab == 'subdomain' %}active{% endif %}" data-target="#secondLevelDomains" data-toggle="tab" role="tab" aria-controls="secondLevelDomains" aria-selected="{% if activetab == 'subdomain' %}true{% else %}false{% endif %}">
-            2nd level domains <span class="tab-count">{{ secondleveldomain_count }}</span>
-          </button>
-          <button type="button" class="suggestion-tab-btn {% if activetab == 'starreddomain' %}active{% endif %}" data-target="#starredDomains" data-toggle="tab" role="tab" aria-controls="starredDomains" aria-selected="{% if activetab == 'starreddomain' %}true{% else %}false{% endif %}">
-            Starred Domains <span class="tab-count">{{ starreddomain_count }}</span>
-          </button>
-          <button type="button" class="suggestion-tab-btn {% if activetab == 'ipaddress' %}active{% endif %}" data-target="#sipaddress" data-toggle="tab" role="tab" aria-controls="sipaddress" aria-selected="{% if activetab == 'ipaddress' %}true{% else %}false{% endif %}">
-            IPs <span class="tab-count">{{ ip_count }}</span>
-          </button>
+      <div class="list-filter-bar" id="suggestion-filter-bar">
+        <div class="list-filter-tabs" role="group" aria-label="Asset group">
+          <button type="button" class="list-filter-btn" aria-pressed="false" data-filter="all">All <span class="tab-count">{{ filter_counts.all }}</span></button>
+          <button type="button" class="list-filter-btn active" aria-pressed="true" data-filter="hosts">Hosts <span class="tab-count">{{ filter_counts.hosts }}</span></button>
+          <button type="button" class="list-filter-btn" aria-pressed="false" data-filter="service">Service records <span class="tab-count">{{ filter_counts.service }}</span></button>
+          <button type="button" class="list-filter-btn" aria-pressed="false" data-filter="ip">IP addresses <span class="tab-count">{{ filter_counts.ip }}</span></button>
         </div>
-        <div class="tab-content">
-          <div role="tabpanel" class="tab-pane fade {% if activetab == 'domain' %}in active{% endif %}" id="allDomains">
-            <table id="table_list_domain_suggestions" class="table table-condensed table-striped table-bordered" width="100%" data-default-columns="value,vulns,tag,source,description,creation_time,registrant_info" data-group-columns="source,tag,monitor,active,owner,scope">
+        <div class="list-filter-sub" role="group" aria-label="Asset sub-category">
+          <button type="button" class="list-filter-btn is-sub active" aria-pressed="true" data-group="hosts" data-filter="all">All</button>
+          <button type="button" class="list-filter-btn is-sub" aria-pressed="false" data-group="hosts" data-filter="second_level_domain">2nd level domains <span class="tab-count">{{ filter_counts.second_level_domain }}</span></button>
+          <button type="button" class="list-filter-btn is-sub" aria-pressed="false" data-group="hosts" data-filter="subdomain">Subdomains <span class="tab-count">{{ filter_counts.subdomain }}</span></button>
+          <button type="button" class="list-filter-btn is-sub" aria-pressed="false" data-group="hosts" data-filter="starred_domain">Wildcard domains <span class="tab-count">{{ filter_counts.starred_domain }}</span></button>
+          <button type="button" class="list-filter-btn is-sub" aria-pressed="false" data-group="hosts" data-filter="www">www <span class="tab-count">{{ filter_counts.www }}</span></button>
+          <button type="button" class="list-filter-btn is-sub" aria-pressed="false" data-group="hosts" data-filter="mail_server">Mail servers <span class="tab-count">{{ filter_counts.mail_server }}</span></button>
+          <button type="button" class="list-filter-btn is-sub" aria-pressed="false" data-group="hosts" data-filter="numeric_subdomain">Numeric subdomains <span class="tab-count">{{ filter_counts.numeric_subdomain }}</span></button>
+          <button type="button" class="list-filter-btn is-sub" aria-pressed="false" data-group="service" data-filter="all" hidden>All</button>
+          <button type="button" class="list-filter-btn is-sub" aria-pressed="false" data-group="service" data-filter="service_mail" hidden>Mail records <span class="tab-count">{{ filter_counts.service_mail }}</span></button>
+          <button type="button" class="list-filter-btn is-sub" aria-pressed="false" data-group="service" data-filter="service_validation" hidden>Domain validation <span class="tab-count">{{ filter_counts.service_validation }}</span></button>
+          <button type="button" class="list-filter-btn is-sub" aria-pressed="false" data-group="service" data-filter="service_discovery" hidden>Service discovery <span class="tab-count">{{ filter_counts.service_discovery }}</span></button>
+        </div>
+      </div>
+            <table id="table_list_suggestions" class="table table-condensed table-striped table-bordered" width="100%" data-default-columns="value,category,vulns,tag,source,description,creation_time,registrant_info" data-group-columns="source,tag,monitor,active,owner,scope,category">
               <thead>
                 <tr>
                   <th><input type="checkbox" name="select_all" value="1" id="select-all-items-dom">&nbsp; Operations</th>
                   <th>Value</th>
+                  <th>Category</th>
                   <th>Source</th>
                   <th>Tag</th>
                   <th>Description</th>
@@ -83,19 +86,12 @@
                 <tr>
                   <th></th>
                   <th><input type="text" placeholder="Search Value" class="column-search-input form-control input-sm" data-column="1"></th>
-                  <th><input type="text" placeholder="Search Source" class="column-search-input form-control input-sm" data-column="2"></th>
-                  <th><input type="text" placeholder="Search Tag" class="column-search-input form-control input-sm" data-column="3"></th>
-                  <th><input type="text" placeholder="Search Description" class="column-search-input form-control input-sm" data-column="4"></th>
-                  <th><input type="text" placeholder="Search Redirect" class="column-search-input form-control input-sm" data-column="5"></th>
-                  <th><input type="text" placeholder="Search Created" class="column-search-input form-control input-sm" data-column="6"></th>
-                  <th>
-                    <select class="column-search-input form-control input-sm" data-column="7">
-                      <option value="">All</option>
-                      <option value="true">True</option>
-                      <option value="false">False</option>
-                      <option value="none">None</option>
-                    </select>
-                  </th>
+                  <th></th>
+                  <th><input type="text" placeholder="Search Source" class="column-search-input form-control input-sm" data-column="3"></th>
+                  <th><input type="text" placeholder="Search Tag" class="column-search-input form-control input-sm" data-column="4"></th>
+                  <th><input type="text" placeholder="Search Description" class="column-search-input form-control input-sm" data-column="5"></th>
+                  <th><input type="text" placeholder="Search Redirect" class="column-search-input form-control input-sm" data-column="6"></th>
+                  <th><input type="text" placeholder="Search Created" class="column-search-input form-control input-sm" data-column="7"></th>
                   <th>
                     <select class="column-search-input form-control input-sm" data-column="8">
                       <option value="">All</option>
@@ -104,196 +100,28 @@
                       <option value="none">None</option>
                     </select>
                   </th>
-                  <th><input type="text" placeholder="Search IP" class="column-search-input form-control input-sm" data-column="9"></th>
-                  <th><input type="text" placeholder="Search Owner" class="column-search-input form-control input-sm" data-column="10"></th>
-                  <th>
-                    <select class="column-search-input form-control input-sm" data-column="11">
-                      <option value="">All Scopes</option>
-                      <option value="external">External</option>
-                      <option value="internal">Internal</option>
-                    </select>
-                  </th>
-                  <th><input type="text" placeholder="Search Registrant (! = exclude)" class="column-search-input form-control input-sm" data-column="12" title="Prepend ! to exclude, e.g. !henkel.com"></th>
-                  <th></th>
-                </tr>
-              </thead>
-            </table>
-          </div>
-
-          <div role="tabpanel" class="tab-pane fade {% if activetab == 'subdomain' %}in active{% endif %}" id="secondLevelDomains">
-            <table id="table_list_second_level_domain_suggestions" class="table table-condensed table-striped table-bordered" width="100%" data-default-columns="value,vulns,tag,source,description,creation_time,registrant_info" data-group-columns="source,tag,monitor,active,owner,scope">
-              <thead>
-                <tr>
-                  <th><input type="checkbox" name="select_all" value="1" id="select-all-items-sub">&nbsp; Operations</th>
-                  <th>Value</th>
-                  <th>Source</th>
-                  <th>Tag</th>
-                  <th>Description</th>
-                  <th>Redirect to</th>
-                  <th>Created</th>
-                  <th>Monitor</th>
-                  <th>Active</th>
-                  <th>IP</th>
-                  <th>Owner</th>
-                  <th>Scope</th>
-                  <th>Registrant info</th>
-                  <th>Vulnerabilities</th>
-                </tr>
-                <tr>
-                  <th></th>
-                  <th><input type="text" placeholder="Search Value" class="column-search-input form-control input-sm" data-column="1"></th>
-                  <th><input type="text" placeholder="Search Source" class="column-search-input form-control input-sm" data-column="2"></th>
-                  <th><input type="text" placeholder="Search Tag" class="column-search-input form-control input-sm" data-column="3"></th>
-                  <th><input type="text" placeholder="Search Description" class="column-search-input form-control input-sm" data-column="4"></th>
-                  <th><input type="text" placeholder="Search Redirect" class="column-search-input form-control input-sm" data-column="5"></th>
-                  <th><input type="text" placeholder="Search Created" class="column-search-input form-control input-sm" data-column="6"></th>
-                  <th>
-                    <select class="column-search-input form-control input-sm" data-column="7">
-                      <option value="">All</option>
-                      <option value="true">True</option>
-                      <option value="false">False</option>
-                      <option value="none">None</option>
-                    </select>
-                  </th>
-                  <th>
-                    <select class="column-search-input form-control input-sm" data-column="8">
-                      <option value="">All</option>
-                      <option value="true">True</option>
-                      <option value="false">False</option>
-                      <option value="none">None</option>
-                    </select>
-                  </th>
-                  <th><input type="text" placeholder="Search IP" class="column-search-input form-control input-sm" data-column="9"></th>
-                  <th><input type="text" placeholder="Search Owner" class="column-search-input form-control input-sm" data-column="10"></th>
-                  <th>
-                    <select class="column-search-input form-control input-sm" data-column="11">
-                      <option value="">All Scopes</option>
-                      <option value="external">External</option>
-                      <option value="internal">Internal</option>
-                    </select>
-                  </th>
-                  <th><input type="text" placeholder="Search Registrant (! = exclude)" class="column-search-input form-control input-sm" data-column="12" title="Prepend ! to exclude, e.g. !henkel.com"></th>
-                  <th></th>
-                </tr>
-              </thead>
-            </table>
-          </div>
-
-          <div role="tabpanel" class="tab-pane fade {% if activetab == 'starreddomain' %}in active{% endif %}" id="starredDomains">
-            <table id="table_list_starreddomain_suggestions" class="table table-condensed table-striped table-bordered" width="100%" data-default-columns="value,vulns,tag,source,description,creation_time,registrant_info" data-group-columns="source,tag,monitor,active,owner,scope">
-              <thead>
-                <tr>
-                  <th><input type="checkbox" name="select_all" value="1" id="select-all-items-starred">&nbsp; Operations</th>
-                  <th>Value</th>
-                  <th>Source</th>
-                  <th>Tag</th>
-                  <th>Description</th>
-                  <th>Redirect to</th>
-                  <th>Created</th>
-                  <th>Monitor</th>
-                  <th>Active</th>
-                  <th>IP</th>
-                  <th>Owner</th>
-                  <th>Scope</th>
-                  <th>Registrant info</th>
-                  <th>Vulnerabilities</th>
-                </tr>
-                <tr>
-                  <th></th>
-                  <th><input type="text" placeholder="Search Value" class="column-search-input form-control input-sm" data-column="1"></th>
-                  <th><input type="text" placeholder="Search Source" class="column-search-input form-control input-sm" data-column="2"></th>
-                  <th><input type="text" placeholder="Search Tag" class="column-search-input form-control input-sm" data-column="3"></th>
-                  <th><input type="text" placeholder="Search Description" class="column-search-input form-control input-sm" data-column="4"></th>
-                  <th><input type="text" placeholder="Search Redirect" class="column-search-input form-control input-sm" data-column="5"></th>
-                  <th><input type="text" placeholder="Search Created" class="column-search-input form-control input-sm" data-column="6"></th>
-                  <th>
-                    <select class="column-search-input form-control input-sm" data-column="7">
-                      <option value="">All</option>
-                      <option value="true">True</option>
-                      <option value="false">False</option>
-                      <option value="none">None</option>
-                    </select>
-                  </th>
-                  <th>
-                    <select class="column-search-input form-control input-sm" data-column="8">
-                      <option value="">All</option>
-                      <option value="true">True</option>
-                      <option value="false">False</option>
-                      <option value="none">None</option>
-                    </select>
-                  </th>
-                  <th><input type="text" placeholder="Search IP" class="column-search-input form-control input-sm" data-column="9"></th>
-                  <th><input type="text" placeholder="Search Owner" class="column-search-input form-control input-sm" data-column="10"></th>
-                  <th>
-                    <select class="column-search-input form-control input-sm" data-column="11">
-                      <option value="">All Scopes</option>
-                      <option value="external">External</option>
-                      <option value="internal">Internal</option>
-                    </select>
-                  </th>
-                  <th><input type="text" placeholder="Search Registrant (! = exclude)" class="column-search-input form-control input-sm" data-column="12" title="Prepend ! to exclude, e.g. !henkel.com"></th>
-                  <th></th>
-                </tr>
-              </thead>
-            </table>
-          </div>
-
-          <div role="tabpanel" class="tab-pane fade {% if activetab == 'ipaddress' %}in active{% endif %}" id="sipaddress">
-            <table id="table_list_ipaddress_suggestions" class="table table-condensed table-striped table-bordered" width="100%" data-default-columns="value,vulns,tag,source,description,creation_time,registrant_info" data-group-columns="source,tag,monitor,active,owner,scope">
-              <thead>
-                <tr>
-                  <th><input type="checkbox" name="select_all" value="1" id="select-all-items-ip">&nbsp; Operations</th>
-                  <th>Value</th>
-                  <th>Source</th>
-                  <th>Tag</th>
-                  <th>Description</th>
-                  <th>Created</th>
-                  <th>Monitor</th>
-                  <th>Active</th>
-                  <th>Owner</th>
-                  <th>Scope</th>
-                  <th>Registrant info</th>
-                  <th>Vulnerabilities</th>
-                </tr>
-                <tr>
-                  <th></th>
-                  <th><input type="text" placeholder="Search Value" class="column-search-input form-control input-sm" data-column="1"></th>
-                  <th><input type="text" placeholder="Search Source" class="column-search-input form-control input-sm" data-column="2"></th>
-                  <th><input type="text" placeholder="Search Tag" class="column-search-input form-control input-sm" data-column="3"></th>
-                  <th><input type="text" placeholder="Search Description" class="column-search-input form-control input-sm" data-column="4"></th>
-                  <th><input type="text" placeholder="Search Created" class="column-search-input form-control input-sm" data-column="5"></th>
-                  <th>
-                    <select class="column-search-input form-control input-sm" data-column="6">
-                      <option value="">All</option>
-                      <option value="true">True</option>
-                      <option value="false">False</option>
-                      <option value="none">None</option>
-                    </select>
-                  </th>
-                  <th>
-                    <select class="column-search-input form-control input-sm" data-column="7">
-                      <option value="">All</option>
-                      <option value="true">True</option>
-                      <option value="false">False</option>
-                      <option value="none">None</option>
-                    </select>
-                  </th>
-                  <th><input type="text" placeholder="Search Owner" class="column-search-input form-control input-sm" data-column="8"></th>
                   <th>
                     <select class="column-search-input form-control input-sm" data-column="9">
+                      <option value="">All</option>
+                      <option value="true">True</option>
+                      <option value="false">False</option>
+                      <option value="none">None</option>
+                    </select>
+                  </th>
+                  <th><input type="text" placeholder="Search IP" class="column-search-input form-control input-sm" data-column="10"></th>
+                  <th><input type="text" placeholder="Search Owner" class="column-search-input form-control input-sm" data-column="11"></th>
+                  <th>
+                    <select class="column-search-input form-control input-sm" data-column="12">
                       <option value="">All Scopes</option>
                       <option value="external">External</option>
                       <option value="internal">Internal</option>
                     </select>
                   </th>
-                  <th><input type="text" placeholder="Search Registrant (! = exclude)" class="column-search-input form-control input-sm"></th>
+                  <th><input type="text" placeholder="Search Registrant (! = exclude)" class="column-search-input form-control input-sm" data-column="13" title="Prepend ! to exclude, e.g. !henkel.com"></th>
                   <th></th>
                 </tr>
               </thead>
             </table>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 
@@ -451,15 +279,16 @@
             }
           },
           { 'data': 'value', 'sName': 'Value', 'aTargets': [1] },
-          { 'data': 'source', 'sName': 'Source', 'aTargets': [2] },
-          { 'data': 'tag', 'sName': 'Tag', 'aTargets': [3],
+          { 'data': 'category', 'sName': 'Category', 'aTargets': [2], 'searchable': false },
+          { 'data': 'source', 'sName': 'Source', 'aTargets': [3] },
+          { 'data': 'tag', 'sName': 'Tag', 'aTargets': [4],
             'render': function(data, type, row) {
               return typeof window.renderTagBadges === 'function' ? window.renderTagBadges(data, type) : (data || '');
             }
           },
-          { 'data': 'description', 'sName': 'Description', 'aTargets': [4] },
-          { 'data': 'redirects_to', 'sName': 'Redirect', 'aTargets': [5] },
-          { 'data': 'creation_time', 'sName': 'Created', 'aTargets': [6],
+          { 'data': 'description', 'sName': 'Description', 'aTargets': [5] },
+          { 'data': 'redirects_to', 'sName': 'Redirect', 'aTargets': [6] },
+          { 'data': 'creation_time', 'sName': 'Created', 'aTargets': [7],
             'render': function(data, type, row) {
               if (!data) return '';
               // Use moment.js for formatting if available
@@ -470,66 +299,44 @@
               return data;
             }
           },
-          { 'data': 'monitor', 'sName': 'Monitor', 'aTargets': [7] },
-          { 'data': 'active', 'sName': 'Active', 'aTargets': [8] },
-          { 'data': 'ip', 'sName': 'IP', 'aTargets': [9],
+          { 'data': 'monitor', 'sName': 'Monitor', 'aTargets': [8] },
+          { 'data': 'active', 'sName': 'Active', 'aTargets': [9] },
+          { 'data': 'ip', 'sName': 'IP', 'aTargets': [10],
             'render': function(data, type, row) {
               return renderTruncatedCell(data, type, { separator: ', ', maxItems: 2, className: 'ip-cell' });
             }
           },
-          { 'data': 'owner', 'sName': 'Owner', 'aTargets': [10],
+          { 'data': 'owner', 'sName': 'Owner', 'aTargets': [11],
             'render': function(data, type, row) {
               return renderTruncatedCell(data, type, { separator: ', ', maxItems: 2, className: 'owner-cell' });
             }
           },
-          { 'data': 'scope', 'sName': 'Scope', 'aTargets': [11] },
-          { 'data': 'registrant_info', 'sName': 'Registrant info', 'aTargets': [12],
+          { 'data': 'scope', 'sName': 'Scope', 'aTargets': [12] },
+          { 'data': 'registrant_info', 'sName': 'Registrant info', 'aTargets': [13],
             'render': function(data, type, row) { return renderRegistrantInfo(data, type); }
           },
           { 'data': 'vulns', 'sName': 'Vulnerabilities', 'orderable': false, 'searchable': false }
     ];
-    var ipColumns = suggestionColumns.filter(function(column) {
-      return ['ip', 'redirects_to'].indexOf(column.data) === -1;
-    });
-    function createSuggestionsTable(selector, vtype, columns) {
-      return createServerSideTable(selector, suggestionsListUrl, columns || suggestionColumns, {
-        order: [[1, 'asc']], ajax: { data: { selection: 'visible', vtype: vtype } }
-      });
-    }
 
     var suggestionsListUrl = "{% url 'api:list_suggestions' projectid=projectid %}";
-    var domTable = createSuggestionsTable('#table_list_domain_suggestions', 'all');
-    var subTable = createSuggestionsTable('#table_list_second_level_domain_suggestions', 'second_level_domain');
-    var starredTable = createSuggestionsTable('#table_list_starreddomain_suggestions', 'starred_domain');
-    var ipTable = createSuggestionsTable('#table_list_ipaddress_suggestions', 'ip', ipColumns);
-    var suggestionTables = [domTable, subTable, starredTable, ipTable];
+    var suggestionsTable = createServerSideTable('#table_list_suggestions', suggestionsListUrl, suggestionColumns, {
+      order: [[1, 'asc']], ajax: { data: { selection: 'visible', vtype: 'hosts' } }
+    });
+    setupTableFilterButtons(suggestionsTable, '#suggestion-filter-bar');
 
-    function applySearch(table, tableId) {
-      // Find the second header row (filter row) and bind to its inputs/selects
-      var $filterRow = $(tableId + ' thead tr:eq(1)');
-      applyDebouncedColumnSearch(table, 'input.column-search-input', 'select.column-search-input', 400, $filterRow);
-    }
-    
-    applySearch(domTable, '#table_list_domain_suggestions');
-    applySearch(subTable, '#table_list_second_level_domain_suggestions');
-    applySearch(starredTable, '#table_list_starreddomain_suggestions');
-    applySearch(ipTable, '#table_list_ipaddress_suggestions');
+    applyDebouncedColumnSearch(suggestionsTable, 'input.column-search-input', 'select.column-search-input', 400);
 
-    // Initialize common standalone features for multiple tables
+    // Initialize common standalone features
     initializeStandaloneFeatures();
-    
-    // Setup select all for each table
-    setupStandaloneSelectAll('#select-all-items-dom', '#table_list_domain_suggestions');
-    setupStandaloneSelectAll('#select-all-items-sub', '#table_list_second_level_domain_suggestions');
-    setupStandaloneSelectAll('#select-all-items-starred', '#table_list_starreddomain_suggestions');
-    setupStandaloneSelectAll('#select-all-items-ip', '#table_list_ipaddress_suggestions');
+
+    setupStandaloneSelectAll('#select-all-items-dom', '#table_list_suggestions');
 
     // Bulk actions via API (no page refresh)
     setupBulkActions({
       formSelector: '#form-selected',
       apiUrl: "{% url 'api:bulk_suggestions' projectid=projectid %}",
       checkboxName: 'id[]',
-      tableInstances: suggestionTables,
+      tableInstances: [suggestionsTable],
       buttons: [
         { name: 'btnmonitor', action: 'monitor', confirm: false },
         { name: 'btnignore', action: 'ignore', confirm: false },
@@ -540,7 +347,7 @@
     // Row-level actions (monitor/ignore/delete) via API (no page refresh)
     setupRowActions({
       apiUrl: "{% url 'api:bulk_suggestions' projectid=projectid %}",
-      tableInstances: suggestionTables,
+      tableInstances: [suggestionsTable],
       confirmActions: ['delete']
     });
 
@@ -549,7 +356,7 @@
 
     // When "Scan selected suggestions" is clicked, set flag and open modal
     $('#scan-selected-suggestions-btn').on('click', function (e) {
-      var selectedUuids = getSelectedIdsFromBulkConfig({ tableInstances: suggestionTables });
+      var selectedUuids = getSelectedIdsFromBulkConfig({ tableInstances: [suggestionsTable] });
 
       if (selectedUuids.length === 0) {
         e.preventDefault();
@@ -570,7 +377,7 @@
     $('#scan-suggestions-form').on('submit', function (e) {
       $(this).find('input[name="uuid[]"]').remove();
       if (scanSelectedSuggestions) {
-        var selectedUuids = getSelectedIdsFromBulkConfig({ tableInstances: suggestionTables });
+        var selectedUuids = getSelectedIdsFromBulkConfig({ tableInstances: [suggestionsTable] });
         if (!selectedUuids.length) {
           e.preventDefault();
           bootbox.alert('Please select at least one suggestion to scan.');
@@ -587,17 +394,6 @@
         }
       }
       // else: normal scan, no UUIDs added
-    });
-
-    // Clear column search inputs and reset DataTable filters when switching tabs
-    $('[data-toggle="tab"]').on('shown.bs.tab', function (e) {
-      // Update active button state
-      $('.suggestion-tab-btn').removeClass('active');
-      $(this).addClass('active');
-      // Clear all search inputs
-      $('.column-search-input').val('');
-      // Reset search for all tables
-      suggestionTables.forEach(function(table) { table.columns().search('').draw(); });
     });
 
     // ========== Upload Assets Modal ==========

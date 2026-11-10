@@ -5,7 +5,7 @@ from django.contrib import messages
 from django.utils.html import escape
 from django.utils.timezone import make_aware
 from django.http import HttpResponse
-from assets.models import Asset
+from assets.models import Asset, ASSET_FILTER_QUERIES
 from project.models import Project
 from datetime import datetime
 import uuid as imported_uuid
@@ -107,6 +107,16 @@ def classify_category(value, asset_type=None):
     if extracted.subdomain and _NUMERIC_LABEL_RE.match(extracted.subdomain.split('.')[0]):
         return 'numeric_subdomain'
     return ''
+
+
+def asset_filter_counts(queryset):
+    """Counts for the two-level filter bar, keyed by filter-button id.
+
+    The three group ids partition the queryset; the sub ids refine one group.
+    Cheap enough to render server-side (14 indexed COUNTs) instead of a
+    JSON counts endpoint.
+    """
+    return {key: queryset.filter(value).count() for key, value in ASSET_FILTER_QUERIES.items()}
 
 
 def export_assets_csv(project_id, monitored_only=False, scope='external'):

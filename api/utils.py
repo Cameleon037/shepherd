@@ -3,7 +3,8 @@ from django.db.models import Count, Q
 
 TABLE_GROUP_FIELDS = {
     'assets.asset': {'value': 'value', 'source': 'source', 'tag': 'tag', 'scope': 'scope',
-                     'owner': 'owner', 'monitor': 'monitor', 'active': 'active', 'endpoint_count': 'endpoint_count'},
+                     'owner': 'owner', 'monitor': 'monitor', 'active': 'active', 'endpoint_count': 'endpoint_count',
+                     'category': 'category'},
     'findings.finding': {'asset_name': 'asset_name', 'name': 'name', 'type': 'type',
                          'source': 'source', 'severity': 'severity', 'status': 'status',
                          'keyword': 'keyword__keyword'},

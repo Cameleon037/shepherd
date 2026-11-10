@@ -519,16 +519,24 @@ body {
     color: #fff;
 }
 
-/* Suggestion tabs - simple button group navigation */
-.suggestion-tabs {
+/* Asset/suggestion table filter bar - two-level button navigation */
+.list-filter-bar {
     display: flex;
-    gap: 8px;
+    flex-direction: column;
+    gap: 10px;
     margin-bottom: 20px;
     padding-bottom: 12px;
     border-bottom: 2px solid var(--border-primary);
 }
 
-.suggestion-tab-btn {
+.list-filter-tabs,
+.list-filter-sub {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.list-filter-btn {
     background: var(--bg-tertiary);
     color: var(--text-secondary);
     border: 1px solid var(--border-primary);
@@ -543,24 +551,33 @@ body {
     font-weight: 500;
 }
 
-.suggestion-tab-btn:hover {
+.list-filter-btn:hover {
     background: var(--bg-secondary);
     color: var(--text-primary);
     border-color: var(--border-secondary);
     transform: translateY(-1px);
 }
 
-.suggestion-tab-btn.active {
+.list-filter-btn.active {
     background: var(--bg-selected);
     color: var(--text-primary);
     border-color: var(--bg-selected);
     box-shadow: 0 2px 4px var(--shadow);
 }
 
-.suggestion-tab-btn.active:hover {
+.list-filter-btn.active:hover {
     background: var(--bg-selected-alt);
     transform: translateY(0);
 }
+
+.list-filter-btn.is-sub {
+    padding: 6px 12px;
+    border-radius: 14px;
+    font-size: 0.85em;
+}
+
+/* .list-filter-btn sets display:inline-flex, which beats the UA [hidden] rule. */
+.list-filter-btn[hidden] { display: none; }
 
 .tab-count {
     background: rgba(0, 0, 0, 0.1);
@@ -577,12 +594,12 @@ body {
     background: rgba(255, 255, 255, 0.15);
 }
 
-.suggestion-tab-btn.active .tab-count {
+.list-filter-btn.active .tab-count {
     background: rgba(0, 0, 0, 0.2);
     color: var(--text-primary);
 }
 
-[data-theme="dark"] .suggestion-tab-btn.active .tab-count {
+[data-theme="dark"] .list-filter-btn.active .tab-count {
     background: rgba(255, 255, 255, 0.25);
 }
 

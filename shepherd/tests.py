@@ -40,14 +40,9 @@ class TableMarkupParser(HTMLParser):
 
 class TablePresentationTests(SimpleTestCase):
     tables = {
-        "assets/list_assets.html": {"table_list_assets": 12},
+        "assets/list_assets.html": {"table_list_assets": 13},
         "assets/list_ignored_suggestions.html": {"table_list_ignored_suggestions": 8},
-        "assets/list_suggestions.html": {
-            "table_list_domain_suggestions": 14,
-            "table_list_second_level_domain_suggestions": 14,
-            "table_list_starreddomain_suggestions": 14,
-            "table_list_ipaddress_suggestions": 12,
-        },
+        "assets/list_suggestions.html": {"table_list_suggestions": 15},
         "findings/list_findings.html": {"table_list_findings": 11},
         "findings/list_data_leaks.html": {"table_list_findings": 8},
         "findings/list_dns_records.html": {"table_list_dns_records": 6},
@@ -92,11 +87,10 @@ class TablePresentationTests(SimpleTestCase):
                         self.assertIn("disabled", attrs)
 
     def test_default_columns_for_findings_assets_and_suggestions(self):
-        asset_columns = 'value,vulns,tag,source,description,creation_time,registrant_info'
         defaults = {
-            'assets/list_assets.html': asset_columns,
-            'assets/list_suggestions.html': asset_columns,
-            'assets/list_ignored_suggestions.html': asset_columns,
+            'assets/list_assets.html': 'value,category,vulns,tag,source,description,creation_time,registrant_info',
+            'assets/list_suggestions.html': 'value,category,vulns,tag,source,description,creation_time,registrant_info',
+            'assets/list_ignored_suggestions.html': 'value,vulns,tag,source,description,creation_time,registrant_info',
             'findings/list_findings.html': 'asset_name,name,description,source,severity,status,scan_date',
         }
         for template, expected in defaults.items():

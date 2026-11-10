@@ -1,4 +1,47 @@
 from django.db import models
+from django.db.models import Q
+
+
+# Filter-button vocabulary for the asset/suggestion tables: keys are the ?vtype=
+# values the table endpoints accept, values the ORM filter for that button.
+# 'hosts' and 'service' split by category so service_* (DNS record names that
+# cannot be browsed or scanned) never mix with real hosts. A chip refines one
+# group, so its filter is <group> & <its own filter>: the badge count on the
+# chip and the rows it returns are then the same set, and a chip can never
+# reach another group (all service_* records are domain/subdomain too).
+ASSET_FILTER_GROUPS = {
+    'all': Q(),
+    'hosts': ~Q(type='ip') & ~Q(category__startswith='service'),
+    'service': Q(category__startswith='service'),
+    'ip': Q(type='ip'),
+}
+
+# chip id -> (its own filter, the group whose row it refines in the bar)
+ASSET_FILTER_SUBS = {
+    'second_level_domain': (Q(type='domain', subtype='domain'), 'hosts'),
+    'subdomain': (Q(type='domain', subtype='subdomain'), 'hosts'),
+    'starred_domain': (Q(type='starred_domain'), 'hosts'),
+    'www': (Q(category='www'), 'hosts'),
+    'mail_server': (Q(category='mail_server'), 'hosts'),
+    'numeric_subdomain': (Q(category='numeric_subdomain'), 'hosts'),
+    'service_mail': (Q(category='service_mail'), 'service'),
+    'service_validation': (Q(category='service_validation'), 'service'),
+    'service_discovery': (Q(category='service_discovery'), 'service'),
+}
+
+ASSET_FILTER_QUERIES = {
+    **ASSET_FILTER_GROUPS,
+    # Unscoped type filter, accepted by the endpoints for hand-built requests;
+    # no button in the bar uses it.
+    'domain': Q(type='domain'),
+    **{key: ASSET_FILTER_GROUPS[group] & query
+       for key, (query, group) in ASSET_FILTER_SUBS.items()},
+}
+
+
+def asset_filter_query(vtype):
+    """Q object for a table filter button; unknown or missing values filter nothing."""
+    return ASSET_FILTER_QUERIES.get(vtype or 'all', Q())
 
 
 class AssetQuerySet(models.QuerySet):

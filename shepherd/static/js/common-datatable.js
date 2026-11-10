@@ -35,6 +35,55 @@ function createServerSideTable(selector, url, columns, options) {
     }, options || {}));
 }
 
+/** Two-level filter bar (primary groups + sub-category chips) for one server-side
+ *  table. Buttons carry data-filter (the ?vtype= value); sub buttons carry
+ *  data-group and class "is-sub". Initial active state is rendered server-side,
+ *  and the table must be created with the matching default vtype in ajax.data,
+ *  because the first XHR fires during DataTables init. */
+function setupTableFilterButtons(table, barSelector) {
+    var $bar = $(barSelector);
+    var $primary = $bar.find('.list-filter-btn').not('.is-sub');
+    var $sub = $bar.find('.list-filter-btn.is-sub');
+    var $subRow = $bar.find('.list-filter-sub');
+    var group = $primary.filter('.active').attr('data-filter') || 'all';
+    var sub = 'all';
+
+    function select($buttons) {
+        $buttons.removeClass('active').attr('aria-pressed', 'false');
+        var $active = $buttons.filter('[data-filter="' + (sub !== 'all' ? sub : group) + '"]');
+        if (sub === 'all') {
+            $active = $active.add($sub.filter('[data-group="' + group + '"][data-filter="all"]'));
+        }
+        $active.addClass('active').attr('aria-pressed', 'true');
+    }
+
+    function showSubs() {
+        var $visible = $sub.filter('[data-group="' + group + '"]');
+        $sub.add($primary).removeClass('active').attr('aria-pressed', 'false');
+        $sub.each(function() { this.hidden = true; });
+        $visible.each(function() { this.hidden = false; });
+        $subRow[0].hidden = $visible.length === 0;
+        sub = 'all';
+        select($visible.add($primary));
+    }
+
+    table.on('preXhr.dt.filterButtons', function(e, settings, data) {
+        data.vtype = sub !== 'all' ? sub : group;
+    });
+    $primary.on('click', function() {
+        group = $(this).attr('data-filter');
+        showSubs();
+        table.page(0).draw(false);
+    });
+    $sub.on('click', function() {
+        sub = $(this).attr('data-filter');
+        select($sub.filter('[data-group="' + group + '"]'));
+        table.page(0).draw(false);
+    });
+    showSubs();
+    return function currentFilter() { return sub !== 'all' ? sub : group; };
+}
+
 // Shared search lifecycle for DataTables and the project-wide endpoint search.
 function setupSearchControl($input, $clear, search) {
     var timer;

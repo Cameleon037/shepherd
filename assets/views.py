@@ -11,7 +11,7 @@ from assets.models import Asset
 from project.models import Project
 from findings.models import DNSRecord, Endpoint, Screenshot
 from jobs.utils import run_job
-from assets.utils import export_assets_csv, upload_domains_from_file, ignore_asset
+from assets.utils import export_assets_csv, upload_domains_from_file, ignore_asset, asset_filter_counts
 from assets.forms import AddSuggestionForm, AddAssetForm
 import json
 import threading
@@ -25,11 +25,7 @@ def suggestions(request):
     
     context = {'projectid': request.session['current_project']['prj_id'], 'suggestionform': AddSuggestionForm()}
     prj = Project.objects.get(id=request.session['current_project']['prj_id'])
-    context['all_count'] = prj.asset_set.filter(ignore=False).count()
-    context['secondleveldomain_count'] = prj.asset_set.filter(type='domain', subtype='domain', ignore=False).count()
-    context['starreddomain_count'] = prj.asset_set.filter(type='starred_domain', ignore=False).count()
-    context['ip_count'] = prj.asset_set.filter(type='ip', ignore=False).count()
-    context['activetab'] = 'domain'
+    context['filter_counts'] = asset_filter_counts(prj.asset_set.filter(ignore=False))
     return render(request, 'assets/list_suggestions.html', context)
 
 
@@ -287,6 +283,7 @@ def assets(request):
 
     # Add form for manual asset addition
     context['assetform'] = AddAssetForm()
+    context['filter_counts'] = asset_filter_counts(prj.asset_set.filter(monitor=True, ignore=False))
     return render(request, 'assets/list_assets.html', context)
 
 @login_required
