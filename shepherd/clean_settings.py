@@ -260,6 +260,17 @@ GHLEAKS_TOKEN = ''
 GHLEAKS_WORKING_DIR = ''
 GHLEAKS_BINARY = ''
 
+# Subfinder passive sources: Shodan (SHODAN_API_KEY), FOFA (FOFA_EMAIL/FOFA_KEY)
+# and the GitHub token (GHLEAKS_TOKEN or SUBFINDER_GITHUB_TOKEN) are reused
+# automatically. The keys below are free-signup extras that unlock the Chaos,
+# VirusTotal, SecurityTrails and Censys subfinder sources.
+PDCP_API_KEY = ''          # https://cloud.projectdiscovery.io (Chaos)
+VIRUSTOTAL_API_KEY = ''    # https://www.virustotal.com (free API key)
+SECURITYTRAILS_API_KEY = ''  # https://securitytrails.com (free plan)
+CENSYS_ID = ''             # https://search.censys.io (account -> API)
+CENSYS_SECRET = ''
+SUBFINDER_GITHUB_TOKEN = ''  # optional override; falls back to GHLEAKS_TOKEN
+
 # Recent Findings Days
 RECENT_DAYS = 5
 

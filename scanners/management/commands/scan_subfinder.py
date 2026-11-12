@@ -1,10 +1,13 @@
+import os
 import subprocess
 import json
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import uuid
 import dateparser
+import yaml
 from django.core.management.base import BaseCommand, CommandError
+from django.conf import settings
 from django.utils.timezone import make_aware
 from datetime import datetime
 from assets.models import Asset
@@ -42,13 +45,61 @@ class Command(BaseCommand):
             self.stdout.write("No active domains found to scan.")
             return
 
-        # Use ThreadPoolExecutor to run scans in parallel
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            futures = [executor.submit(self.subfinder_scan_domain, domain.value, project) for domain in domains]
-            for future in as_completed(futures):
-                future.result()  # This will raise any exceptions caught during the scan
+        provider_config_path = self.build_provider_config()
 
-    def subfinder_scan_domain(self, domain, prj):
+        # Use ThreadPoolExecutor to run scans in parallel
+        try:
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                futures = [executor.submit(self.subfinder_scan_domain, domain.value, project, provider_config_path)
+                           for domain in domains]
+                for future in as_completed(futures):
+                    future.result()  # This will raise any exceptions caught during the scan
+        finally:
+            if provider_config_path:
+                os.unlink(provider_config_path)
+
+    def build_provider_config(self):
+        """Write a subfinder provider-config.yaml built from Django settings.
+
+        Enables the key-backed passive sources: Shodan and FOFA reuse the keys
+        already configured for their discovery imports; Chaos (PDCP),
+        VirusTotal, SecurityTrails, Censys and GitHub are opt-in through their
+        own settings entries (all free plans suffice). Returns the file path
+        (caller deletes it) or None when no key is set, in which case subfinder
+        falls back to its keyless sources.
+        """
+        def setting(name):
+            return str(getattr(settings, name, '') or '').strip()
+
+        providers = {}
+        if setting('SHODAN_API_KEY'):
+            providers['shodan'] = [{'key': setting('SHODAN_API_KEY')}]
+        if setting('FOFA_EMAIL') and setting('FOFA_KEY'):
+            # subfinder expects fofa keys as "email,key"
+            providers['fofa'] = [{'key': f"{setting('FOFA_EMAIL')},{setting('FOFA_KEY')}"}]
+        if setting('PDCP_API_KEY'):
+            providers['chaos'] = [{'key': setting('PDCP_API_KEY')}]
+        if setting('VIRUSTOTAL_API_KEY'):
+            providers['virustotal'] = [{'key': setting('VIRUSTOTAL_API_KEY')}]
+        if setting('SECURITYTRAILS_API_KEY'):
+            providers['securitytrails'] = [{'key': setting('SECURITYTRAILS_API_KEY')}]
+        if setting('CENSYS_ID') and setting('CENSYS_SECRET'):
+            providers['censys'] = [{'id': setting('CENSYS_ID'), 'secret': setting('CENSYS_SECRET')}]
+        github_token = setting('SUBFINDER_GITHUB_TOKEN') or setting('GHLEAKS_TOKEN')
+        if github_token:
+            providers['github'] = [{'token': [github_token]}]
+
+        if not providers:
+            return None
+
+        fd, path = tempfile.mkstemp(prefix='subfinder_providers_', suffix='.yaml')
+        os.chmod(path, 0o600)
+        with os.fdopen(fd, 'w') as f:
+            yaml.safe_dump(providers, f)
+        self.stdout.write(f"[+] subfinder provider config enabled: {', '.join(sorted(providers))}")
+        return path
+
+    def subfinder_scan_domain(self, domain, prj, provider_config_path=None):
         self.stdout.write(f'Scanning subdomains for: {domain}')
         try:
             # Create a temporary file to store the Subfinder results
@@ -59,17 +110,22 @@ class Command(BaseCommand):
                 if domain.startswith("*."):
                     domain = domain[2:]
 
-                # Build the Subfinder command
-                command = ['subfinder', '-d', domain, '-oJ', '-o', temp_file_path]
-
-                # print(command)
-                # exit(0)
+                # Build the Subfinder command: -all enables every source
+                # (including the key-backed ones and slower/recursive
+                # providers); -silent keeps stdout to results, so the stderr
+                # source-statistics table (-stats) is worth logging per domain.
+                command = ['subfinder', '-d', domain, '-oJ', '-o', temp_file_path,
+                           '-all', '-silent', '-stats']
+                if provider_config_path:
+                    command += ['-pc', provider_config_path]
 
                 # Trigger Subfinder scan
                 result = subprocess.run(command, capture_output=True, text=True, check=True)
                 if result.returncode != 0:
                     self.stderr.write(f'Error scanning domain {domain}: {result.stderr}')
                     return
+                if result.stderr.strip():
+                    self.stdout.write(f'[stats] {domain}: ' + ' | '.join(result.stderr.splitlines()))
 
                 # for line in temp_file:
                 #     print(line)
