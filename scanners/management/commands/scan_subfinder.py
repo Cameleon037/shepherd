@@ -128,9 +128,13 @@ class Command(BaseCommand):
                 # for line in temp_file:
                 #     print(line)
 
+                found = new = 0
                 for line in temp_file:
                     subfinder_domain = json.loads(line)
                     subfinder_domain_name = subfinder_domain['host'].lower()
+                    # subfinder attributes each host to one source in its JSONL
+                    found_src = subfinder_domain.get('source', '?')
+                    found += 1
 
                     # Create the asset details
                     sugg = {
@@ -148,13 +152,16 @@ class Command(BaseCommand):
                     sobj, created = Asset.objects.get_or_create(uuid=subfinder_domain_uuid, related_project=prj, defaults=sugg)
 
                     if created:
-                        print(f"Add new suggestion: {subfinder_domain_name} to project {prj.projectname}")
+                        new += 1
+                        print(f"Add new suggestion: {subfinder_domain_name} (source: {found_src}) to project {prj.projectname}")
                     else:
                         sobj.last_seen_time = make_aware(dateparser.parse(datetime.now().isoformat(sep=" ", timespec="seconds")))
                         if not 'subfinder' in sobj.source:
                             sobj.source = sobj.source + ", subfinder"
                         sobj.save()
-                        print(f"Update suggestion: {subfinder_domain_name} in project {prj.projectname}")
+                        print(f"Update suggestion: {subfinder_domain_name} (source: {found_src}) in project {prj.projectname}")
+
+                self.stdout.write(f"[+] {domain}: subfinder found {found} subdomains ({new} new assets)")
 
         except Exception as e:
             self.stderr.write(f'Exception scanning domain {domain}: {str(e)}')
