@@ -110,12 +110,12 @@ class Command(BaseCommand):
                 if domain.startswith("*."):
                     domain = domain[2:]
 
-                # Build the Subfinder command: -all enables every source
-                # (including the key-backed ones and slower/recursive
-                # providers); -silent keeps stdout to results, so the stderr
-                # source-statistics table (-stats) is worth logging per domain.
+                # Build the Subfinder command: -all enables every source,
+                # including the key-backed ones (provider config below) and
+                # the slower/recursive providers; -silent keeps stdout to the
+                # JSONL results file.
                 command = ['subfinder', '-d', domain, '-oJ', '-o', temp_file_path,
-                           '-all', '-silent', '-stats']
+                           '-all', '-silent']
                 if provider_config_path:
                     command += ['-pc', provider_config_path]
 
@@ -124,8 +124,6 @@ class Command(BaseCommand):
                 if result.returncode != 0:
                     self.stderr.write(f'Error scanning domain {domain}: {result.stderr}')
                     return
-                if result.stderr.strip():
-                    self.stdout.write(f'[stats] {domain}: ' + ' | '.join(result.stderr.splitlines()))
 
                 # for line in temp_file:
                 #     print(line)
