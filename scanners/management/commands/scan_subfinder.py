@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 import json
 import tempfile
@@ -132,15 +133,19 @@ class Command(BaseCommand):
                 for line in temp_file:
                     subfinder_domain = json.loads(line)
                     subfinder_domain_name = subfinder_domain['host'].lower()
-                    # subfinder attributes each host to one source in its JSONL
-                    found_src = subfinder_domain.get('source', '?')
+                    # subfinder attributes each host to one source in its JSONL.
+                    # Persist that attribution in the source field namespaced as
+                    # subfinder_<source>, so provenance survives and stays
+                    # distinct from the standalone crtsh/shodan importers.
+                    src_slug = re.sub(r'[^a-z0-9]', '', str(subfinder_domain.get('source', '')).lower())
+                    source_token = f"subfinder_{src_slug}" if src_slug else 'subfinder'
                     found += 1
 
                     # Create the asset details
                     sugg = {
                         "related_project": prj,
                         "value": subfinder_domain_name,
-                        "source": 'subfinder',
+                        "source": source_token,
                         "scope": 'external',
                         "link": '',
                         "raw": subfinder_domain,
@@ -153,13 +158,15 @@ class Command(BaseCommand):
 
                     if created:
                         new += 1
-                        print(f"Add new suggestion: {subfinder_domain_name} (source: {found_src}) to project {prj.projectname}")
+                        print(f"Add new suggestion: {subfinder_domain_name} (source: {source_token}) to project {prj.projectname}")
                     else:
                         sobj.last_seen_time = make_aware(dateparser.parse(datetime.now().isoformat(sep=" ", timespec="seconds")))
-                        if not 'subfinder' in sobj.source:
-                            sobj.source = sobj.source + ", subfinder"
+                        # Keep exactly one subfinder attribution per asset: the
+                        # first one wins, later scans only refresh last_seen.
+                        if not any(token.strip().startswith('subfinder') for token in sobj.source.split(',')):
+                            sobj.source = f"{sobj.source}, {source_token}" if sobj.source else source_token
                         sobj.save()
-                        print(f"Update suggestion: {subfinder_domain_name} (source: {found_src}) in project {prj.projectname}")
+                        print(f"Update suggestion: {subfinder_domain_name} (source: {source_token}) in project {prj.projectname}")
 
                 self.stdout.write(f"[+] {domain}: subfinder found {found} subdomains ({new} new assets)")
 
