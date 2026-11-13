@@ -655,6 +655,8 @@ function setupTableSelectionBar(table) {
  * Setup bulk actions: intercept form/buttons, collect selected IDs, POST to API, reload tables.
  * @param {object} config - apiUrl, formSelector, checkboxName ('id[]' or 'uuid[]'), tableInstances (DataTable APIs to reload), buttons [{ name, action, confirm }]
  *   Example: { apiUrl: '{% url "api:bulk_assets" projectid=projectid %}', formSelector: '#form-selected', checkboxName: 'id[]', tableInstances: [assetsTable], buttons: [{ name: 'btnignore', action: 'ignore', confirm: false }, { name: 'btndelete', action: 'delete', confirm: true }] }
+ *   onAction (optional) function(action, ids) -> boolean; return true when the page has
+ *   already updated the DOM, in which case no table reload is issued.
  */
 function setupBulkActions(config) {
     if (!config || !config.apiUrl || !config.buttons || !config.buttons.length) return;
@@ -685,7 +687,11 @@ function setupBulkActions(config) {
                 success: function(response) {
                     if (response.success) {
                         displayMessage('info', response.message || 'Action completed.');
-                        tableInstances.forEach(function(t) { if (t && t.ajax && t.ajax.reload) t.ajax.reload(); });
+                        var handled = typeof config.onAction === 'function' &&
+                                      config.onAction(action, ids) === true;
+                        if (!handled) {
+                            tableInstances.forEach(function(t) { if (t && t.ajax && t.ajax.reload) t.ajax.reload(); });
+                        }
                         $(formSelector + ' input[type="checkbox"][name="select_all"], ' + formSelector + ' input[id^="select-all-"]').prop('checked', false).prop('indeterminate', false);
                     } else {
                         displayMessage('danger', response.error || 'Action failed.');
@@ -731,15 +737,20 @@ function setupBulkActions(config) {
  * Setup row-level action buttons (monitor/ignore/move/activate/delete) that POST to
  * a bulk API (or a direct view URL) and reload the tables without a page refresh.
  * @param {object} config - apiUrl (bulk API URL), tableInstances (DataTable APIs to reload),
- *   confirmActions (array of action names that require a bootbox confirm, e.g. ['delete'])
+ *   confirmActions (array of action names that require a bootbox confirm, e.g. ['delete']),
+ *   silentActions (optional array of action names with no success toast - the row
+ *   control itself already shows the new state),
  * Row buttons must have class "row-action", data-action, data-uuid (or data-url for direct views),
  *   and optionally data-display (shown in the confirm dialog).
+ *   onAction (optional) function(action, ids) -> boolean; return true when the page has
+ *   already updated the DOM, in which case no table reload is issued.
  */
 function setupRowActions(config) {
     config = config || {};
     var apiUrl = config.apiUrl;
     var tableInstances = config.tableInstances || [];
     var confirmActions = config.confirmActions || [];
+    var silentActions = config.silentActions || [];
 
     $(document).on('click', '.row-action', function (e) {
         e.preventDefault();
@@ -766,10 +777,16 @@ function setupRowActions(config) {
                 contentType: false,
                 success: function (response) {
                     if (response && response.success) {
-                        displayMessage('info', response.message || 'Action completed.');
-                        tableInstances.forEach(function (t) {
-                            if (t && t.ajax && t.ajax.reload) t.ajax.reload();
-                        });
+                        if (silentActions.indexOf(action) === -1) {
+                            displayMessage('info', response.message || 'Action completed.');
+                        }
+                        var handled = typeof config.onAction === 'function' &&
+                                      config.onAction(action, uuid ? [uuid] : []) === true;
+                        if (!handled) {
+                            tableInstances.forEach(function (t) {
+                                if (t && t.ajax && t.ajax.reload) t.ajax.reload();
+                            });
+                        }
                     } else {
                         displayMessage('danger', (response && response.error) || 'Action failed.');
                     }

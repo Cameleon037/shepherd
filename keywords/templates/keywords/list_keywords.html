@@ -289,6 +289,61 @@
 <script src="{% static 'js/bootbox.min.js' %}"></script>
 <script type="text/javascript" language="javascript" class="init">
 $(document).ready( function () {
+    // KeywordSwitch: pure helpers (no DOM access) for the Enabled column of both
+    // keyword tables, so the DataTables renderers and the in-place refresh after
+    // Enable/Disable emit identical markup. escapeHtml is hoisted from below.
+    var KeywordSwitch = {
+        // Explicit-state transition (a mixed text accepts Enable). Mutates the row
+        // object, so later local redraws and Group-by-Enabled headers stay truthful.
+        nextState: function (row, action) {
+            var enable = action === 'enable';
+            row.enabled = enable;
+            if (row.type_count !== undefined) {          // grouped keyword row
+                row.enabled_count = enable ? row.type_count : 0;
+                row.any_enabled = enable;
+            }
+        },
+        // Grouped keyword row: three states (On / n-m mixed / Off).
+        groupHtml: function (row) {
+            var enabledCount = row.enabled_count || 0;
+            var total = row.type_count || (row.ktypes || []).length || 1;
+            var state, role, checked, label, tooltip, action;
+            if (row.enabled) {
+                state = 'on'; role = 'switch'; checked = 'true'; label = 'On';
+                action = 'disable'; tooltip = 'Disable all types';
+            } else if (row.any_enabled) {
+                // Types of this keyword disagree; a plain On/Off would lie.
+                state = 'mixed'; role = 'button'; checked = ''; label = enabledCount + '/' + total;
+                action = 'enable';
+                tooltip = enabledCount + ' of ' + total + ' types enabled - click to enable all';
+            } else {
+                state = 'off'; role = 'switch'; checked = 'false'; label = 'Off';
+                action = 'enable'; tooltip = 'Enable all types';
+            }
+            return '<a class="keyword-switch ' + state + ' row-action" role="' + role + '"' +
+                   (checked ? ' aria-checked="' + checked + '"' : '') +
+                   ' rel="tooltip" data-placement="left" data-original-title="' + tooltip + '"' +
+                   ' aria-label="' + tooltip + '" data-action="' + action + '"' +
+                   ' data-uuid="' + row.id + '" data-display="' + escapeHtml(row.keyword) + '"' +
+                   ' href="#">' + label + '</a>';
+        },
+        // Supplier row (ktype ransomlook_supplier): two states, no type counts.
+        supplierHtml: function (row) {
+            var on = !!row.enabled;
+            var tooltip = on ? 'Disable Supplier' : 'Enable Supplier';
+            return '<a class="keyword-switch ' + (on ? 'on' : 'off') + ' row-action" role="switch" ' +
+                   'aria-checked="' + on + '" ' +
+                   'rel="tooltip" data-placement="left" data-original-title="' + tooltip + '" ' +
+                   'aria-label="' + tooltip + '" data-action="' + (on ? 'disable' : 'enable') + '" ' +
+                   'data-uuid="' + row.id + '" data-display="' + escapeHtml(row.keyword) + '" ' +
+                   'href="#">' + (on ? 'On' : 'Off') + '</a>';
+        },
+        // Serializer rows have no type_count; group rows from group_keywords_by_text always do.
+        html: function (row) {
+            return row.type_count === undefined ? KeywordSwitch.supplierHtml(row)
+                                                : KeywordSwitch.groupHtml(row);
+        }
+    };
     var keywordsTable = $('#table_list_keywords').DataTable({
         processing: true, serverSide: true, pageLength: 25, select: true,
         order: [[ 1, "asc" ]], // Sort by Keyword (column index 1; Actions is the first column)
@@ -333,29 +388,7 @@ $(document).ready( function () {
                 },
             },
             {'data': 'enabled', 'sName': 'Enabled', 'aTargets': [ 3 ],
-                "mRender": function (data, type, full) {
-                    var enabled = full.enabled_count || 0;
-                    var total = full.type_count || (full.ktypes || []).length || 1;
-                    var state, role, checked, label, tooltip, action;
-                    if (data) {
-                        state = 'on'; role = 'switch'; checked = 'true'; label = 'On';
-                        action = 'disable'; tooltip = 'Disable all types';
-                    } else if (full.any_enabled) {
-                        // Types of this keyword disagree; a plain On/Off would lie.
-                        state = 'mixed'; role = 'button'; checked = ''; label = enabled + '/' + total;
-                        action = 'enable';
-                        tooltip = enabled + ' of ' + total + ' types enabled - click to enable all';
-                    } else {
-                        state = 'off'; role = 'switch'; checked = 'false'; label = 'Off';
-                        action = 'enable'; tooltip = 'Enable all types';
-                    }
-                    return '<a class="keyword-switch ' + state + ' row-action" role="' + role + '"' +
-                           (checked ? ' aria-checked="' + checked + '"' : '') +
-                           ' rel="tooltip" data-placement="left" data-original-title="' + tooltip + '"' +
-                           ' aria-label="' + tooltip + '" data-action="' + action + '"' +
-                           ' data-uuid="' + full.id + '" data-display="' + escapeHtml(full.keyword) + '"' +
-                           ' href="#">' + label + '</a>';
-                },
+                "mRender": function (data, type, full) { return KeywordSwitch.groupHtml(full); },
                 "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) { $("a", nTd).tooltip(); },
             },
             {'data': 'description', 'sName': 'Description', 'aTargets': [ 4 ],
@@ -412,16 +445,7 @@ $(document).ready( function () {
                 },
             },
             {'data': 'enabled', 'sName': 'Enabled', 'aTargets': [ 2 ],
-                "mRender": function (data, type, full) {
-                    var on = !!data;
-                    var tooltip = on ? 'Disable Supplier' : 'Enable Supplier';
-                    return '<a class="keyword-switch ' + (on ? 'on' : 'off') + ' row-action" role="switch" ' +
-                           'aria-checked="' + on + '" ' +
-                           'rel="tooltip" data-placement="left" data-original-title="' + tooltip + '" ' +
-                           'aria-label="' + tooltip + '" data-action="' + (on ? 'disable' : 'enable') + '" ' +
-                           'data-uuid="' + full.id + '" data-display="' + escapeHtml(full.keyword) + '" ' +
-                           'href="#">' + (on ? 'On' : 'Off') + '</a>';
-                },
+                "mRender": function (data, type, full) { return KeywordSwitch.supplierHtml(full); },
                 "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) { $("a", nTd).tooltip(); },
             },
             {'data': 'description', 'sName': 'Description', 'aTargets': [ 3 ],
@@ -442,6 +466,44 @@ $(document).ready( function () {
         ]
     });
 
+    // --- Enable/Disable keeps the row where it is: patch its Enabled cell instead
+    // of reloading the table (a reload would re-apply the server's enabled-first
+    // ranking and move the row). Returns false when the caller must reload instead:
+    // the id is not in this table's loaded page, or the table is grouped by Enabled,
+    // because setupTableGrouping draws its group headers from the row values
+    // (common-datatable.js:160-175) and needs a re-query to redraw them.
+    function refreshKeywordSwitch(table, id, action) {
+        var $groupBy = $('#' + $(table.table().node()).attr('id') + '-group-by');
+        if ($groupBy.length && $groupBy.val()) return false;
+        var node = null;
+        table.rows().every(function () {
+            if (!node && String(this.data().id) === String(id)) node = this.node();
+        });
+        if (!node) return false;
+        var row = table.row(node).data();
+        KeywordSwitch.nextState(row, action);
+        var column = -1;   // by dataSrc, so a later column reorder cannot break the patch
+        table.columns().every(function (i) { if (this.dataSrc() === 'enabled') column = i; });
+        var cell = table.cell(node, column).node();
+        cell.innerHTML = KeywordSwitch.html(row);
+        $(cell).find('a').tooltip();   // mirrors the Enabled column's fnCreatedCell
+        return true;
+    }
+
+    // onAction hook: true = DOM already updated, skip the reload. An id that is not
+    // in the loaded page fails the every(), so the whole action reloads and a partial
+    // patch is never shown. Delete still reloads: that row is gone and every remaining
+    // row keeps its enabled state and keyword order, so nothing visually re-ranks.
+    function handleKeywordStateAction(action, ids) {
+        if (action === 'delete') return false;
+        // A keyword text lives in exactly one of the two tables (suppliers are
+        // ktype ransomlook_supplier and are excluded from the keyword table).
+        return ids.every(function (id) {
+            return refreshKeywordSwitch(keywordsTable, id, action) ||
+                   refreshKeywordSwitch(suppliersTable, id, action);
+        });
+    }
+
     // Per-column search + selection/bulk wiring for both tables
     applyDebouncedColumnSearch(keywordsTable, 'input.column-search-input', 'select.column-search-input', 400);
     applyDebouncedColumnSearch(suppliersTable, 'input.column-search-input', 'select.column-search-input', 400);
@@ -453,6 +515,7 @@ $(document).ready( function () {
         apiUrl: "{% url 'api:bulk_keywords' projectid=projectid %}",
         checkboxName: 'id[]',
         tableInstances: [keywordsTable, suppliersTable],
+        onAction: handleKeywordStateAction,
         buttons: [
             { name: 'btnenable', action: 'enable', confirm: false },
             { name: 'btndisable', action: 'disable', confirm: false },
@@ -674,7 +737,9 @@ $(document).ready( function () {
     setupRowActions({
         apiUrl: "{% url 'api:bulk_keywords' projectid=projectid %}",
         tableInstances: [keywordsTable, suppliersTable],
-        confirmActions: ['delete']
+        confirmActions: ['delete'],
+        silentActions: ['enable', 'disable'],
+        onAction: handleKeywordStateAction
     });
 });
 </script>
