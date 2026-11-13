@@ -22,8 +22,21 @@
   <button type="button" class="btn btn-primary btn-sm" id="btn-manage-keywords">Manage keywords</button>
   <button type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#ScanKeywordsModal">Scan keywords</button>
   <button type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#UploadRansomlookSuppliersModal">Upload RansomLook suppliers</button>
+  <button type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#MineKeywordsModal">🧲 Mine keywords</button>
 </div>
 
+<form id="form-selected">
+  {% csrf_token %}
+
+  <div class="list-selection-bar" role="group" aria-label="Selected keyword actions">
+    {% include "table_selection_status.html" %}
+    <div class="list-selection-actions">
+      <button type="button" name="btnenable" id="enable-selected" class="btn btn-default btn-sm" data-selection-action disabled>Enable</button>
+      <button type="button" name="btndisable" id="disable-selected" class="btn btn-default btn-sm" data-selection-action disabled>Disable</button>
+      <button type="button" name="btndelete" id="delete-selected" class="btn btn-danger btn-sm" data-selection-action disabled>Delete</button>
+      <button type="button" class="btn btn-link btn-sm" data-clear-selection disabled>Clear selection</button>
+    </div>
+  </div>
 
 <div class="panel panel-default">
   <div class="panel-heading">
@@ -32,12 +45,26 @@
   <div class="panel-body">
     <table id="table_list_keywords" class="table table-condensed table-striped table-bordered" width="100%" data-group-columns="enabled">
     <thead><tr>
+        <th><input type="checkbox" name="select_all" value="1" id="select-all-items" aria-label="Select all keywords on this page">&nbsp; Actions</th>
         <th>Keyword</th>
         <th>Types</th>
         <th>Enabled</th>
         <th>Description</th>
         <th>Created</th>
-        <th>Operations</th>
+    </tr>
+    <tr>
+        <th></th>
+        <th><input type="text" placeholder="Search Keyword" class="column-search-input form-control input-sm"></th>
+        <th><input type="text" placeholder="Search Types" class="column-search-input form-control input-sm"></th>
+        <th>
+            <select class="column-search-input form-control input-sm">
+                <option value="">All</option>
+                <option value="true">Enabled</option>
+                <option value="false">Disabled</option>
+            </select>
+        </th>
+        <th><input type="text" placeholder="Search Description" class="column-search-input form-control input-sm"></th>
+        <th><input type="text" placeholder="Search Created" class="column-search-input form-control input-sm"></th>
     </tr></thead>
     </table>
     </div>
@@ -50,15 +77,29 @@
   <div class="panel-body">
     <table id="table_suppliers" class="table table-condensed table-striped table-bordered" width="100%" data-group-columns="enabled">
     <thead><tr>
+        <th><input type="checkbox" name="select_all" value="1" id="select-all-suppliers" aria-label="Select all suppliers on this page">&nbsp; Actions</th>
         <th>Supplier</th>
         <th>Enabled</th>
         <th>Description</th>
         <th>Created</th>
-        <th>Operations</th>
+    </tr>
+    <tr>
+        <th></th>
+        <th><input type="text" placeholder="Search Supplier" class="column-search-input form-control input-sm"></th>
+        <th>
+            <select class="column-search-input form-control input-sm">
+                <option value="">All</option>
+                <option value="true">Enabled</option>
+                <option value="false">Disabled</option>
+            </select>
+        </th>
+        <th><input type="text" placeholder="Search Description" class="column-search-input form-control input-sm"></th>
+        <th><input type="text" placeholder="Search Created" class="column-search-input form-control input-sm"></th>
     </tr></thead>
     </table>
   </div>
 </div>
+</form> <!-- close selection form -->
 
 <!-- New Panel for Interesting Keywords -->
 <div class="panel panel-default">
@@ -86,12 +127,12 @@
         </div>
         <div class="modal-body">
             <p class="text-muted">Add, edit, or remove keywords. Changes are saved when you click "Save Changes".</p>
-            
+
             <div class="keyword-editor-list" id="keyword-editor-list">
                 <!-- Keywords will be loaded here dynamically -->
                 <div class="text-center text-muted" id="keywords-loading">Loading keywords...</div>
             </div>
-            
+
             <div style="margin-top: 12px;">
                 <button type="button" class="btn btn-success btn-sm" id="btn-add-keyword-row">
                     <span class="glyphicon glyphicon-plus"></span> Add Keyword
@@ -194,13 +235,13 @@
         <div class="modal-body">
           {% csrf_token %}
           <p class="text-muted" style="margin-bottom: 12px;">Upload a text file with one supplier per line.</p>
-          
+
           <div id="upload-suppliers-drop-zone" style="border: 2px dashed #ccc; border-radius: 6px; padding: 30px 20px; text-align: center; cursor: pointer; transition: all 0.2s ease; background: #fafafa;">
             <span class="glyphicon glyphicon-cloud-upload" style="font-size: 32px; color: #999; display: block; margin-bottom: 10px;"></span>
             <span id="upload-suppliers-drop-text" style="color: #666;">Drag & drop a .txt file here<br><small>or click to browse</small></span>
             <input type="file" id="modal-suppliers-file" name="suppliers_file" accept=".txt" style="display: none;">
           </div>
-          
+
           <div id="upload-suppliers-file-info" style="display: none; margin-top: 12px; padding: 10px; background: #e8f5e9; border-radius: 4px;">
             <span class="glyphicon glyphicon-file" style="color: #4caf50;"></span>
             <span id="upload-suppliers-file-name" style="margin-left: 6px; font-weight: 500;"></span>
@@ -215,6 +256,32 @@
     </div>
   </div>
 </div>
+
+<!-- Mine Keywords Modal -->
+<div class="modal fade" id="MineKeywordsModal" tabindex="-1" role="dialog" aria-labelledby="mineKeywordsModalLabel">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <form action="{% url 'keywords:mine_keywords' %}" method="post">
+        {% csrf_token %}
+        <div class="modal-header">
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+          <h4>🧲 Mine Keywords</h4>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted">Enter a seed URL or domain. Shepherd derives candidate keywords (certificate organizations, brand tokens, WHOIS/DNS pivots) with evidence, and stores brand-new keywords as DISABLED for your review — nothing of theirs is scanned until you enable them. A new type for a keyword you already have inherits that keyword's state, so an extra discovery angle never turns the keyword off.</p>
+          <div class="form-group">
+            <label for="mine_url">Seed URL</label>
+            <input type="text" class="form-control" id="mine_url" name="mine_url" placeholder="https://example.com" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Start mining</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 {% endspaceless%}
 {% endblock %}
 
@@ -224,7 +291,7 @@
 $(document).ready( function () {
     var keywordsTable = $('#table_list_keywords').DataTable({
         processing: true, serverSide: true, pageLength: 25, select: true,
-        order: [[ 0, "asc" ]], // Sort by Keyword (column index 0)
+        order: [[ 1, "asc" ]], // Sort by Keyword (column index 1; Actions is the first column)
         ajax: {
             processing: true,
             url: "{% url 'api:list_keywords' projectid=projectid %}",
@@ -236,7 +303,21 @@ $(document).ready( function () {
             }
         },
         columns: [
-            {'data': 'keyword', 'sName': 'Keyword', 'aTargets': [ 0 ],
+            {'data': 'id', 'sName': 'Actions', 'aTargets': [ 0 ],
+                'bSortable': false,
+                "mRender": function (data, type, full) {
+                    return '<div class="table-row-actions">' +
+                        '<input type="checkbox" name="id[]" aria-label="Select keyword" value="' + data + '">' +
+                        '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Delete Keyword" data-action="delete" data-uuid="' + data + '" data-display="'+escapeHtml(full.keyword)+'" href="#">' +
+                        '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
+                        '</a> ' +
+                        '</div>';
+                    },
+                "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
+                    $("a", nTd).tooltip();
+                }
+            },
+            {'data': 'keyword', 'sName': 'Keyword', 'aTargets': [ 1 ],
                 'render': function (data, type) {
                     return type === 'display' ? escapeHtml(data) : data;
                 },
@@ -244,25 +325,43 @@ $(document).ready( function () {
                     $("div", nTd).tooltip();
                 },
             },
-            {'data': 'ktypes', 'sName': 'Types', 'aTargets': [ 1 ], 'bSortable': false,
+            {'data': 'ktypes', 'sName': 'Types', 'aTargets': [ 2 ],
                 'render': function (data) {
                     return (data || []).map(function (t) {
                         return '<span class="keyword-badge">' + t + '</span>';
                     }).join('');
                 },
             },
-            {'data': 'enabled', 'sName': 'Enabled', 'aTargets': [ 2 ], 'bSortable': false,
+            {'data': 'enabled', 'sName': 'Enabled', 'aTargets': [ 3 ],
                 "mRender": function (data, type, full) {
-                    var toggle_url = "{% url 'keywords:toggle_keyword' keywordid=0 %}".replace(0, full.id);
-                    var labelClass = data ? 'label-success' : 'label-danger';
-                    var tooltip = data ? 'Disable Keyword' : 'Enable Keyword';
-                    return '<div rel="tooltip" data-placement="left" data-original-title="' + tooltip + '"><a href="'+toggle_url+'"><span class="label ' + labelClass + '">'+data+'</span></a></div>';
+                    var enabled = full.enabled_count || 0;
+                    var total = full.type_count || (full.ktypes || []).length || 1;
+                    var state, role, checked, label, tooltip, action;
+                    if (data) {
+                        state = 'on'; role = 'switch'; checked = 'true'; label = 'On';
+                        action = 'disable'; tooltip = 'Disable all types';
+                    } else if (full.any_enabled) {
+                        // Types of this keyword disagree; a plain On/Off would lie.
+                        state = 'mixed'; role = 'button'; checked = ''; label = enabled + '/' + total;
+                        action = 'enable';
+                        tooltip = enabled + ' of ' + total + ' types enabled - click to enable all';
+                    } else {
+                        state = 'off'; role = 'switch'; checked = 'false'; label = 'Off';
+                        action = 'enable'; tooltip = 'Enable all types';
+                    }
+                    return '<a class="keyword-switch ' + state + ' row-action" role="' + role + '"' +
+                           (checked ? ' aria-checked="' + checked + '"' : '') +
+                           ' rel="tooltip" data-placement="left" data-original-title="' + tooltip + '"' +
+                           ' aria-label="' + tooltip + '" data-action="' + action + '"' +
+                           ' data-uuid="' + full.id + '" data-display="' + escapeHtml(full.keyword) + '"' +
+                           ' href="#">' + label + '</a>';
                 },
+                "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) { $("a", nTd).tooltip(); },
             },
-            {'data': 'description', 'sName': 'Description', 'aTargets': [ 3 ], 'bSortable': false,
+            {'data': 'description', 'sName': 'Description', 'aTargets': [ 4 ],
                 'render': function (data, type) { return renderTruncatedCell(data, type, { maxLength: 60 }); },
             },
-            {'data': 'creation_time', 'sName': 'Created', 'aTargets': [ 4 ], 'bSortable': false,
+            {'data': 'creation_time', 'sName': 'Created', 'aTargets': [ 5 ],
               'render': function(data, type, row) {
                 if (!data) return '';
                 if (window.moment) {
@@ -274,25 +373,11 @@ $(document).ready( function () {
                 return data;
               }
             },
-            {'data': 'id', 'sName': 'Operations', 'aTargets': [ 5 ],
-                'bSortable': false,
-                "mRender": function (data, type, full) {
-                    var delete_url = "{% url 'keywords:delete_keyword' keywordid=0 %}".replace(0, full.id);
-                    return '<div class="table-row-actions">' +
-                        '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Delete Keyword" data-action="delete" data-url="'+delete_url+'" data-display="'+escapeHtml(full.keyword)+'" href="#">' +
-                        '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
-                        '</a> ' +
-                        '</div>';
-                    },
-                "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
-                    $("a", nTd).tooltip();
-                }
-            },
         ]
     });
     var suppliersTable = $('#table_suppliers').DataTable({
         processing: true, serverSide: true, pageLength: 25, select: true,
-        order: [[ 0, "asc" ]], // Sort by Supplier (column index 0)
+        order: [[ 1, "asc" ]], // Sort by Supplier (column index 1; Actions is the first column)
         ajax: {
             processing: true,
             url: "{% url 'api:list_keywords' projectid=projectid %}",
@@ -304,7 +389,21 @@ $(document).ready( function () {
             }
         },
         columns: [
-            {'data': 'keyword', 'sName': 'Supplier', 'aTargets': [ 0 ],
+            {'data': 'id', 'sName': 'Actions', 'aTargets': [ 0 ],
+                'bSortable': false,
+                "mRender": function (data, type, full) {
+                    return '<div class="table-row-actions">' +
+                        '<input type="checkbox" name="id[]" aria-label="Select supplier" value="' + data + '">' +
+                        '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Delete Supplier" data-action="delete" data-uuid="' + data + '" data-display="'+escapeHtml(full.keyword)+'" href="#">' +
+                        '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
+                        '</a> ' +
+                        '</div>';
+                    },
+                "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
+                    $("a", nTd).tooltip();
+                }
+            },
+            {'data': 'keyword', 'sName': 'Supplier', 'aTargets': [ 1 ],
                 'render': function (data, type) {
                     return type === 'display' ? escapeHtml(data) : data;
                 },
@@ -312,18 +411,23 @@ $(document).ready( function () {
                     $("div", nTd).tooltip();
                 },
             },
-            {'data': 'enabled', 'sName': 'Enabled', 'aTargets': [ 1 ],
+            {'data': 'enabled', 'sName': 'Enabled', 'aTargets': [ 2 ],
                 "mRender": function (data, type, full) {
-                    var toggle_url = "{% url 'keywords:toggle_keyword' keywordid=0 %}".replace(0, full.id);
-                    var labelClass = data ? 'label-success' : 'label-danger';
-                    var tooltip = data ? 'Disable Supplier' : 'Enable Supplier';
-                    return '<div rel="tooltip" data-placement="left" data-original-title="' + tooltip + '"><a href="'+toggle_url+'"><span class="label ' + labelClass + '">'+data+'</span></a></div>';
+                    var on = !!data;
+                    var tooltip = on ? 'Disable Supplier' : 'Enable Supplier';
+                    return '<a class="keyword-switch ' + (on ? 'on' : 'off') + ' row-action" role="switch" ' +
+                           'aria-checked="' + on + '" ' +
+                           'rel="tooltip" data-placement="left" data-original-title="' + tooltip + '" ' +
+                           'aria-label="' + tooltip + '" data-action="' + (on ? 'disable' : 'enable') + '" ' +
+                           'data-uuid="' + full.id + '" data-display="' + escapeHtml(full.keyword) + '" ' +
+                           'href="#">' + (on ? 'On' : 'Off') + '</a>';
                 },
+                "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) { $("a", nTd).tooltip(); },
             },
-            {'data': 'description', 'sName': 'Description', 'aTargets': [ 2 ],
+            {'data': 'description', 'sName': 'Description', 'aTargets': [ 3 ],
                 'render': function (data, type) { return renderTruncatedCell(data, type, { maxLength: 60 }); },
             },
-            {'data': 'creation_time', 'sName': 'Created', 'aTargets': [ 3 ],
+            {'data': 'creation_time', 'sName': 'Created', 'aTargets': [ 4 ],
               'render': function(data, type, row) {
                 if (!data) return '';
                 if (window.moment) {
@@ -335,20 +439,24 @@ $(document).ready( function () {
                 return data;
               }
             },
-            {'data': 'id', 'sName': 'Operations', 'aTargets': [ 4 ],
-                'bSortable': false,
-                "mRender": function (data, type, full) {
-                    var delete_url = "{% url 'keywords:delete_keyword' keywordid=0 %}".replace(0, full.id);
-                    return '<div class="table-row-actions">' +
-                        '<a class="btn btn-xs row-action" rel="tooltip" data-placement="right" data-original-title="Delete Supplier" data-action="delete" data-url="'+delete_url+'" data-display="'+escapeHtml(full.keyword)+'" href="#">' +
-                        '<span class="glyphicon glyphicon-trash" aria-hidden="true"></span>' +
-                        '</a> ' +
-                        '</div>';
-                    },
-                "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
-                    $("a", nTd).tooltip();
-                }
-            },
+        ]
+    });
+
+    // Per-column search + selection/bulk wiring for both tables
+    applyDebouncedColumnSearch(keywordsTable, 'input.column-search-input', 'select.column-search-input', 400);
+    applyDebouncedColumnSearch(suppliersTable, 'input.column-search-input', 'select.column-search-input', 400);
+    initializeStandaloneFeatures();
+    setupStandaloneSelectAll('#select-all-items', '#table_list_keywords');
+    setupStandaloneSelectAll('#select-all-suppliers', '#table_suppliers');
+    setupBulkActions({
+        formSelector: '#form-selected',
+        apiUrl: "{% url 'api:bulk_keywords' projectid=projectid %}",
+        checkboxName: 'id[]',
+        tableInstances: [keywordsTable, suppliersTable],
+        buttons: [
+            { name: 'btnenable', action: 'enable', confirm: false },
+            { name: 'btndisable', action: 'disable', confirm: false },
+            { name: 'btndelete', action: 'delete', confirm: true }
         ]
     });
 
@@ -376,7 +484,7 @@ $(document).ready( function () {
     function createKeywordRow(group) {
         var isNew = !group.id;
         var rowClass = isNew ? 'keyword-editor-row new-keyword-row' : 'keyword-editor-row';
-        if (group.enabled === false) {
+        if (group.any_enabled === false) {
             rowClass += ' disabled-keyword';
         }
 
@@ -393,7 +501,7 @@ $(document).ready( function () {
                    '</div>';
         }).join('');
 
-        var enabledChecked = (group.enabled !== false) ? 'checked' : '';
+        var enabledChecked = (group.any_enabled !== false) ? 'checked' : '';
 
         return '<div class="' + rowClass + '"' +
             ' data-type-ids="' + escapeHtml(JSON.stringify(group.type_ids || {})) + '">' +
@@ -408,7 +516,7 @@ $(document).ready( function () {
     function loadKeywordsIntoEditor() {
         var $list = $('#keyword-editor-list');
         $list.html('<div class="text-center text-muted">Loading keywords...</div>');
-        
+
         $.ajax({
             url: "{% url 'api:list_keywords' projectid=projectid %}",
             type: 'GET',
@@ -453,7 +561,7 @@ $(document).ready( function () {
         var keywords = [];
         var hasError = false;
         var seenKeywords = {};
-        
+
         $('#keyword-editor-list .keyword-editor-row').each(function() {
             var $row = $(this);
             var value = $row.find('.keyword-value').val().trim();
@@ -463,7 +571,7 @@ $(document).ready( function () {
                 return;
             }
             $row.find('.keyword-value').css('border-color', '');
-            
+
             var types = [];
             $row.find('.keyword-type-option:checked').each(function () { types.push($(this).val()); });
             if (types.length === 0) {
@@ -564,6 +672,7 @@ $(document).ready( function () {
 
     // Row-level delete via API (no page refresh)
     setupRowActions({
+        apiUrl: "{% url 'api:bulk_keywords' projectid=projectid %}",
         tableInstances: [keywordsTable, suppliersTable],
         confirmActions: ['delete']
     });

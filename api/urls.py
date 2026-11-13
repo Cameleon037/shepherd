@@ -19,6 +19,7 @@ urlpatterns = [
     path('v1/scheduled_jobs/', views.list_scheduled_jobs, name='list_scheduled_jobs'),
 
     ##### KEYWORDS #####
+    path('v1/project/<str:projectid>/keywords/bulk/', views.bulk_keywords, name='bulk_keywords'),
     path('v1/project/<str:projectid>/keywords/bulk_update/', views.bulk_update_keywords, name='bulk_update_keywords'),
     path('v1/project/<str:projectid>/keywords/', views.list_keywords, name='list_keywords'),
 

@@ -33,7 +33,7 @@ from api.utils import (
 )
 
 from project.models import Project
-from keywords.models import Keyword, group_keywords_by_text
+from keywords.models import Keyword, group_keywords_by_text, group_state_rank
 from assets.models import Asset, asset_filter_query
 from jobs.models import Job
 from jobs.utils import kill_job_process_tree
@@ -814,7 +814,15 @@ def list_keywords(request, projectid, format=None):
 
     ### get search parameters
     search_value = request.query_params.get('search[value]', None)
-    
+    # Column searches resolve by field name; the fallback indices are only for callers
+    # that omit columns[i][data] and mirror the Keywords table's layout, where the
+    # Actions column sits first (Suppliers keeps its own order via columns[i][data]).
+    search_keyword = get_column_search(request.query_params, 'keyword', 1)
+    search_ktypes = get_column_search(request.query_params, 'ktypes', 2)
+    search_enabled = get_column_search(request.query_params, 'enabled', 3)
+    search_description = get_column_search(request.query_params, 'description', 4)
+    search_created = get_column_search(request.query_params, 'creation_time', 5)
+
     ### create queryset
     if selection in ['enabled']:
         queryset = prj.keyword_set.all().filter(enabled=True).exclude(ktype='ransomlook_supplier')
@@ -833,26 +841,105 @@ def list_keywords(request, projectid, format=None):
         min_length=1
     )
 
+    ### filter by column-specific search values
+    queryset = apply_column_search_multi(queryset, search_keyword, 'keyword__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_ktypes, 'ktype__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_description, 'description__icontains', min_length=1)
+    queryset = apply_column_search_multi(queryset, search_created, 'creation_time__icontains', min_length=1)
+    if search_enabled == 'true':
+        queryset = queryset.filter(enabled=True)
+    elif search_enabled == 'false':
+        queryset = queryset.filter(enabled=False)
+
     if selection == 'all':
         # Grouped output: one object per keyword text, types collected as a list.
+        # Row-level filters can split a keyword text across types; re-widen so each
+        # group keeps all of its rows (no-op when no filters were applied).
+        queryset = prj.keyword_set.all().exclude(ktype='ransomlook_supplier').filter(
+            keyword__in=queryset.values('keyword'))
+        # Deterministic primary row / ktypes order; the user-facing sort is applied to
+        # the groups below, because a keyword text's state spans several rows and
+        # row-level ORDER BY would rank a mixed group by one of its rows.
         queryset = queryset.order_by('keyword', 'ktype')
         groups = group_keywords_by_text(queryset)
+
+        order_by_column, order_direction = get_ordering_vars(request.query_params,
+                                                             default_column='keyword', default_direction='')
+        descending = order_direction == '-'
+        group_sorts = {'keyword': lambda g: g['keyword'],
+                       'ktypes': lambda g: ','.join(g['ktypes']),
+                       'description': lambda g: g['description'],
+                       'creation_time': lambda g: g['creation_time']}
+        groups.sort(key=lambda g: g['keyword'])  # deterministic tie-break for stable sorts
+        if order_by_column in group_sorts:
+            groups.sort(key=group_sorts[order_by_column], reverse=descending)
+        if order_by_column == 'enabled':
+            groups.sort(key=group_state_rank, reverse=descending)
+        else:
+            groups.sort(key=group_state_rank)  # enabled texts first, mixed next, disabled last
         kwrds = paginator.paginate_queryset(groups, request)
         return paginator.get_paginated_response(kwrds)
 
     ### get variables
     order_by_column, order_direction = get_ordering_vars(request.query_params,
-                                                         default_column='ktype' if selection == 'all' else 'last_modified',
+                                                         default_column='last_modified',
                                                          default_direction='')
-    ### order queryset
-    if order_by_column:
-        queryset = queryset.order_by('%s%s' % (order_direction, order_by_column))
-    elif selection == 'all':
-        # Default sort by ktype for 'all' selection
-        queryset = queryset.order_by('ktype')
+    ### order queryset (enabled rows first, unless sorting by the enabled column itself)
+    if order_by_column == 'enabled':
+        queryset = queryset.order_by('%s%s' % (order_direction, 'enabled'))
+    elif order_by_column in ('id', 'keyword', 'description', 'ktype', 'creation_time', 'last_modified'):
+        queryset = queryset.order_by('-enabled', '%s%s' % (order_direction, order_by_column))
+    else:
+        # Display-only column (e.g. 'ktypes'): fall back to the stable default ordering.
+        queryset = queryset.order_by('-enabled', 'last_modified')
     kwrds = paginator.paginate_queryset(queryset, request)
     serializer = KeywordSerializer(instance=kwrds, many=True)
     return paginator.get_paginated_response(serializer.data)
+
+
+@extend_schema(
+    tags=['Keywords'],
+    summary='Bulk actions on keywords',
+    description='Bulk actions on keywords: enable, disable, delete. Actions apply to every keyword row sharing the selected keyword text. POST body: action=enable|disable|delete, id[]=id...',
+    request=BulkActionSerializer,
+    responses={200: SuccessMessageSerializer},
+)
+@api_view(['POST'])
+@authentication_classes((SessionAuthentication, ShepherdTokenAuthentication))
+@permission_classes((IsAuthenticated,))
+def bulk_keywords(request, projectid, format=None):
+    """Bulk actions on keywords: enable, disable, delete. POST body: action=enable|disable|delete, id[]=id..."""
+    if not request.user.has_perm('keywords.view_keyword'):
+        return HttpResponseForbidden("You do not have permission.")
+    if not request.user.has_perm('keywords.change_keyword'):
+        return HttpResponseForbidden("You do not have permission.")
+    try:
+        prj = Project.objects.get(id=projectid)
+    except Project.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Project not found'}, status=404)
+    action = request.POST.get('action')
+    if action not in ('enable', 'disable', 'delete'):
+        return JsonResponse({'success': False, 'error': 'Unknown action'}, status=400)
+    if action == 'delete' and not request.user.has_perm('keywords.delete_keyword'):
+        return HttpResponseForbidden("You do not have permission.")
+    id_lst = request.POST.getlist('id[]')
+    if not id_lst:
+        return JsonResponse({'success': False, 'error': 'No items selected'}, status=400)
+    errors = []
+    for keywordid in id_lst:
+        try:
+            kw_obj = Keyword.objects.get(id=int(keywordid), related_project=prj)
+        except (Keyword.DoesNotExist, ValueError, TypeError):
+            errors.append('Unknown Keyword: %s' % keywordid)
+            continue
+        if action == 'delete':
+            # Same group semantics as the row-level toggle: act on every row of the keyword text.
+            Keyword.objects.filter(related_project=prj, keyword=kw_obj.keyword).delete()
+        else:
+            Keyword.objects.filter(related_project=prj, keyword=kw_obj.keyword).update(enabled=(action == 'enable'))
+    if errors:
+        return JsonResponse({'success': False, 'error': '; '.join(errors[:5])}, status=400)
+    return JsonResponse({'success': True, 'message': 'Action completed successfully'})
 
 
 @extend_schema(

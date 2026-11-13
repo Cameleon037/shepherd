@@ -1,6 +1,6 @@
 # vim: tabstop=4 expandtab shiftwidth=4 softtabstop=4
 
-from django.http import HttpResponseForbidden, JsonResponse
+from django.http import HttpResponseForbidden
 from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
@@ -12,6 +12,7 @@ from keywords.models import Keyword, group_keywords_by_text, ktype_picker_sectio
 from assets.models import Asset
 from keywords.forms import AddKeywordForm
 import threading
+import re
 
 from jobs.utils import run_job
 
@@ -38,39 +39,6 @@ def keywords(request):
         'keyword_types': ktype_picker_sections(),
     }
     return render(request, 'keywords/list_keywords.html', context)
-
-@login_required
-def toggle_keyword(request, keywordid):
-    if not request.user.has_perm('keywords.change_keyword'):
-        return HttpResponseForbidden("You do not have permission.")
-    
-    try:
-        kw_obj = Keyword.objects.get(id=keywordid)
-    except Keyword.DoesNotExist:
-        kw_obj = None
-    if kw_obj is not None:
-        new_state = not kw_obj.enabled
-        for kw in Keyword.objects.filter(related_project=kw_obj.related_project, keyword=kw_obj.keyword):
-            kw.enabled = new_state
-            kw.save()
-    return redirect(reverse('keywords:keywords'))
-
-@login_required
-def delete_keyword(request, keywordid):
-    if not request.user.has_perm('keywords.delete_keyword'):
-        return HttpResponseForbidden("You do not have permission.")
-    
-    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest'
-    try:
-        kw_obj = Keyword.objects.get(id=keywordid)
-        Keyword.objects.filter(related_project=kw_obj.related_project, keyword=kw_obj.keyword).delete()
-    except Keyword.DoesNotExist:
-        if is_ajax:
-            return JsonResponse({'success': False, 'error': 'Unknown keyword'}, status=404)
-        return redirect(reverse('keywords:keywords'))
-    if is_ajax:
-        return JsonResponse({'success': True, 'message': 'Keyword deleted.'})
-    return redirect(reverse('keywords:keywords'))
 
 @login_required
 def add_keyword(request):
@@ -295,6 +263,36 @@ def scan_keywords(request):
                 messages.error(request, f'Error: {e}')
 
 
+    return redirect(reverse('keywords:keywords'))
+
+
+@login_required
+@require_POST
+def mine_keywords(request):
+    """Launch the keyword miner as a background job (new keyword texts stored DISABLED)."""
+    if not request.user.has_perm('keywords.add_keyword'):
+        return HttpResponseForbidden("You do not have permission.")
+
+    projectid = request.session['current_project']['prj_id']
+    url = (request.POST.get('mine_url') or '').strip()
+    if not re.fullmatch(r'[A-Za-z0-9./:_-]+', url):
+        messages.error(request, 'Enter a valid seed URL (letters, digits, dots, slashes, '
+                                'colons, underscores, hyphens only).')
+        return redirect(reverse('keywords:keywords'))
+
+    # run_job blocks until the subprocess finishes, so run the (network-bound)
+    # miner in a background thread exactly like scan_keywords.
+    def run_command():
+        try:
+            run_job('mine_keywords', f'--projectid {projectid} --url {url}',
+                    projectid, request.user)
+        except Exception as e:
+            print(f"Error running mine_keywords: {e}")
+
+    threading.Thread(target=run_command).start()
+    messages.success(request, f'Keyword mining started for {url}. New keywords appear on this '
+                              f'page as DISABLED keywords when the job completes; an extra type '
+                              f'for a keyword you already have follows that keyword\'s state.')
     return redirect(reverse('keywords:keywords'))
 
 

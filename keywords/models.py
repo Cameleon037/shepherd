@@ -5,6 +5,7 @@ KTYPE_CHOICES = [
     ('domaintools_registrant_email', 'DomainTools - Registrant Email'),
     ('domaintools_registrant_email_domain', 'DomainTools - Registrant Email Domain'),
     ('crtsh_domain', 'CRTSH - Domain'),
+    ('crtsh_brand', 'CRTSH - Brand keyword'),
     ('shodan_keyword', 'Shodan - query keyword'),
     ('porch-pirate_keyword', 'Porch-pirate - query keyword'),
     ('swaggerhub_keyword', 'SwaggerHub - query keyword'),
@@ -20,7 +21,7 @@ KTYPE_CHOICES.sort(key=lambda choice: (choice[1].split(' - ')[0], choice[1]))
 # asset/domain scanners (crtsh, domaintools, shodan, fofa) or data-leakage scanners
 # (scribd, git-hound/ghleaks, porch-pirate, swaggerhub) that create findings.
 KTYPE_SECTIONS = [
-    ('Asset & domain discovery', ['crtsh_domain', 'domaintools_registrant_org',
+    ('Asset & domain discovery', ['crtsh_domain', 'crtsh_brand', 'domaintools_registrant_org',
                                   'domaintools_registrant_email',
                                   'domaintools_registrant_email_domain',
                                   'fofa_keyword', 'shodan_keyword']),
@@ -66,8 +67,9 @@ def group_keywords_by_text(queryset):
     """Group Keyword rows sharing the same keyword text, preserving queryset order.
 
     Returns one dict per keyword text: id (primary row), keyword, ktypes,
-    type_ids (ktype -> row id), ids, id_csv, enabled (all rows), description
-    (first non-empty), creation_time (earliest, ISO string).
+    type_ids (ktype -> row id), ids, id_csv, enabled (all rows), enabled_count,
+    type_count, any_enabled (rows disagree when enabled is False but enabled_count
+    is not 0), description (first non-empty), creation_time (earliest, ISO string).
     """
     groups = []
     by_text = {}
@@ -81,6 +83,7 @@ def group_keywords_by_text(queryset):
                 'type_ids': {},
                 'ids': [],
                 'enabled': True,
+                'enabled_count': 0,
                 'description': '',
                 'creation_time': kw.creation_time,
             }
@@ -90,11 +93,21 @@ def group_keywords_by_text(queryset):
         group['type_ids'][kw.ktype] = kw.id
         group['ids'].append(kw.id)
         group['enabled'] = group['enabled'] and bool(kw.enabled)
+        group['enabled_count'] += 1 if kw.enabled else 0
         if kw.description and not group['description']:
             group['description'] = kw.description
         if kw.creation_time < group['creation_time']:
             group['creation_time'] = kw.creation_time
     for group in groups:
+        group['type_count'] = len(group['ids'])
+        group['any_enabled'] = group['enabled_count'] > 0
         group['id_csv'] = ','.join(str(i) for i in group['ids'])
         group['creation_time'] = group['creation_time'].isoformat()
     return groups
+
+
+def group_state_rank(group):
+    """Sort key for a keyword text: 0 all types enabled, 1 mixed, 2 none enabled."""
+    if group['enabled']:
+        return 0
+    return 1 if group['any_enabled'] else 2
